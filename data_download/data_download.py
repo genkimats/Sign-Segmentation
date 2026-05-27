@@ -5,13 +5,15 @@ from urllib.parse import urljoin, unquote
 import time
 
 # --- Configuration ---
-# 1. Define your base paths
-BASE_PATH = "/Users/genkimatsunaga/GR/workspace/Sign-Segmentation/data/raw"
+# 1. Dynamically set base paths relative to this script's location
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_PATH = os.path.join(SCRIPT_DIR, "data")
 ANNOTATIONS_DIR = os.path.join(BASE_PATH, "annotations")
 VIDEOS_DIR = os.path.join(BASE_PATH, "videos")
 
 # 2. Set the HTML file path and correct base URL for the DGS corpus
-HTML_FILE = "index.html"
+# This assumes index.html is in the exact same folder as this Python script
+HTML_FILE = os.path.join(SCRIPT_DIR, "index.html")
 BASE_URL = "https://www.sign-lang.uni-hamburg.de/meinedgs/ling/" 
 
 # --- Setup ---
@@ -21,16 +23,12 @@ os.makedirs(VIDEOS_DIR, exist_ok=True)
 
 def download_file(url, target_path, max_retries=5):
     """Streams a file from a URL with built-in timeout and retry logic."""
-    # If the file already exists completely, skip it (helps if you have to restart the script)
-    if os.path.exists(target_path):
-        # Optional: check if file is non-empty before skipping
-        if os.path.getsize(target_path) > 0:
-            print(f"⏩ Skipping (Already Exists): {os.path.basename(target_path)}")
-            return
+    if os.path.exists(target_path) and os.path.getsize(target_path) > 0:
+        print(f"⏩ Skipping (Already Exists): {os.path.basename(target_path)}")
+        return
 
     for attempt in range(1, max_retries + 1):
         try:
-            # Added a 30-second timeout so the script doesn't hang forever on a dead stream
             with requests.get(url, stream=True, timeout=30) as response:
                 response.raise_for_status()
                 with open(target_path, 'wb') as f:
@@ -51,6 +49,13 @@ def download_file(url, target_path, max_retries=5):
 def main():
     # Read the uploaded HTML file
     print(f"Parsing {HTML_FILE}...")
+    
+    # Failsafe: Check if index.html actually exists in this directory
+    if not os.path.exists(HTML_FILE):
+        print(f"❌ Error: Could not find 'index.html' at {HTML_FILE}.")
+        print("Please ensure your HTML file is in the same directory as this script.")
+        return
+
     with open(HTML_FILE, 'r', encoding='utf-8') as f:
         soup = BeautifulSoup(f, 'html.parser')
 
@@ -71,12 +76,10 @@ def main():
             target_dir = ANNOTATIONS_DIR
             
         # 2. Match Videos (Broadened check)
-        # Looks for .mp4 anywhere in the URL, or "video a" / "video b" in the HTML text
         elif '.mp4' in href_lower or 'video a' in link_text or 'video b' in link_text:
             target_dir = VIDEOS_DIR
             
         else:
-            # Keep track of what we are ignoring for debugging
             skipped_links.append((link_text, href))
 
         # If the link matches our target files, execute the download
@@ -84,28 +87,22 @@ def main():
             download_count += 1
             full_url = urljoin(BASE_URL, href)
             
-            # Extract a clean filename from the URL
             file_name = unquote(full_url.split('/')[-1])
             
-            # Strip query parameters for the local filename
             if '?' in file_name:
                 file_name = file_name.split('?')[0]
                 
-            # Failsafe: if the URL was totally obscured (e.g., 'download.php'), append the right extension
             if target_dir == VIDEOS_DIR and not file_name.endswith('.mp4'):
-                # Try to create a unique name using the download count so files don't overwrite each other
                 file_name = f"video_{download_count}.mp4"
                 
             file_path = os.path.join(target_dir, file_name)
             
             print(f"Downloading [{download_count}] {file_name}...")
-            # Assuming you are using the robust download_file function with retries from the previous step
             download_file(full_url, file_path)
 
     print(f"\nFinished processing. Attempted to download {download_count} target files.")
     
     # 3. Debug Print
-    # Print the first 10 skipped links to see if the videos are formatted weirdly
     print("\n--- Diagnostic: First 10 Skipped Links ---")
     for text, h in skipped_links[:10]:
         print(f"Skipped -> Text: '{text}' | Link: {h}")
