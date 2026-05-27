@@ -1,0 +1,12 @@
+{
+  "name": "sign-segmentation",
+  "build": {
+    "dockerfile": "../Dockerfile"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-python.python", "ms-python.vscode-pylance"]
+    }
+  },
+  "remoteUser": "root"
+}
