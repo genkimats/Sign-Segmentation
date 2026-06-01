@@ -9,10 +9,10 @@ from urllib.parse import urljoin, unquote
 # Get the exact directory where this python script is located
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Go up one level (parent directory), then point to a new "data" folder
-BASE_PATH = os.path.join(os.path.dirname(SCRIPT_DIR), "data")
+# Go up one level (parent directory), then point to a new "raw_data" folder
+BASE_PATH = os.path.join(os.path.dirname(SCRIPT_DIR), "raw_data")
 
-# Create the specific subdirectories inside the "data" folder
+# Create the specific subdirectories inside the "raw_data" folder
 ANNOTATIONS_DIR = os.path.join(BASE_PATH, "annotations")
 VIDEOS_DIR = os.path.join(BASE_PATH, "videos")
 
