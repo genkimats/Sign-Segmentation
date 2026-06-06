@@ -1,6 +1,131 @@
 import torch
 import torch.nn as nn
 from mamba_ssm import Mamba
+from src.graph import SkeletonGraph
+from src.stgcn import STGCNBlock
+
+
+class STGCN_BiMamba(nn.Module):
+    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3):
+        super().__init__()
+        
+        # 1. Get the physical skeleton graph
+        graph = SkeletonGraph(num_vertices=num_vertices)
+        A = graph.A
+        
+        # 2. ST-GCN Front-End (Spatial Encoder)
+        self.stgcn_blocks = nn.Sequential(
+            STGCNBlock(in_channels, stgcn_channels, A),
+            STGCNBlock(stgcn_channels, stgcn_channels, A)
+        )
+        
+        # 3. Graph-to-Sequence Bridge
+        self.bridge_dim = num_vertices * stgcn_channels
+        self.feature_proj = nn.Sequential(
+            nn.Linear(self.bridge_dim, d_model),
+            nn.LayerNorm(d_model),
+            nn.GELU(),
+            nn.Dropout(0.1) # Prevent overfitting on spatial features
+        )
+        
+        # 4. Bi-Mamba Back-End (Temporal Encoder)
+        self.fwd_mamba = nn.ModuleList([
+            Mamba(d_model=d_model, d_state=16, d_conv=4, expand=2) for _ in range(n_layers)
+        ])
+        self.bwd_mamba = nn.ModuleList([
+            Mamba(d_model=d_model, d_state=16, d_conv=4, expand=2) for _ in range(n_layers)
+        ])
+        
+        # 5. Fusion and Classifier
+        self.fusion = nn.Linear(d_model * 2, d_model)
+        self.classifier = nn.Linear(d_model, num_classes)
+
+    def forward(self, x):
+        """ x shape expected: (Batch, Channels, Frames, Vertices) -> (B, 3, 1000, 65) """
+        B, C, T, V = x.shape
+        
+        # Phase 1: Spatial-Temporal Graph Parsing
+        x = self.stgcn_blocks(x) # Shape: (B, 64, 1000, 65)
+        
+        # Phase 2: Bridge Formatting
+        x = x.permute(0, 2, 3, 1).contiguous()
+        x = x.view(B, T, -1) 
+        x = self.feature_proj(x) # Shape: (B, 1000, 256)
+        
+        # Phase 3: Bidirectional Mamba Sweeps
+        # Forward sweep
+        fwd_out = x
+        for layer in self.fwd_mamba:
+            fwd_out = layer(fwd_out)
+            
+        # Backward sweep (flip time dimension, process, flip back)
+        bwd_out = torch.flip(x, dims=[1])
+        for layer in self.bwd_mamba:
+            bwd_out = layer(bwd_out)
+        bwd_out = torch.flip(bwd_out, dims=[1])
+        
+        # Phase 4: Fusion & Classification
+        combined = torch.cat([fwd_out, bwd_out], dim=-1)
+        x = self.fusion(combined)
+        
+        logits = self.classifier(x)
+        return logits.permute(0, 2, 1) # Shape: (B, 3, T) ready for Focal Loss
+
+class STGCN_Mamba(nn.Module):
+    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3):
+        super().__init__()
+        
+        # 1. Get the physical skeleton graph
+        graph = SkeletonGraph(num_vertices=num_vertices)
+        A = graph.A
+        
+        # 2. ST-GCN Front-End (Spatial Encoder)
+        # Maps 3 (x,y,z) channels to stgcn_channels (e.g., 64) through structural context
+        self.stgcn_blocks = nn.Sequential(
+            STGCNBlock(in_channels, stgcn_channels, A),
+            STGCNBlock(stgcn_channels, stgcn_channels, A)
+        )
+        
+        # 3. Graph-to-Sequence Bridge
+        # We flatten the (Vertices * Channels) into a 1D vector per frame
+        self.bridge_dim = num_vertices * stgcn_channels
+        self.feature_proj = nn.Sequential(
+            nn.Linear(self.bridge_dim, d_model),
+            nn.LayerNorm(d_model),
+            nn.GELU(),
+            nn.Dropout(0.1) # Added slight dropout to prevent ST-GCN overfitting
+        )
+        
+        # 4. Mamba Back-End (Temporal Encoder)
+        self.mamba_layers = nn.ModuleList([
+            Mamba(d_model=d_model, d_state=16, d_conv=4, expand=2) for _ in range(n_layers)
+        ])
+        
+        self.classifier = nn.Linear(d_model, num_classes)
+
+    def forward(self, x):
+        """ x shape expected: (Batch, Channels, Frames, Vertices) -> (B, 3, 1000, 65) """
+        B, C, T, V = x.shape
+        
+        # Phase 1: Spatial-Temporal Graph Parsing
+        x = self.stgcn_blocks(x) # Shape becomes (B, 64, 1000, 65)
+        
+        # Phase 2: Bridge Formatting
+        # Permute to (B, T, V, C_new) -> (B, 1000, 65, 64)
+        x = x.permute(0, 2, 3, 1).contiguous()
+        # Flatten spatial info -> (B, 1000, 65 * 64)
+        x = x.view(B, T, -1) 
+        
+        # Project down to d_model -> (B, 1000, 256)
+        x = self.feature_proj(x)
+        
+        # Phase 3: Mamba Sequence Parsing
+        for layer in self.mamba_layers:
+            x = layer(x)
+            
+        # Classify and format for Focal Loss
+        logits = self.classifier(x)
+        return logits.permute(0, 2, 1) # (B, 3, T)
 
 class BiMambaBaseline(nn.Module):
     def __init__(self, num_vertices=65, in_channels=3, d_model=256, n_layers=4, num_classes=3):

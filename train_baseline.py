@@ -11,12 +11,16 @@ from tqdm import tqdm
 
 # Import our custom modules
 from src.dataset import SignSegmentationDataset
-from src.models import BiMambaBaseline, PureMambaBaseline
+from src.models import PureMambaBaseline, BiMambaBaseline, STGCN_Mamba, STGCN_BiMamba
 from src.loss import FocalLoss
 from src.metrics import evaluate_batch
 
-# --- Hyperparameters ---
-EXPERIMENT_BASENAME = "bi_mamba" # Change this when you build the ST-GCN!
+# ==============================================================================
+# 🎛️ EXPERIMENT CONFIGURATION PANEL
+# ==============================================================================
+# Options: "pure_mamba", "bi_mamba", "stgcn_mamba", "stgcn_bimamba"
+CHOSEN_MODEL = "stgcn_bimamba" 
+
 BATCH_SIZE = 16      
 EPOCHS = 30
 LEARNING_RATE = 1e-4
@@ -24,6 +28,18 @@ WINDOW_SIZE = 1000
 OVERLAP = 200
 NUM_VERTICES = 65
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
+# Map the string names to their actual PyTorch Class objects
+MODEL_REGISTRY = {
+    "pure_mamba": PureMambaBaseline,
+    "bi_mamba": BiMambaBaseline,
+    "stgcn_mamba": STGCN_Mamba,
+    "stgcn_bimamba": STGCN_BiMamba
+}
+
+# Automatically use the correct name and class based on your choice above
+EXPERIMENT_BASENAME = CHOSEN_MODEL
+MODEL_CLASS = MODEL_REGISTRY[CHOSEN_MODEL]
 
 HYPERPARAMETERS = {
     "basename": EXPERIMENT_BASENAME,
@@ -40,6 +56,7 @@ HYPERPARAMETERS = {
     "optimizer": "AdamW",
     "scheduler": "CosineAnnealingLR"
 }
+# ==============================================================================
 
 def setup_experiment_dirs(basename):
     """
@@ -144,8 +161,7 @@ def train():
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4, pin_memory=True)
     
     # 2. Initialize Model, Loss, and Optimizer
-    # model = PureMambaBaseline(num_vertices=NUM_VERTICES, in_channels=3, d_model=256, n_layers=4).to(DEVICE)
-    model = BiMambaBaseline(num_vertices=NUM_VERTICES, d_model=256, n_layers=4).to(DEVICE)
+    model = MODEL_CLASS(num_vertices=NUM_VERTICES, in_channels=3, d_model=256, n_layers=4).to(DEVICE)
     
     criterion = FocalLoss(gamma=HYPERPARAMETERS['focal_loss_gamma']).to(DEVICE)
     optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=0.01)
@@ -157,7 +173,8 @@ def train():
     
     history = {
         'epoch': [], 'train_loss': [], 'val_loss': [],
-        'frame_f1': [], 'mean_iou': [], 'segment_f1': []
+        'frame_f1': [], 'mean_iou': [], 'segment_f1': [],
+        'epoch_time': [] # Tracks time taken per epoch in seconds
     }
     
     # 3. Training Loop
@@ -223,19 +240,31 @@ def train():
         history['frame_f1'].append(epoch_f1)
         history['mean_iou'].append(epoch_iou)
         history['segment_f1'].append(epoch_seg)
+        history['epoch_time'].append(round(epoch_time_taken, 2))
         
         print(f"Epoch {epoch:02d} | Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f} | ⏱️ {format_time(epoch_time_taken)}")
         print(f"         └─> Frame F1: {epoch_f1:.4f} | Mean IoU: {epoch_iou:.4f} | Segments % (F1@0.5): {epoch_seg:.4f}")
 
     # --- Post-Training Exports ---
-    # 1. Save CSV
+    # 1. Save CSV with Time Summary rows at the footer
+    total_training_time = time.time() - training_start_time
+    average_epoch_time = sum(epoch_durations) / len(epoch_durations)
+    
     csv_path = os.path.join(log_dir, "training_metrics.csv")
     with open(csv_path, "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(history.keys())
+        writer.writerow(history.keys()) # Writes column headers
+        
+        # Write step-by-step tabular epoch data
         for row_data in zip(*history.values()):
             writer.writerow(row_data)
-    print(f"\n✅ Saved epoch metrics to '{csv_path}'")
+            
+        # Append runtime summaries at the very bottom of the document
+        writer.writerow([]) # Inserts an empty spacer row
+        writer.writerow(["Average Time Per Epoch:", format_time(average_epoch_time)])
+        writer.writerow(["Total Training Time:", format_time(total_training_time)])
+        
+    print(f"\n✅ Saved epoch metrics and runtime summary to '{csv_path}'")
 
     # 2. Save Plots
     save_plots(history, log_dir)
