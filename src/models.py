@@ -2,6 +2,52 @@ import torch
 import torch.nn as nn
 from mamba_ssm import Mamba
 
+class BiMambaBaseline(nn.Module):
+    def __init__(self, num_vertices=65, in_channels=3, d_model=256, n_layers=4, num_classes=3):
+        super().__init__()
+        
+        self.input_dim = num_vertices * in_channels
+        self.d_model = d_model
+        
+        self.feature_proj = nn.Sequential(
+            nn.Linear(self.input_dim, d_model),
+            nn.LayerNorm(d_model),
+            nn.GELU()
+        )
+        
+        # We need two Mamba streams
+        self.fwd_mamba = nn.ModuleList([Mamba(d_model=d_model, d_state=16, d_conv=4, expand=2) for _ in range(n_layers)])
+        self.bwd_mamba = nn.ModuleList([Mamba(d_model=d_model, d_state=16, d_conv=4, expand=2) for _ in range(n_layers)])
+        
+        # Fusion layer to combine forward and backward features
+        self.fusion = nn.Linear(d_model * 2, d_model)
+        self.classifier = nn.Linear(d_model, num_classes)
+
+    def forward(self, x):
+        B, C, T, V = x.shape
+        x = x.permute(0, 2, 3, 1).contiguous().view(B, T, V * C)
+        x = self.feature_proj(x)
+        
+        # Forward pass
+        fwd_out = x
+        for layer in self.fwd_mamba:
+            fwd_out = layer(fwd_out)
+            
+        # Backward pass
+        # Flip the temporal dimension (dim 1)
+        bwd_out = torch.flip(x, dims=[1])
+        for layer in self.bwd_mamba:
+            bwd_out = layer(bwd_out)
+        # Flip back to original order
+        bwd_out = torch.flip(bwd_out, dims=[1])
+        
+        # Fusion: Concat and project
+        combined = torch.cat([fwd_out, bwd_out], dim=-1)
+        x = self.fusion(combined)
+        
+        logits = self.classifier(x)
+        return logits.permute(0, 2, 1) # (B, 3, T)
+
 class PureMambaBaseline(nn.Module):
     def __init__(self, num_vertices=65, in_channels=3, d_model=256, n_layers=4, num_classes=3):
         super().__init__()

@@ -11,12 +11,12 @@ from tqdm import tqdm
 
 # Import our custom modules
 from src.dataset import SignSegmentationDataset
-from src.models import PureMambaBaseline
+from src.models import BiMambaBaseline, PureMambaBaseline
 from src.loss import FocalLoss
 from src.metrics import evaluate_batch
 
 # --- Hyperparameters ---
-EXPERIMENT_BASENAME = "pure_mamba" # Change this when you build the ST-GCN!
+EXPERIMENT_BASENAME = "bi_mamba" # Change this when you build the ST-GCN!
 BATCH_SIZE = 16      
 EPOCHS = 30
 LEARNING_RATE = 1e-4
@@ -101,6 +101,10 @@ def save_plots(history, log_dir):
     ax2.set_title('Validation Metrics over Time')
     ax2.set_xlabel('Epoch')
     ax2.set_ylabel('Score')
+    
+    # --- MODIFICATION: Fix Y-axis to 1.0 ---
+    ax2.set_ylim(0, 1.0) 
+    
     ax2.legend()
     ax2.grid(True, linestyle='--', alpha=0.7)
     
@@ -140,7 +144,8 @@ def train():
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4, pin_memory=True)
     
     # 2. Initialize Model, Loss, and Optimizer
-    model = PureMambaBaseline(num_vertices=NUM_VERTICES, in_channels=3, d_model=256, n_layers=4).to(DEVICE)
+    # model = PureMambaBaseline(num_vertices=NUM_VERTICES, in_channels=3, d_model=256, n_layers=4).to(DEVICE)
+    model = BiMambaBaseline(num_vertices=NUM_VERTICES, d_model=256, n_layers=4).to(DEVICE)
     
     criterion = FocalLoss(gamma=HYPERPARAMETERS['focal_loss_gamma']).to(DEVICE)
     optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=0.01)
