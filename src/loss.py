@@ -4,15 +4,9 @@ import torch.nn.functional as F
 
 class FocalLoss(nn.Module):
     def __init__(self, alpha=None, gamma=2.0, reduction='mean'):
-        """
-        alpha: Tensor of weights for each class (e.g., [0.1, 0.4, 0.5])
-        gamma: Focusing parameter. Higher = more focus on hard examples.
-        """
         super(FocalLoss, self).__init__()
         self.gamma = gamma
         self.reduction = reduction
-        # Default alpha weighting if none provided:
-        # Class 0 (Out) gets low weight, Class 1 (In) medium, Class 2 (Begin) high
         if alpha is None:
             self.alpha = torch.tensor([0.1, 0.4, 0.5])
         else:
@@ -20,27 +14,25 @@ class FocalLoss(nn.Module):
 
     def forward(self, inputs, targets):
         """
-        inputs: logits from model of shape (Batch, Classes, SequenceLength) -> (B, 3, 1000)
-        targets: ground truth of shape (Batch, SequenceLength) -> (B, 1000)
+        inputs: (B, 3, T) logits
+        targets: Can now be Soft Labels (B, 3, T) OR Hard Labels (B, T)
         """
-        # Move alpha to the same device as inputs
         self.alpha = self.alpha.to(inputs.device)
         
-        # Calculate standard cross entropy loss (unreduced)
+        # PyTorch F.cross_entropy automatically handles soft targets (probabilities)
         ce_loss = F.cross_entropy(inputs, targets, reduction='none')
-        
-        # Get the probabilities for the true classes
         pt = torch.exp(-ce_loss)
         
-        # Apply alpha weighting
-        alpha_t = self.alpha[targets]
-        
-        # Calculate Focal Loss
+        # Dynamically apply alpha weighting depending on target type
+        if targets.dim() == inputs.dim():
+            # Soft Labels: Weight is the dot product of probabilities and alpha
+            alpha_t = torch.einsum('bct,c->bt', targets, self.alpha)
+        else:
+            # Hard Labels (Fallback): Standard integer indexing
+            alpha_t = self.alpha[targets]
+            
         focal_loss = alpha_t * (1 - pt) ** self.gamma * ce_loss
         
-        if self.reduction == 'mean':
-            return focal_loss.mean()
-        elif self.reduction == 'sum':
-            return focal_loss.sum()
-        else:
-            return focal_loss
+        if self.reduction == 'mean': return focal_loss.mean()
+        elif self.reduction == 'sum': return focal_loss.sum()
+        return focal_loss

@@ -1,98 +1,86 @@
 import os
 import torch
 import numpy as np
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
+
+def apply_label_smoothing(labels_array, window_size=5):
+    """
+    Converts 1D hard labels into 2D soft probability distributions.
+    Applies a Gaussian tolerance window around 'Begin' (Class 2) tags.
+    """
+    T = labels_array.shape[0]
+    num_classes = 3
+    soft_labels = np.zeros((T, num_classes), dtype=np.float32)
+
+    # Convert to strict one-hot vectors first
+    soft_labels[np.arange(T), labels_array] = 1.0
+
+    if window_size <= 1:
+        return soft_labels
+
+    spread = window_size // 2
+    # Standard deviation scales with the window spread
+    sigma = spread / 2.0 if spread > 0 else 1.0
+
+    # Find all exact 'Begin' frames
+    begin_indices = np.where(labels_array == 2)[0]
+
+    for i in begin_indices:
+        for d in range(-spread, spread + 1):
+            idx = i + d
+            if 0 <= idx < T:
+                # Calculate Gaussian weight
+                weight = np.exp(-(d**2) / (2 * sigma**2))
+                
+                # If this curve provides a higher 'Begin' probability, apply it
+                if weight > soft_labels[idx, 2]:
+                    soft_labels[idx, 2] = weight
+                    
+                    # Proportionally scale down whatever the original class was
+                    orig_class = labels_array[idx]
+                    if orig_class != 2:
+                        soft_labels[idx, orig_class] = 1.0 - weight
+                        
+    return soft_labels
 
 class SignSegmentationDataset(Dataset):
-    def __init__(self, keypoints_dir, labels_dir, window_size=1000, overlap=200, mode='train'):
-        """
-        Args:
-            keypoints_dir: Path to processed_data/keypoints
-            labels_dir: Path to processed_data/BIO_tags
-            window_size: Number of frames per slice
-            overlap: Number of frames to overlap between slices
-            mode: 'train', 'val', or 'test' (Useful later for data splitting)
-        """
+    def __init__(self, keypoints_dir, labels_dir, window_size=1000, overlap=200, tolerance_window=5):
         self.keypoints_dir = keypoints_dir
         self.labels_dir = labels_dir
         self.window_size = window_size
         self.step_size = window_size - overlap
-        
-        # We will build an index of all possible slices across all files
+        self.tolerance_window = tolerance_window
         self.slice_index = []
         
         self._build_index()
 
     def _build_index(self):
-        """Scans all files and pre-calculates the start/end frames for every slice."""
         files = [f for f in os.listdir(self.keypoints_dir) if f.endswith('.npy')]
-        
         for file_name in files:
             base_name = file_name.replace('.npy', '')
             kp_path = os.path.join(self.keypoints_dir, file_name)
+            total_frames = np.load(kp_path, mmap_mode='r').shape[0]
             
-            # Load just the shape of the array using mmap_mode to save RAM
-            # This allows us to know the length of the video without loading the 1GB file
-            kp_shape = np.load(kp_path, mmap_mode='r').shape
-            total_frames = kp_shape[0]
-            
-            # Calculate all valid slice windows for this file
             for start in range(0, total_frames - self.window_size + 1, self.step_size):
-                end = start + self.window_size
-                self.slice_index.append({
-                    'base_name': base_name,
-                    'start': start,
-                    'end': end
-                })
+                self.slice_index.append({'base_name': base_name, 'start': start, 'end': start + self.window_size})
 
     def __len__(self):
         return len(self.slice_index)
 
     def __getitem__(self, idx):
-        # 1. Get the pre-calculated slice metadata
         slice_info = self.slice_index[idx]
-        base_name = slice_info['base_name']
-        start = slice_info['start']
-        end = slice_info['end']
+        kp_path = os.path.join(self.keypoints_dir, f"{slice_info['base_name']}.npy")
+        label_path = os.path.join(self.labels_dir, f"{slice_info['base_name']}.npy")
         
-        # 2. Load only the specific slice from the disk arrays
-        kp_path = os.path.join(self.keypoints_dir, f"{base_name}.npy")
-        label_path = os.path.join(self.labels_dir, f"{base_name}.npy")
+        kp_array = np.load(kp_path, mmap_mode='c')[slice_info['start']:slice_info['end']]
+        label_array = np.load(label_path, mmap_mode='c')[slice_info['start']:slice_info['end']]
         
-        # Use mmap_mode to efficiently slice directly from disk
-        kp_array = np.load(kp_path, mmap_mode='c')[start:end]
-        label_array = np.load(label_path, mmap_mode='c')[start:end]
+        # Format Keypoints
+        keypoints_tensor = torch.tensor(kp_array, dtype=torch.float32).permute(2, 0, 1) 
         
-        # 3. Format tensors for PyTorch and ST-GCN
-        # ST-GCN typically expects inputs in the shape: (Channels, Frames, Vertices)
-        # Your data is currently saved as: (Frames, Vertices, Channels) -> (1000, 67, 3)
-        keypoints_tensor = torch.tensor(kp_array, dtype=torch.float32)
-        keypoints_tensor = keypoints_tensor.permute(2, 0, 1) # Now (3, 1000, 67)
-        
-        labels_tensor = torch.tensor(label_array, dtype=torch.long)
+        # --- NEW: Apply Gaussian Tolerance and return Soft Labels ---
+        soft_labels = apply_label_smoothing(label_array, self.tolerance_window)
+        # Expected shape for PyTorch Cross Entropy is (Classes, SequenceLength)
+        labels_tensor = torch.tensor(soft_labels, dtype=torch.float32).permute(1, 0)
         
         return keypoints_tensor, labels_tensor
-
-# --- Quick Test to verify it works ---
-if __name__ == "__main__":
-    import time
-    
-    # Adjust these paths to point to your processed_data directories
-    KEYPOINTS_DIR = "../processed_data/keypoints"
-    LABELS_DIR = "../processed_data/BIO_tags"
-    
-    print("Building Dataset Index...")
-    start_time = time.time()
-    
-    dataset = SignSegmentationDataset(KEYPOINTS_DIR, LABELS_DIR, window_size=1000, overlap=200)
-    dataloader = DataLoader(dataset, batch_size=4, shuffle=True, num_workers=2)
-    
-    print(f"Index built in {time.time() - start_time:.2f} seconds.")
-    print(f"Total overlapping slices available: {len(dataset)}")
-    
-    # Test one batch
-    for batch_idx, (features, targets) in enumerate(dataloader):
-        print(f"\nBatch {batch_idx}:")
-        print(f"Feature Shape: {features.shape}") # Should be [4, 3, 1000, 67]
-        print(f"Target Shape: {targets.shape}")   # Should be [4, 1000]
-        break # Just run one batch to test
