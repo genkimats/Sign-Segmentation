@@ -3,7 +3,117 @@ import torch.nn as nn
 from mamba_ssm import Mamba
 from src.graph import SkeletonGraph
 from src.stgcn import STGCNBlock
+from src.stgcn import DecoupledSTGCNBlock
+from mamba_ssm import Mamba
 
+
+class Decoupled_STGCN_Mamba(nn.Module):
+    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3):
+        super().__init__()
+        
+        # 1. Decoupled Spatial Encoder
+        self.stgcn_blocks = nn.Sequential(
+            DecoupledSTGCNBlock(in_channels, stgcn_channels),
+            DecoupledSTGCNBlock(stgcn_channels, stgcn_channels)
+        )
+        
+        # 2. Bridge (THE FIX: LayerNorm and GELU restored)
+        self.bridge_dim = num_vertices * stgcn_channels
+        self.feature_proj = nn.Sequential(
+            nn.Linear(self.bridge_dim, d_model),
+            nn.LayerNorm(d_model), # Critical for Mamba stability
+            nn.GELU(),
+            nn.Dropout(0.1)
+        )
+        
+        # 3. Standard Causal Mamba
+        self.mamba_layers = nn.ModuleList([
+            Mamba(d_model=d_model, d_state=16, d_conv=4, expand=2) for _ in range(n_layers)
+        ])
+        
+        self.classifier = nn.Linear(d_model, num_classes)
+
+    def forward(self, x):
+        """ x shape expected: (B, 3, T, 65) """
+        x = self.stgcn_blocks(x) 
+        
+        # Bridge to Sequence
+        x = x.permute(0, 2, 3, 1).contiguous()
+        x = x.view(x.size(0), x.size(1), -1) 
+        x = self.feature_proj(x) 
+        
+        # Mamba Sequence Parsing
+        for layer in self.mamba_layers:
+            x = layer(x)
+            
+        embeddings = x.permute(0, 2, 1) # Extract for BCL
+        logits = self.classifier(x).permute(0, 2, 1) # Standard Classification
+        
+        return logits, embeddings
+
+class Decoupled_STGCN_BiMamba(nn.Module):
+    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3):
+        super().__init__()
+        
+        # 1. Decoupled Spatial Encoder
+        self.stgcn_blocks = nn.Sequential(
+            DecoupledSTGCNBlock(in_channels, stgcn_channels),
+            DecoupledSTGCNBlock(stgcn_channels, stgcn_channels)
+        )
+        
+        # 2. Bridge
+        self.bridge_dim = num_vertices * stgcn_channels
+        self.feature_proj = nn.Sequential(
+            nn.Linear(self.bridge_dim, d_model),
+            nn.LayerNorm(d_model),
+            nn.GELU(),
+            nn.Dropout(0.1)
+        )
+        
+        # 3. Bi-Mamba Temporal Encoder
+        self.fwd_mamba = nn.ModuleList([
+            Mamba(d_model=d_model, d_state=16, d_conv=4, expand=2) for _ in range(n_layers)
+        ])
+        self.bwd_mamba = nn.ModuleList([
+            Mamba(d_model=d_model, d_state=16, d_conv=4, expand=2) for _ in range(n_layers)
+        ])
+        
+        # 4. Fusion and Classification
+        self.fusion = nn.Linear(d_model * 2, d_model)
+        self.classifier = nn.Linear(d_model, num_classes)
+
+    def forward(self, x):
+        """ x shape expected: (B, 3, T, 65) """
+        B, C, T, V = x.shape
+        
+        # Pass through the Anatomically Decoupled GCN
+        x = self.stgcn_blocks(x) # (B, 64, T, 65)
+        
+        # Bridge to Sequence
+        x = x.permute(0, 2, 3, 1).contiguous()
+        x = x.view(B, T, -1) 
+        x = self.feature_proj(x) # (B, T, 256)
+        
+        # Bi-Mamba Sweeps
+        fwd_out = x
+        for layer in self.fwd_mamba:
+            fwd_out = layer(fwd_out)
+            
+        bwd_out = torch.flip(x, dims=[1])
+        for layer in self.bwd_mamba:
+            bwd_out = layer(bwd_out)
+        bwd_out = torch.flip(bwd_out, dims=[1])
+        
+        combined = torch.cat([fwd_out, bwd_out], dim=-1)
+        x = self.fusion(combined)
+        
+        # Extract embeddings for Boundary Contrastive Loss
+        embeddings = x.permute(0, 2, 1) # (B, 256, T)
+        
+        logits = self.classifier(x)
+        logits = logits.permute(0, 2, 1) # (B, 3, T)
+        
+        return logits, embeddings
 
 class STGCN_BiMamba(nn.Module):
     def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3):
@@ -68,8 +178,15 @@ class STGCN_BiMamba(nn.Module):
         combined = torch.cat([fwd_out, bwd_out], dim=-1)
         x = self.fusion(combined)
         
+        # --- NEW: Extract Latent Embeddings before Classification ---
+        embeddings = x.permute(0, 2, 1) # Shape: (B, 256, 1000)
+        
+        # Phase 4: Classification
         logits = self.classifier(x)
-        return logits.permute(0, 2, 1) # Shape: (B, 3, T) ready for Focal Loss
+        logits = logits.permute(0, 2, 1) # Shape: (B, 3, 1000)
+        
+        # Return BOTH for the combined loss function
+        return logits, embeddings
 
 class STGCN_Mamba(nn.Module):
     def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3):
@@ -123,9 +240,15 @@ class STGCN_Mamba(nn.Module):
         for layer in self.mamba_layers:
             x = layer(x)
             
-        # Classify and format for Focal Loss
+        # --- NEW: Extract Latent Embeddings before Classification ---
+        embeddings = x.permute(0, 2, 1) # Shape: (B, 256, 1000)
+        
+        # Phase 4: Classification
         logits = self.classifier(x)
-        return logits.permute(0, 2, 1) # (B, 3, T)
+        logits = logits.permute(0, 2, 1) # Shape: (B, 3, 1000)
+        
+        # Return BOTH for the combined loss function
+        return logits, embeddings
 
 class BiMambaBaseline(nn.Module):
     def __init__(self, num_vertices=65, in_channels=3, d_model=256, n_layers=4, num_classes=3):

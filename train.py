@@ -11,17 +11,21 @@ from tqdm import tqdm
 
 # Import our custom modules
 from src.dataset import SignSegmentationDataset
-from src.models import PureMambaBaseline, BiMambaBaseline, STGCN_Mamba, STGCN_BiMamba
-from src.loss import FocalLoss
+from src.models import PureMambaBaseline, BiMambaBaseline, STGCN_Mamba, STGCN_BiMamba, Decoupled_STGCN_Mamba, Decoupled_STGCN_BiMamba
 from src.metrics import evaluate_batch
+from src.loss import CombinedBoundaryLoss, FocalLoss
+
 
 # ==============================================================================
 # 🎛️ EXPERIMENT CONFIGURATION PANEL
 # ==============================================================================
-RUN_ALL_MODELS = False           # <-- THE NEW TOGGLE (True = Train all 4 sequentially)
+RUN_ALL_MODELS = False
 
-# Options: "pure_mamba", "bi_mamba", "stgcn_mamba", "stgcn_bimamba"
-CHOSEN_MODEL = "stgcn_bimamba"    # Only used if RUN_ALL_MODELS is False
+# Options: "pure_mamba", "bi_mamba", "stgcn_mamba", "stgcn_bimamba", "decoupled_stgcn_mamba", "decoupled_stgcn_bimamba"
+MODELS_TO_TRAIN = [
+    "decoupled_stgcn_mamba",
+    "decoupled_stgcn_bimamba"
+]
 
 BATCH_SIZE = 16      
 EPOCHS = 30
@@ -29,7 +33,11 @@ LEARNING_RATE = 1e-4
 WINDOW_SIZE = 1000
 OVERLAP = 200
 NUM_VERTICES = 65
-TOLERANCE_WINDOW = 5            # 1 (Strict), 3, or 5 frames
+TOLERANCE_WINDOW = 5            
+
+# --- NEW TOGGLE: Boundary Contrastive Loss ---
+USE_BCL = False                  # True = Use Combined Loss. False = Use standard Focal Loss only.
+CONTRASTIVE_WEIGHT = 0.15       # Only active if USE_BCL is True
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -37,10 +45,11 @@ MODEL_REGISTRY = {
     "pure_mamba": PureMambaBaseline,
     "bi_mamba": BiMambaBaseline,
     "stgcn_mamba": STGCN_Mamba,
-    "stgcn_bimamba": STGCN_BiMamba
+    "stgcn_bimamba": STGCN_BiMamba,
+    "decoupled_stgcn_mamba": Decoupled_STGCN_Mamba,
+    "decoupled_stgcn_bimamba": Decoupled_STGCN_BiMamba
 }
 
-# Base hyperparameters (basename is injected dynamically during training)
 HYPERPARAMETERS = {
     "batch_size": BATCH_SIZE,
     "epochs": EPOCHS,
@@ -49,6 +58,8 @@ HYPERPARAMETERS = {
     "overlap": OVERLAP,
     "num_vertices": NUM_VERTICES,
     "tolerance_window": TOLERANCE_WINDOW,
+    "use_bcl": USE_BCL,                          # <-- Saved to JSON
+    "contrastive_weight": CONTRASTIVE_WEIGHT,    # <-- Saved to JSON
     "in_channels": 3,
     "d_model": 256,
     "n_layers": 4,
@@ -137,7 +148,16 @@ def train_model(model_name, model_class, train_loader, val_loader):
     # Initialize Model, Loss, and Optimizer
     model = model_class(num_vertices=NUM_VERTICES, in_channels=3, d_model=256, n_layers=4).to(DEVICE)
     
-    criterion = FocalLoss(gamma=HYPERPARAMETERS['focal_loss_gamma']).to(DEVICE)
+    # Initialize the correct Loss Function based on the toggle
+    if USE_BCL:
+        print(f"⚖️ Loss Function: Combined (Focal + BCL at w={CONTRASTIVE_WEIGHT})")
+        criterion = CombinedBoundaryLoss(
+            focal_gamma=HYPERPARAMETERS['focal_loss_gamma'], 
+            contrastive_weight=CONTRASTIVE_WEIGHT
+        ).to(DEVICE)
+    else:
+        print("⚖️ Loss Function: Standard Soft Focal Loss Only")
+        criterion = FocalLoss(gamma=HYPERPARAMETERS['focal_loss_gamma']).to(DEVICE)
     optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=0.01)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS)
     
@@ -161,16 +181,24 @@ def train_model(model_name, model_class, train_loader, val_loader):
             features, targets = features.to(DEVICE), targets.to(DEVICE)
             
             optimizer.zero_grad()
-            logits = model(features)  
             
-            loss = criterion(logits, targets)
+            logits, embeddings = model(features)  
+            
+            # Dynamic Loss routing
+            if USE_BCL:
+                loss, focal_val, contrastive_val = criterion(logits, embeddings, targets)
+                # Update progress bar for BCL
+                loop.set_postfix(Focal=f"{focal_val.item():.3f}", BCL=f"{contrastive_val.item():.3f}")
+            else:
+                loss = criterion(logits, targets)
+                # Update progress bar for standard Focal Loss
+                loop.set_postfix(Loss=f"{loss.item():.4f}")
+            
             loss.backward()
-            
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
             
             total_train_loss += loss.item()
-            loop.set_postfix(loss=loss.item())
             
         scheduler.step()
         avg_train_loss = total_train_loss / len(train_loader)
@@ -183,9 +211,13 @@ def train_model(model_name, model_class, train_loader, val_loader):
         with torch.no_grad():
             for features, targets in val_loader:
                 features, targets = features.to(DEVICE), targets.to(DEVICE)
-                logits = model(features) 
+                logits, _ = model(features) 
                 
-                loss = criterion(logits, targets)
+                # Dynamically calculate pure classification error
+                if USE_BCL:
+                    loss = criterion.focal(logits, targets)
+                else:
+                    loss = criterion(logits, targets)
                 total_val_loss += loss.item()
                 
                 predictions = torch.argmax(logits, dim=1) 
@@ -271,9 +303,17 @@ if __name__ == "__main__":
     
     if RUN_ALL_MODELS:
         print("🔄 RUN_ALL_MODELS is TRUE. Training all architectures sequentially...")
-        for name, cls in MODEL_REGISTRY.items():
-            train_model(name, cls, train_loader, val_loader)
-        print("\n🎉 ALL ARCHITECTURES HAVE FINISHED TRAINING 🎉")
+        models_to_run = list(MODEL_REGISTRY.keys())
     else:
-        print(f"▶️ RUN_ALL_MODELS is FALSE. Training only {CHOSEN_MODEL}...")
-        train_model(CHOSEN_MODEL, MODEL_REGISTRY[CHOSEN_MODEL], train_loader, val_loader)
+        print(f"▶️ RUN_ALL_MODELS is FALSE. Training selected subset: {MODELS_TO_TRAIN}")
+        models_to_run = MODELS_TO_TRAIN
+
+    # Loop through the target models and train them safely
+    for model_name in models_to_run:
+        if model_name in MODEL_REGISTRY:
+            model_class = MODEL_REGISTRY[model_name]
+            train_model(model_name, model_class, train_loader, val_loader)
+        else:
+            print(f"❌ ERROR: Model '{model_name}' is not in the MODEL_REGISTRY. Skipping...")
+            
+    print("\n🎉 ALL SCHEDULED TRAININGS HAVE FINISHED 🎉")
