@@ -2,6 +2,35 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+# ==========================================
+# 1. Standard Cross-Entropy
+# ==========================================
+class StandardCrossEntropyLoss(nn.Module):
+    """Treats all classes equally."""
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, inputs, targets):
+        return F.cross_entropy(inputs, targets)
+
+# ==========================================
+# 2. Weighted Cross-Entropy
+# ==========================================
+class WeightedCrossEntropyLoss(nn.Module):
+    """Applies a manual multiplier to specific classes to combat imbalance."""
+    def __init__(self, weights):
+        super().__init__()
+        # Ensure weights is a float tensor
+        self.weights = torch.tensor(weights, dtype=torch.float32)
+
+    def forward(self, inputs, targets):
+        # Move weights to the same device as inputs (GPU)
+        self.weights = self.weights.to(inputs.device)
+        return F.cross_entropy(inputs, targets, weight=self.weights)
+
+# ==========================================
+# 3. Focal Loss & BCL (Your existing work)
+# ==========================================
 class FocalLoss(nn.Module):
     def __init__(self, alpha=None, gamma=2.0, reduction='mean'):
         super(FocalLoss, self).__init__()
@@ -10,7 +39,7 @@ class FocalLoss(nn.Module):
         if alpha is None:
             self.alpha = torch.tensor([0.1, 0.4, 0.5])
         else:
-            self.alpha = alpha
+            self.alpha = torch.tensor(alpha, dtype=torch.float32)
 
     def forward(self, inputs, targets):
         self.alpha = self.alpha.to(inputs.device)
@@ -29,10 +58,6 @@ class FocalLoss(nn.Module):
         return focal_loss
 
 class BoundaryContrastiveLoss(nn.Module):
-    """
-    Forces the latent embeddings of 'Begin' frames to cluster together,
-    while pushing 'Inside' and 'Outside' frames away from the Begin centroid.
-    """
     def __init__(self, margin=0.0):
         super().__init__()
         self.margin = margin 
@@ -47,8 +72,6 @@ class BoundaryContrastiveLoss(nn.Module):
         embeddings = embeddings.permute(0, 2, 1).reshape(-1, D) 
         hard_targets = hard_targets.reshape(-1) 
         
-        # --- FIX 1: Safe Normalization ---
-        # eps prevents division by zero if an embedding collapses
         embeddings = F.normalize(embeddings, p=2, dim=1, eps=1e-8)
         
         b_mask = (hard_targets == 2)
@@ -57,17 +80,12 @@ class BoundaryContrastiveLoss(nn.Module):
         b_embeddings = embeddings[b_mask]
         non_b_embeddings = embeddings[non_b_mask]
         
-        # If no boundaries exist in this batch, return 0 loss gracefully
         if len(b_embeddings) == 0 or len(non_b_embeddings) == 0:
             return torch.tensor(0.0, device=embeddings.device, requires_grad=True)
             
         b_centroid = b_embeddings.mean(dim=0, keepdim=True)
-        # --- FIX 2: Safe Normalization on Centroid ---
         b_centroid = F.normalize(b_centroid, p=2, dim=1, eps=1e-8)
         
-        # --- FIX 3: Clamping Cosine Similarity ---
-        # Floating point inaccuracies can sometimes cause cosine sim to be 1.0000001
-        # which can cause NaN in subsequent backward gradient calculations.
         pull_sim = F.cosine_similarity(b_embeddings, b_centroid)
         pull_sim = torch.clamp(pull_sim, min=-0.999, max=0.999)
         pull_loss = (1.0 - pull_sim).mean()
@@ -83,13 +101,10 @@ class CombinedBoundaryLoss(nn.Module):
         super().__init__()
         self.focal = FocalLoss(gamma=focal_gamma)
         self.contrastive = BoundaryContrastiveLoss()
-        
-        # Lambda weight: How much importance to give the Contrastive Loss
         self.lambda_w = contrastive_weight 
 
     def forward(self, logits, embeddings, targets):
         loss_f = self.focal(logits, targets)
         loss_c = self.contrastive(embeddings, targets)
-        
         total_loss = loss_f + (self.lambda_w * loss_c)
         return total_loss, loss_f, loss_c

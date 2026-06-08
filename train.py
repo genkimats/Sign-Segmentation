@@ -14,7 +14,7 @@ import copy
 from src.dataset import SignSegmentationDataset
 from src.models import PureMambaBaseline, BiMambaBaseline, STGCN_Mamba, STGCN_BiMamba, Decoupled_STGCN_Mamba, Decoupled_STGCN_BiMamba
 from src.metrics import evaluate_batch
-from src.loss import CombinedBoundaryLoss, FocalLoss
+from src.loss import CombinedBoundaryLoss, FocalLoss, StandardCrossEntropyLoss, WeightedCrossEntropyLoss
 from src.decoder import decode_predictions
 
 
@@ -25,6 +25,7 @@ RUN_ALL_MODELS = False
 
 # Options: "pure_mamba", "bi_mamba", "stgcn_mamba", "stgcn_bimamba", "decoupled_stgcn_mamba", "decoupled_stgcn_bimamba"
 MODELS_TO_TRAIN = [
+    "stgcn_mamba",
     "stgcn_bimamba",
     "decoupled_stgcn_mamba",
     "decoupled_stgcn_bimamba"
@@ -38,13 +39,19 @@ OVERLAP = 200
 NUM_VERTICES = 65
 TOLERANCE_WINDOW = 5            
 
-USE_BCL = False       
-CONTRASTIVE_WEIGHT = 0.15
+# --- NEW: LOSS FUNCTION TOGGLES ---
+# Options: "standard_ce", "weighted_ce", "bcl"
+LOSS_FUNCTION = "weighted_ce"   
 
-# --- NEW TOGGLES: Decoding Strategy ---
-# Options: "argmax", "threshold", "linguistic"
+# Class weights for 'weighted_ce' [Class 0 (O), Class 1 (I), Class 2 (B)]
+# 1.0 means full penalty. 0.1 means 10% penalty.
+CLASS_WEIGHTS = [0.1, 0.3, 1.0]  
+
+CONTRASTIVE_WEIGHT = 0.15 # Only used if LOSS_FUNCTION is "bcl"      
+
+# --- DECODING STRATEGY ---
 DECODER_STRATEGY = "linguistic"  
-DECODER_THRESHOLD = 0.60         # 0.51 for Hands-On, 0.55 - 0.65 for Linguistic
+DECODER_THRESHOLD = 0.60         
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -65,10 +72,11 @@ HYPERPARAMETERS = {
     "overlap": OVERLAP,
     "num_vertices": NUM_VERTICES,
     "tolerance_window": TOLERANCE_WINDOW,
-    "use_bcl": USE_BCL,                          # <-- Saved to JSON
-    "contrastive_weight": CONTRASTIVE_WEIGHT,    # <-- Saved to JSON
-    "decoder_strategy": DECODER_STRATEGY,      # <-- Add to JSON log
-    "decoder_threshold": DECODER_THRESHOLD,      # <-- Add to JSON log
+    "loss_function": LOSS_FUNCTION,
+    "class_weights": CLASS_WEIGHTS,
+    "contrastive_weight": CONTRASTIVE_WEIGHT,
+    "decoder_strategy": DECODER_STRATEGY,
+    "decoder_threshold": DECODER_THRESHOLD,
     "in_channels": 3,
     "d_model": 256,
     "n_layers": 4,
@@ -157,16 +165,24 @@ def train_model(model_name, model_class, train_loader, val_loader):
     # Initialize Model, Loss, and Optimizer
     model = model_class(num_vertices=NUM_VERTICES, in_channels=3, d_model=256, n_layers=4).to(DEVICE)
     
-    # Initialize the correct Loss Function based on the toggle
-    if USE_BCL:
-        print(f"⚖️ Loss Function: Combined (Focal + BCL at w={CONTRASTIVE_WEIGHT})")
-        criterion = CombinedBoundaryLoss(
-            focal_gamma=HYPERPARAMETERS['focal_loss_gamma'], 
-            contrastive_weight=CONTRASTIVE_WEIGHT
-        ).to(DEVICE)
+    # 2. Initialize Model, Loss, and Optimizer
+    model = model_class(num_vertices=NUM_VERTICES, in_channels=3, d_model=256, n_layers=4).to(DEVICE)
+    
+    if HYPERPARAMETERS['loss_function'] == "standard_ce":
+        print("⚖️ Loss Function: Standard Cross-Entropy")
+        criterion = StandardCrossEntropyLoss().to(DEVICE)
+        
+    elif HYPERPARAMETERS['loss_function'] == "weighted_ce":
+        print(f"⚖️ Loss Function: Weighted Cross-Entropy (Weights: {HYPERPARAMETERS['class_weights']})")
+        criterion = WeightedCrossEntropyLoss(weights=HYPERPARAMETERS['class_weights']).to(DEVICE)
+        
+    elif HYPERPARAMETERS['loss_function'] == "bcl":
+        print(f"⚖️ Loss Function: Combined BCL (Weight: {HYPERPARAMETERS['contrastive_weight']})")
+        criterion = CombinedBoundaryLoss(focal_gamma=2.0, contrastive_weight=HYPERPARAMETERS['contrastive_weight']).to(DEVICE)
+        
     else:
-        print("⚖️ Loss Function: Standard Soft Focal Loss Only")
-        criterion = FocalLoss(gamma=HYPERPARAMETERS['focal_loss_gamma']).to(DEVICE)
+        raise ValueError(f"Unknown Loss Function: {HYPERPARAMETERS['loss_function']}")
+    
     optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=0.01)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS)
     
@@ -196,7 +212,6 @@ def train_model(model_name, model_class, train_loader, val_loader):
             
             optimizer.zero_grad()
             
-            # --- FIX: Safely handle models that return 1 or 2 items ---
             outputs = model(features)
             if isinstance(outputs, tuple):
                 logits, embeddings = outputs
@@ -205,12 +220,13 @@ def train_model(model_name, model_class, train_loader, val_loader):
                 embeddings = None
             
             # Dynamic Loss routing
-            if USE_BCL:
+            if HYPERPARAMETERS['loss_function'] == "bcl":
                 if embeddings is None:
-                    raise ValueError(f"❌ Model '{model_name}' does not return embeddings. BCL requires embeddings. Update the model's forward() function or set USE_BCL=False.")
+                    raise ValueError(f"❌ Model '{model_name}' does not return embeddings. BCL requires embeddings.")
                 loss, focal_val, contrastive_val = criterion(logits, embeddings, targets)
                 loop.set_postfix(Focal=f"{focal_val.item():.3f}", BCL=f"{contrastive_val.item():.3f}")
             else:
+                # Used for both standard_ce and weighted_ce
                 loss = criterion(logits, targets)
                 loop.set_postfix(Loss=f"{loss.item():.4f}")
             
@@ -239,10 +255,11 @@ def train_model(model_name, model_class, train_loader, val_loader):
                     logits = outputs
                 
                 # Dynamically calculate pure classification error
-                if USE_BCL:
+                if HYPERPARAMETERS['loss_function'] == "bcl":
                     loss = criterion.focal(logits, targets)
                 else:
                     loss = criterion(logits, targets)
+                
                 total_val_loss += loss.item()
                 
                 # --- FIX: Force FAST argmax during training to save time ---
