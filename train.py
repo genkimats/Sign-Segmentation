@@ -8,12 +8,14 @@ import matplotlib.pyplot as plt
 import torch.optim as optim
 from torch.utils.data import DataLoader, random_split
 from tqdm import tqdm
+import copy
 
 # Import our custom modules
 from src.dataset import SignSegmentationDataset
 from src.models import PureMambaBaseline, BiMambaBaseline, STGCN_Mamba, STGCN_BiMamba, Decoupled_STGCN_Mamba, Decoupled_STGCN_BiMamba
 from src.metrics import evaluate_batch
 from src.loss import CombinedBoundaryLoss, FocalLoss
+from src.decoder import decode_predictions
 
 
 # ==============================================================================
@@ -23,6 +25,7 @@ RUN_ALL_MODELS = False
 
 # Options: "pure_mamba", "bi_mamba", "stgcn_mamba", "stgcn_bimamba", "decoupled_stgcn_mamba", "decoupled_stgcn_bimamba"
 MODELS_TO_TRAIN = [
+    "stgcn_bimamba",
     "decoupled_stgcn_mamba",
     "decoupled_stgcn_bimamba"
 ]
@@ -35,9 +38,13 @@ OVERLAP = 200
 NUM_VERTICES = 65
 TOLERANCE_WINDOW = 5            
 
-# --- NEW TOGGLE: Boundary Contrastive Loss ---
-USE_BCL = False                  # True = Use Combined Loss. False = Use standard Focal Loss only.
-CONTRASTIVE_WEIGHT = 0.15       # Only active if USE_BCL is True
+USE_BCL = False       
+CONTRASTIVE_WEIGHT = 0.15
+
+# --- NEW TOGGLES: Decoding Strategy ---
+# Options: "argmax", "threshold", "linguistic"
+DECODER_STRATEGY = "linguistic"  
+DECODER_THRESHOLD = 0.60         # 0.51 for Hands-On, 0.55 - 0.65 for Linguistic
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -60,6 +67,8 @@ HYPERPARAMETERS = {
     "tolerance_window": TOLERANCE_WINDOW,
     "use_bcl": USE_BCL,                          # <-- Saved to JSON
     "contrastive_weight": CONTRASTIVE_WEIGHT,    # <-- Saved to JSON
+    "decoder_strategy": DECODER_STRATEGY,      # <-- Add to JSON log
+    "decoder_threshold": DECODER_THRESHOLD,      # <-- Add to JSON log
     "in_channels": 3,
     "d_model": 256,
     "n_layers": 4,
@@ -169,6 +178,11 @@ def train_model(model_name, model_class, train_loader, val_loader):
         'frame_f1': [], 'mean_iou': [], 'segment_f1': [], 'epoch_time': []
     }
     
+    # --- NEW: Track the best model state ---
+    best_iou = -1.0
+    best_epoch = 0
+    best_model_state = None
+    
     # 3. Training Loop
     for epoch in range(1, EPOCHS + 1):
         epoch_start_time = time.time()
@@ -182,16 +196,22 @@ def train_model(model_name, model_class, train_loader, val_loader):
             
             optimizer.zero_grad()
             
-            logits, embeddings = model(features)  
+            # --- FIX: Safely handle models that return 1 or 2 items ---
+            outputs = model(features)
+            if isinstance(outputs, tuple):
+                logits, embeddings = outputs
+            else:
+                logits = outputs
+                embeddings = None
             
             # Dynamic Loss routing
             if USE_BCL:
+                if embeddings is None:
+                    raise ValueError(f"❌ Model '{model_name}' does not return embeddings. BCL requires embeddings. Update the model's forward() function or set USE_BCL=False.")
                 loss, focal_val, contrastive_val = criterion(logits, embeddings, targets)
-                # Update progress bar for BCL
                 loop.set_postfix(Focal=f"{focal_val.item():.3f}", BCL=f"{contrastive_val.item():.3f}")
             else:
                 loss = criterion(logits, targets)
-                # Update progress bar for standard Focal Loss
                 loop.set_postfix(Loss=f"{loss.item():.4f}")
             
             loss.backward()
@@ -211,7 +231,12 @@ def train_model(model_name, model_class, train_loader, val_loader):
         with torch.no_grad():
             for features, targets in val_loader:
                 features, targets = features.to(DEVICE), targets.to(DEVICE)
-                logits, _ = model(features) 
+                # --- FIX: Safely unpack during inference ---
+                outputs = model(features) 
+                if isinstance(outputs, tuple):
+                    logits, _ = outputs
+                else:
+                    logits = outputs
                 
                 # Dynamically calculate pure classification error
                 if USE_BCL:
@@ -220,7 +245,8 @@ def train_model(model_name, model_class, train_loader, val_loader):
                     loss = criterion(logits, targets)
                 total_val_loss += loss.item()
                 
-                predictions = torch.argmax(logits, dim=1) 
+                # --- FIX: Force FAST argmax during training to save time ---
+                predictions = decode_predictions(logits, strategy="argmax")
                 preds_np = predictions.cpu().numpy()
                 
                 if targets.dim() == 3:
@@ -253,6 +279,12 @@ def train_model(model_name, model_class, train_loader, val_loader):
         print(f"Epoch {epoch:02d} | Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f} | ⏱️ {format_time(epoch_time_taken)}")
         print(f"         └─> Frame F1: {epoch_f1:.4f} | Mean IoU: {epoch_iou:.4f} | Segments %: {epoch_seg:.4f}")
 
+        # --- NEW: Checkpoint the best model based on Mean IoU ---
+        if epoch_iou > best_iou:
+            best_iou = epoch_iou
+            best_epoch = epoch
+            best_model_state = copy.deepcopy(model.state_dict())
+
     # --- Exports ---
     total_training_time = time.time() - training_start_time
     average_epoch_time = sum(epoch_durations) / len(epoch_durations)
@@ -269,16 +301,75 @@ def train_model(model_name, model_class, train_loader, val_loader):
 
     save_plots(history, log_dir)
 
+    # ====================================================================
+    # 🏆 FINAL EVALUATION: APPLY HEAVY DECODER TO BEST MODEL
+    # ====================================================================
+    print(f"\n🌟 Training Complete. Loading Best Model (Epoch {best_epoch}) for Final Decoding...")
+    model.load_state_dict(best_model_state)
+    model.eval()
+    
+    final_val_frame_f1, final_val_iou, final_val_seg_f1 = [], [], []
+    
+    with torch.no_grad():
+        for features, targets in tqdm(val_loader, desc=f"Final Decoding ({HYPERPARAMETERS['decoder_strategy']})"):
+            features, targets = features.to(DEVICE), targets.to(DEVICE)
+            
+            outputs = model(features) 
+            if isinstance(outputs, tuple):
+                logits, _ = outputs
+            else:
+                logits = outputs
+                
+            # --- APPLY THE EXPENSIVE DECODER ONCE ---
+            predictions = decode_predictions(
+                logits, 
+                strategy=HYPERPARAMETERS['decoder_strategy'], 
+                threshold=HYPERPARAMETERS['decoder_threshold']
+            )
+            preds_np = predictions.cpu().numpy()
+            
+            if targets.dim() == 3:
+                hard_targets = torch.argmax(targets, dim=1)
+                targets_np = hard_targets.cpu().numpy()
+            else:
+                targets_np = targets.cpu().numpy()
+            
+            batch_metrics = evaluate_batch(preds_np, targets_np)
+            final_val_frame_f1.append(batch_metrics['Frame_F1'])
+            final_val_iou.append(batch_metrics['Mean_IoU'])
+            final_val_seg_f1.append(batch_metrics['Segment_F1_05'])
+            
+    final_f1 = float(np.mean(final_val_frame_f1))
+    final_iou = float(np.mean(final_val_iou))
+    final_seg = float(np.mean(final_val_seg_f1))
+    
+    print("\n" + "="*50)
+    print(f"🎯 FINAL DECODED METRICS (Epoch {best_epoch})")
+    print(f"Strategy: {HYPERPARAMETERS['decoder_strategy'].upper()} | Threshold: {HYPERPARAMETERS['decoder_threshold']}")
+    print(f"Frame F1: {final_f1:.4f} | Mean IoU: {final_iou:.4f} | Segments %: {final_seg:.4f}")
+    print("="*50)
+    
+    # Save the final results to a new JSON file
+    with open(os.path.join(log_dir, "final_decoded_metrics.json"), "w") as f:
+        json.dump({
+            "best_epoch": best_epoch,
+            "decoder_strategy": HYPERPARAMETERS['decoder_strategy'],
+            "decoder_threshold": HYPERPARAMETERS['decoder_threshold'],
+            "frame_f1": final_f1,
+            "mean_iou": final_iou,
+            "segment_f1": final_seg
+        }, f, indent=4)
+
+    # Save the BEST model state, not the overfitted epoch 30 state
     model_save_path = os.path.join(model_dir, f"{run_name}.pth")
-    torch.save(model.state_dict(), model_save_path)
+    torch.save(best_model_state, model_save_path)
     
     print("\n" + "-"*40)
     print(f"🏁 {run_name.upper()} COMPLETE 🏁")
     print(f"Total Time: {format_time(total_training_time)}")
-    print("-"*40)
+    print("-" * 40)
 
     # --- CRITICAL MEMORY FLUSH ---
-    # Delete the model and optimizer to free up GPU VRAM for the next model in the loop
     del model
     del optimizer
     torch.cuda.empty_cache()
