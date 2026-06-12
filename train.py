@@ -9,6 +9,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, random_split
 from tqdm import tqdm
 import copy
+from torch.amp import GradScaler, autocast
 
 # Import our custom modules
 from src.dataset import SignSegmentationDataset
@@ -26,22 +27,25 @@ RUN_ALL_MODELS = False
 # Options: "pure_mamba", "bi_mamba", "stgcn_mamba", "stgcn_bimamba", "decoupled_stgcn_mamba", "decoupled_stgcn_bimamba"
 MODELS_TO_TRAIN = [
     "stgcn_mamba",
-    "stgcn_bimamba",
-    "decoupled_stgcn_mamba",
-    "decoupled_stgcn_bimamba"
+    "stgcn_bimamba"
 ]
 
-BATCH_SIZE = 16      
+USE_FULL_LENGTH = True          # True = Entire videos. False = Sliding windows.
+
+BATCH_SIZE = 1
 EPOCHS = 30
 LEARNING_RATE = 1e-4
-WINDOW_SIZE = 1000
-OVERLAP = 200
+
+# (Window variables are ignored if USE_FULL_LENGTH is True)
+WINDOW_SIZE = 2048
+OVERLAP = 0
+
 NUM_VERTICES = 65
-TOLERANCE_WINDOW = 5            
+TOLERANCE_WINDOW = 1       
 
 # --- NEW: LOSS FUNCTION TOGGLES ---
 # Options: "standard_ce", "weighted_ce", "bcl"
-LOSS_FUNCTION = "weighted_ce"   
+LOSS_FUNCTION = "standard_ce"   
 
 # Class weights for 'weighted_ce' [Class 0 (O), Class 1 (I), Class 2 (B)]
 # 1.0 means full penalty. 0.1 means 10% penalty.
@@ -50,8 +54,8 @@ CLASS_WEIGHTS = [0.1, 0.3, 1.0]
 CONTRASTIVE_WEIGHT = 0.15 # Only used if LOSS_FUNCTION is "bcl"      
 
 # --- DECODING STRATEGY ---
-DECODER_STRATEGY = "linguistic"  
-DECODER_THRESHOLD = 0.60         
+DECODER_STRATEGY = "threshold"  # Options: "argmax", "threshold", "linguistic"
+DECODER_THRESHOLD = 0.50      
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -198,6 +202,9 @@ def train_model(model_name, model_class, train_loader, val_loader):
     best_iou = -1.0
     best_epoch = 0
     best_model_state = None
+
+    # Inside train_model(), right before the epoch loop starts
+    scaler = GradScaler("cuda" if torch.cuda.is_available() else "cpu")
     
     # 3. Training Loop
     for epoch in range(1, EPOCHS + 1):
@@ -207,33 +214,50 @@ def train_model(model_name, model_class, train_loader, val_loader):
         total_train_loss = 0.0
         
         loop = tqdm(train_loader, desc=f"Epoch {epoch}/{EPOCHS} [Train]", leave=False)
-        for features, targets in loop:
+        # --- NEW: Calculate Accumulation Steps ---
+        accumulation_steps = BATCH_SIZE if USE_FULL_LENGTH else 1
+        
+        # Zero gradients at the START of the epoch
+        optimizer.zero_grad() 
+        
+        for i, (features, targets) in enumerate(loop):
             features, targets = features.to(DEVICE), targets.to(DEVICE)
             
-            optimizer.zero_grad()
+            optimizer.zero_grad() 
             
-            outputs = model(features)
-            if isinstance(outputs, tuple):
-                logits, embeddings = outputs
-            else:
-                logits = outputs
-                embeddings = None
+            # --- AMP Autocast Wrapper ---
+            with autocast(device_type="cuda" if torch.cuda.is_available() else "cpu"):
+                outputs = model(features)
+                if isinstance(outputs, tuple):
+                    logits, embeddings = outputs
+                else:
+                    logits = outputs
+                    embeddings = None
+                
+                # Dynamic Loss routing
+                if HYPERPARAMETERS['loss_function'] == "bcl":
+                    loss, focal_val, contrastive_val = criterion(logits, embeddings, targets)
+                    loop.set_postfix(Focal=f"{focal_val.item():.3f}", BCL=f"{contrastive_val.item():.3f}")
+                else:
+                    loss = criterion(logits, targets)
+                    loop.set_postfix(Loss=f"{loss.item():.4f}")
+                
+                scaled_loss = loss / accumulation_steps
             
-            # Dynamic Loss routing
-            if HYPERPARAMETERS['loss_function'] == "bcl":
-                if embeddings is None:
-                    raise ValueError(f"❌ Model '{model_name}' does not return embeddings. BCL requires embeddings.")
-                loss, focal_val, contrastive_val = criterion(logits, embeddings, targets)
-                loop.set_postfix(Focal=f"{focal_val.item():.3f}", BCL=f"{contrastive_val.item():.3f}")
-            else:
-                # Used for both standard_ce and weighted_ce
-                loss = criterion(logits, targets)
-                loop.set_postfix(Loss=f"{loss.item():.4f}")
+            # --- AMP Backward Pass ---
+            scaler.scale(scaled_loss).backward()
             
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-            optimizer.step()
-            
+            if (i + 1) % accumulation_steps == 0 or (i + 1) == len(train_loader):
+                # Unscale gradients before clipping
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                
+                # Optimizer step via Scaler
+                scaler.step(optimizer)
+                scaler.update()
+                
+                optimizer.zero_grad()
+                
             total_train_loss += loss.item()
             
         scheduler.step()
@@ -398,16 +422,20 @@ if __name__ == "__main__":
         labels_dir="processed_data/BIO_tags",
         window_size=WINDOW_SIZE,
         overlap=OVERLAP,
-        tolerance_window=TOLERANCE_WINDOW
+        tolerance_window=TOLERANCE_WINDOW,
+        use_full_length=USE_FULL_LENGTH # <-- Pass the flag
     )
     
     train_size = int(0.8 * len(full_dataset))
     val_size = len(full_dataset) - train_size
     train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
     
-    # Create the dataloaders ONCE
-    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=4, pin_memory=True)
-    val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4, pin_memory=True)
+    # --- NEW: Safe Batch Sizing ---
+    # Variable lengths require batch size 1. 
+    loader_batch_size = 1 if USE_FULL_LENGTH else BATCH_SIZE
+    
+    train_loader = DataLoader(train_dataset, batch_size=loader_batch_size, shuffle=True, num_workers=4, pin_memory=True)
+    val_loader = DataLoader(val_dataset, batch_size=loader_batch_size, shuffle=False, num_workers=4, pin_memory=True)
     
     if RUN_ALL_MODELS:
         print("🔄 RUN_ALL_MODELS is TRUE. Training all architectures sequentially...")

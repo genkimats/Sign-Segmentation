@@ -44,12 +44,13 @@ def apply_label_smoothing(labels_array, window_size=5):
     return soft_labels
 
 class SignSegmentationDataset(Dataset):
-    def __init__(self, keypoints_dir, labels_dir, window_size=1000, overlap=200, tolerance_window=5):
+    def __init__(self, keypoints_dir, labels_dir, window_size=1000, overlap=200, tolerance_window=5, use_full_length=False):
         self.keypoints_dir = keypoints_dir
         self.labels_dir = labels_dir
         self.window_size = window_size
         self.step_size = window_size - overlap
         self.tolerance_window = tolerance_window
+        self.use_full_length = use_full_length  # <-- NEW TOGGLE
         self.slice_index = []
         
         self._build_index()
@@ -58,11 +59,18 @@ class SignSegmentationDataset(Dataset):
         files = [f for f in os.listdir(self.keypoints_dir) if f.endswith('.npy')]
         for file_name in files:
             base_name = file_name.replace('.npy', '')
-            kp_path = os.path.join(self.keypoints_dir, file_name)
-            total_frames = np.load(kp_path, mmap_mode='r').shape[0]
             
-            for start in range(0, total_frames - self.window_size + 1, self.step_size):
-                self.slice_index.append({'base_name': base_name, 'start': start, 'end': start + self.window_size})
+            # --- NEW: Full Length Routing ---
+            if self.use_full_length:
+                # Just store the file name, skip the chunking math
+                self.slice_index.append({'base_name': base_name, 'start': None, 'end': None})
+            else:
+                # Standard Chunking
+                kp_path = os.path.join(self.keypoints_dir, file_name)
+                total_frames = np.load(kp_path, mmap_mode='r').shape[0]
+                
+                for start in range(0, total_frames - self.window_size + 1, self.step_size):
+                    self.slice_index.append({'base_name': base_name, 'start': start, 'end': start + self.window_size})
 
     def __len__(self):
         return len(self.slice_index)
@@ -72,15 +80,17 @@ class SignSegmentationDataset(Dataset):
         kp_path = os.path.join(self.keypoints_dir, f"{slice_info['base_name']}.npy")
         label_path = os.path.join(self.labels_dir, f"{slice_info['base_name']}.npy")
         
-        kp_array = np.load(kp_path, mmap_mode='c')[slice_info['start']:slice_info['end']]
-        label_array = np.load(label_path, mmap_mode='c')[slice_info['start']:slice_info['end']]
+        # --- NEW: Load Full vs Load Slice ---
+        if self.use_full_length:
+            kp_array = np.load(kp_path)        # Loads entire video
+            label_array = np.load(label_path)  # Loads entire video labels
+        else:
+            kp_array = np.load(kp_path, mmap_mode='c')[slice_info['start']:slice_info['end']]
+            label_array = np.load(label_path, mmap_mode='c')[slice_info['start']:slice_info['end']]
         
-        # Format Keypoints
         keypoints_tensor = torch.tensor(kp_array, dtype=torch.float32).permute(2, 0, 1) 
         
-        # --- NEW: Apply Gaussian Tolerance and return Soft Labels ---
         soft_labels = apply_label_smoothing(label_array, self.tolerance_window)
-        # Expected shape for PyTorch Cross Entropy is (Classes, SequenceLength)
         labels_tensor = torch.tensor(soft_labels, dtype=torch.float32).permute(1, 0)
         
         return keypoints_tensor, labels_tensor

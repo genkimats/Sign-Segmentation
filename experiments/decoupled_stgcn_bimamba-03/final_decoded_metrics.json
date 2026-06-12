@@ -1,0 +1,8 @@
+{
+    "best_epoch": 25,
+    "decoder_strategy": "linguistic",
+    "decoder_threshold": 0.6,
+    "frame_f1": 0.6690000711560871,
+    "mean_iou": 0.436061306931995,
+    "segment_f1": 0.4856239992639326
+}

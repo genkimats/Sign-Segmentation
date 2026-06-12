@@ -5,6 +5,7 @@ from src.graph import SkeletonGraph
 from src.stgcn import STGCNBlock
 from src.stgcn import DecoupledSTGCNBlock
 from mamba_ssm import Mamba
+from torch.utils.checkpoint import checkpoint
 
 
 class Decoupled_STGCN_Mamba(nn.Module):
@@ -163,15 +164,16 @@ class STGCN_BiMamba(nn.Module):
         x = self.feature_proj(x) # Shape: (B, 1000, 256)
         
         # Phase 3: Bidirectional Mamba Sweeps
-        # Forward sweep
+        # Forward sweep with Checkpointing
         fwd_out = x
         for layer in self.fwd_mamba:
-            fwd_out = layer(fwd_out)
+            # Replaces: fwd_out = layer(fwd_out)
+            fwd_out = checkpoint(layer, fwd_out, use_reentrant=False)
             
-        # Backward sweep (flip time dimension, process, flip back)
+        # Backward sweep with Checkpointing
         bwd_out = torch.flip(x, dims=[1])
         for layer in self.bwd_mamba:
-            bwd_out = layer(bwd_out)
+            bwd_out = checkpoint(layer, bwd_out, use_reentrant=False)
         bwd_out = torch.flip(bwd_out, dims=[1])
         
         # Phase 4: Fusion & Classification
