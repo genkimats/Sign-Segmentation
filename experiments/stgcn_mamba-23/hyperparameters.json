@@ -1,0 +1,26 @@
+{
+    "batch_size": 16,
+    "epochs": 30,
+    "learning_rate": 0.0001,
+    "window_size": 1024,
+    "overlap": 400,
+    "num_vertices": 65,
+    "tolerance_window": 1,
+    "use_full_length": false,
+    "base_features": [],
+    "kinematic_features": [
+        "velocity",
+        "acceleration",
+        "jerk"
+    ],
+    "in_channels": 6,
+    "loss_function": "standard_ce",
+    "decoder_strategy": "threshold",
+    "decoder_threshold": 0.5,
+    "d_model": 256,
+    "n_layers": 4,
+    "focal_loss_gamma": 2.0,
+    "optimizer": "AdamW",
+    "scheduler": "CosineAnnealingLR",
+    "basename": "stgcn_mamba"
+}

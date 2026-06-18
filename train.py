@@ -26,26 +26,32 @@ RUN_ALL_MODELS = False
 
 # Options: "pure_mamba", "bi_mamba", "stgcn_mamba", "stgcn_bimamba", "decoupled_stgcn_mamba", "decoupled_stgcn_bimamba"
 MODELS_TO_TRAIN = [
-    "stgcn_mamba",
-    "stgcn_bimamba"
+    "stgcn_mamba"
 ]
 
-USE_FULL_LENGTH = True          # True = Entire videos. False = Sliding windows.
+USE_FULL_LENGTH = False          # True = Entire videos. False = Sliding windows.
 
-BATCH_SIZE = 1
+BATCH_SIZE = 16
 EPOCHS = 30
 LEARNING_RATE = 1e-4
 
+# Options: "x-cord", "y-cord", "confidence"
+BASE_FEATURES = ["x-cord", "y-cord"]
+
+# Available options: "velocity", "acceleration", "jerk", "velocity-mag", "angular-vel"
+KINEMATIC_FEATURES = ["velocity", "acceleration", "jerk", "velocity-mag", "angular-vel"]
+
 # (Window variables are ignored if USE_FULL_LENGTH is True)
-WINDOW_SIZE = 2048
-OVERLAP = 0
+WINDOW_SIZE = 512
+
+OVERLAP = 200
 
 NUM_VERTICES = 65
-TOLERANCE_WINDOW = 1       
+TOLERANCE_WINDOW = 5       
 
 # --- NEW: LOSS FUNCTION TOGGLES ---
 # Options: "standard_ce", "weighted_ce", "bcl"
-LOSS_FUNCTION = "standard_ce"   
+LOSS_FUNCTION = "weighted_ce"  # Default is standard cross-entropy. Weighted CE and BCL are optional.
 
 # Class weights for 'weighted_ce' [Class 0 (O), Class 1 (I), Class 2 (B)]
 # 1.0 means full penalty. 0.1 means 10% penalty.
@@ -68,6 +74,23 @@ MODEL_REGISTRY = {
     "decoupled_stgcn_bimamba": Decoupled_STGCN_BiMamba
 }
 
+# --- CALCULATE DYNAMIC INPUT CHANNELS ---
+num_base = len(BASE_FEATURES)
+
+# If no base features are selected, derivatives default to outputting 2 components (X and Y)
+num_deriv_components = num_base if num_base > 0 else 2
+
+DYNAMIC_IN_CHANNELS = num_base
+
+if "velocity" in KINEMATIC_FEATURES: DYNAMIC_IN_CHANNELS += num_deriv_components
+if "acceleration" in KINEMATIC_FEATURES: DYNAMIC_IN_CHANNELS += num_deriv_components
+if "jerk" in KINEMATIC_FEATURES: DYNAMIC_IN_CHANNELS += num_deriv_components
+if "velocity-mag" in KINEMATIC_FEATURES: DYNAMIC_IN_CHANNELS += 1
+if "angular-vel" in KINEMATIC_FEATURES: DYNAMIC_IN_CHANNELS += 1
+
+# ==============================================================================
+# 📝 METADATA & HYPERPARAMETER LOGGING
+# ==============================================================================
 HYPERPARAMETERS = {
     "batch_size": BATCH_SIZE,
     "epochs": EPOCHS,
@@ -78,10 +101,13 @@ HYPERPARAMETERS = {
     "tolerance_window": TOLERANCE_WINDOW,
     "loss_function": LOSS_FUNCTION,
     "class_weights": CLASS_WEIGHTS,
-    "contrastive_weight": CONTRASTIVE_WEIGHT,
-    "decoder_strategy": DECODER_STRATEGY,
-    "decoder_threshold": DECODER_THRESHOLD,
-    "in_channels": 3,
+    "use_full_length": USE_FULL_LENGTH,
+    "base_features": BASE_FEATURES,              
+    "kinematic_features": KINEMATIC_FEATURES,    
+    "in_channels": DYNAMIC_IN_CHANNELS,          
+    "loss_function": LOSS_FUNCTION,
+    "decoder_strategy": DECODER_STRATEGY,      
+    "decoder_threshold": DECODER_THRESHOLD,    
     "d_model": 256,
     "n_layers": 4,
     "focal_loss_gamma": 2.0,
@@ -166,11 +192,8 @@ def train_model(model_name, model_class, train_loader, val_loader):
     with open(os.path.join(log_dir, "hyperparameters.json"), "w") as f:
         json.dump(local_hp, f, indent=4)
     
-    # Initialize Model, Loss, and Optimizer
-    model = model_class(num_vertices=NUM_VERTICES, in_channels=3, d_model=256, n_layers=4).to(DEVICE)
-    
     # 2. Initialize Model, Loss, and Optimizer
-    model = model_class(num_vertices=NUM_VERTICES, in_channels=3, d_model=256, n_layers=4).to(DEVICE)
+    model = model_class(num_vertices=NUM_VERTICES, in_channels=DYNAMIC_IN_CHANNELS, d_model=256, n_layers=4).to(DEVICE)
     
     if HYPERPARAMETERS['loss_function'] == "standard_ce":
         print("⚖️ Loss Function: Standard Cross-Entropy")
@@ -223,41 +246,62 @@ def train_model(model_name, model_class, train_loader, val_loader):
         for i, (features, targets) in enumerate(loop):
             features, targets = features.to(DEVICE), targets.to(DEVICE)
             
+            # 🛑 DEBUG CATCH 1: Bad Input Data
+            if torch.isnan(features).any():
+                print(f"\n🚨 FATAL: NaN detected in INPUT FEATURES at Epoch {epoch}, Batch {i}")
+                break
+
             optimizer.zero_grad() 
             
-            # --- AMP Autocast Wrapper ---
-            with autocast(device_type="cuda" if torch.cuda.is_available() else "cpu"):
+            # --- FIX 1: Use bfloat16 to prevent Mamba math overflows ---
+            # If your GPU doesn't support bfloat16, it gracefully falls back to float16
+            amp_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+            
+            with autocast(dtype=amp_dtype, device_type=DEVICE):
                 outputs = model(features)
                 if isinstance(outputs, tuple):
                     logits, embeddings = outputs
                 else:
                     logits = outputs
                     embeddings = None
-                
-                # Dynamic Loss routing
-                if HYPERPARAMETERS['loss_function'] == "bcl":
-                    loss, focal_val, contrastive_val = criterion(logits, embeddings, targets)
-                    loop.set_postfix(Focal=f"{focal_val.item():.3f}", BCL=f"{contrastive_val.item():.3f}")
-                else:
-                    loss = criterion(logits, targets)
-                    loop.set_postfix(Loss=f"{loss.item():.4f}")
-                
-                scaled_loss = loss / accumulation_steps
             
-            # --- AMP Backward Pass ---
+            # --- FIX 2: Step out of autocast and calculate Loss in pure FP32 ---
+            # This prevents F.normalize() and F.exp() from triggering Infinity overflows
+            logits = logits.float()
+            if embeddings is not None:
+                embeddings = embeddings.float()
+                
+            # 🛑 DEBUG CATCH 2: Model exploded
+            if torch.isnan(logits).any():
+                print(f"\n🚨 FATAL: NaN detected in MODEL OUTPUTS at Epoch {epoch}, Batch {i}")
+                break
+
+            # Dynamic Loss routing
+            if HYPERPARAMETERS['loss_function'] == "bcl":
+                loss, focal_val, contrastive_val = criterion(logits, embeddings, targets)
+                loop.set_postfix(Focal=f"{focal_val.item():.3f}", BCL=f"{contrastive_val.item():.3f}")
+            else:
+                loss = criterion(logits, targets)
+                loop.set_postfix(Loss=f"{loss.item():.4f}")
+                
+            # 🛑 DEBUG CATCH 3: Loss Function exploded
+            if torch.isnan(loss):
+                print(f"\n🚨 FATAL: NaN detected in LOSS CALCULATION at Epoch {epoch}, Batch {i}")
+                break
+            
+            # --- Gradient Accumulation ---
+            scaled_loss = loss / accumulation_steps
             scaler.scale(scaled_loss).backward()
             
             if (i + 1) % accumulation_steps == 0 or (i + 1) == len(train_loader):
-                # Unscale gradients before clipping
                 scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                 
-                # Optimizer step via Scaler
                 scaler.step(optimizer)
                 scaler.update()
                 
                 optimizer.zero_grad()
-                
+            
             total_train_loss += loss.item()
             
         scheduler.step()
@@ -423,7 +467,9 @@ if __name__ == "__main__":
         window_size=WINDOW_SIZE,
         overlap=OVERLAP,
         tolerance_window=TOLERANCE_WINDOW,
-        use_full_length=USE_FULL_LENGTH # <-- Pass the flag
+        use_full_length=USE_FULL_LENGTH,
+        base_features=BASE_FEATURES,           # <-- NEW
+        kinematic_features=KINEMATIC_FEATURES 
     )
     
     train_size = int(0.8 * len(full_dataset))

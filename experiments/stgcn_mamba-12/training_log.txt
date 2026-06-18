@@ -1,0 +1,18 @@
+Epoch 01 | Train Loss: 0.5386 | Val Loss: 0.4633 | ⏱️ 8m 48s                                                                                                                                          
+         └─> Frame F1: 0.4447 | Mean IoU: 0.0640 | Segments %: 0.0640
+Epoch 02 | Train Loss: 0.4241 | Val Loss: 0.4394 | ⏱️ 21m 18s                                                                                                                                         
+         └─> Frame F1: 0.4737 | Mean IoU: 0.0640 | Segments %: 0.0640
+Epoch 03 | Train Loss: 0.4247 | Val Loss: 0.4238 | ⏱️ 21m 9s                                                                                                                                          
+         └─> Frame F1: 0.4609 | Mean IoU: 0.0640 | Segments %: 0.0640
+Epoch 04 | Train Loss: 0.4018 | Val Loss: 0.4182 | ⏱️ 21m 10s                                                                                                                                         
+         └─> Frame F1: 0.4590 | Mean IoU: 0.0640 | Segments %: 0.0640
+Epoch 05 | Train Loss: 0.3930 | Val Loss: 0.4416 | ⏱️ 20m 58s                                                                                                                                         
+         └─> Frame F1: 0.4262 | Mean IoU: 0.0640 | Segments %: 0.0640
+Epoch 06 | Train Loss: 0.3843 | Val Loss: 0.4023 | ⏱️ 21m 22s                                                                                                                                         
+         └─> Frame F1: 0.4762 | Mean IoU: 0.1147 | Segments %: 0.0642
+Epoch 07 | Train Loss: 0.3771 | Val Loss: 0.4022 | ⏱️ 21m 9s                                                                                                                                          
+         └─> Frame F1: 0.4818 | Mean IoU: 0.1927 | Segments %: 0.0646
+Epoch 08 | Train Loss: 0.3706 | Val Loss: 0.3927 | ⏱️ 21m 3s                                                                                                                                          
+         └─> Frame F1: 0.5030 | Mean IoU: 0.0704 | Segments %: 0.0640
+Epoch 09 | Train Loss: 0.3641 | Val Loss: 0.3800 | ⏱️ 21m 56s             
+         └─> Frame F1: 0.5116 | Mean IoU: 0.0768 | Segments %: 0.0640
