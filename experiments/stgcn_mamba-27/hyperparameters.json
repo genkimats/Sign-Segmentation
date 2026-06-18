@@ -1,26 +1,32 @@
 {
-    "batch_size": 1,
+    "batch_size": 16,
     "epochs": 30,
     "learning_rate": 0.0001,
-    "window_size": 2048,
-    "overlap": 0,
+    "window_size": 512,
+    "overlap": 200,
     "num_vertices": 65,
-    "tolerance_window": 1,
+    "tolerance_window": 5,
     "loss_function": "standard_ce",
     "class_weights": [
         0.1,
         0.3,
         1.0
     ],
-    "contrastive_weight": 0.15,
-    "decoder_strategy": "threshold",
-    "decoder_threshold": 0.5,
-    "use_full_length": true,
+    "use_full_length": false,
+    "base_features": [
+        "x-cord",
+        "y-cord"
+    ],
     "kinematic_features": [
         "velocity",
-        "acceleration"
+        "acceleration",
+        "jerk",
+        "velocity-mag",
+        "angular-vel"
     ],
-    "in_channels": 9,
+    "in_channels": 10,
+    "decoder_strategy": "threshold",
+    "decoder_threshold": 0.5,
     "d_model": 256,
     "n_layers": 4,
     "focal_loss_gamma": 2.0,
