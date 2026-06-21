@@ -42,9 +42,9 @@ BASE_FEATURES = ["x-cord", "y-cord", "z-cord"]
 KINEMATIC_FEATURES = []
 
 # (Window variables are ignored if USE_FULL_LENGTH is True)
-WINDOW_SIZE = 512
+WINDOW_SIZE = 128
 
-OVERLAP = 200
+OVERLAP = 50
 
 NUM_VERTICES = 65
 TOLERANCE_WINDOW = 5       
