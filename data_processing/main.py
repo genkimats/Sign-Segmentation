@@ -3,6 +3,8 @@ import numpy as np
 from config import *
 from extract_poses import extract_video_features
 from parse_labels import create_bio_labels
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from tqdm import tqdm
 
 def setup_directories():
     # Make sure we are saving to the right places
@@ -67,40 +69,24 @@ def match_files(processed_set):
     print(f"⏩ Skipped {skipped_count} jobs that were already processed.")
     return processing_jobs
 
-def main():
-    print("Starting Continuous Data Extraction Pipeline...")
-    setup_directories()
-    
-    # 1. Build the list of already finished files
-    processed_set = get_already_processed_jobs()
-    
-    # 2. Get the remaining jobs
-    jobs = match_files(processed_set)
-    print(f"Found {len(jobs)} remaining jobs to process.")
-    
-    if len(jobs) == 0:
-        print("🎉 All data has been processed!")
-        return
-    
-    for idx, job in enumerate(jobs):
-        print(f"\n--- Processing Job {idx+1}/{len(jobs)}: {job['save_name']} ---")
-        
+def process_job(job, position):
+    """Worker function to process a single video and its ELAN annotations."""
+    try:
         # Pre-check ELAN integrity
         test_parse = create_bio_labels(job['eaf_path'], 10, job['target_tier'])
         if test_parse is None:
-            print(f"⚠️ Skipping {job['save_name']} due to corrupted ELAN annotations.")
-            continue
+            return job, False, "Corrupted ELAN annotations"
         
         # Extract and Normalize Poses (Returns full continuous array)
-        keypoints = extract_video_features(job['video_path'])
+        # We pass the thread position down to extract_poses to stack the progress bars
+        keypoints = extract_video_features(job['video_path'], position=position)
         total_frames = keypoints.shape[0]
         
-        # Parse ELAN annotations for real (Returns full continuous array)
+        # Parse ELAN annotations for real
         bio_array = create_bio_labels(job['eaf_path'], total_frames, job['target_tier'])
         
         if bio_array is None:
-            print(f"⚠️ Skipping {job['save_name']} due to label creation failure.")
-            continue
+            return job, False, "Label creation failure"
         
         # --- NEW SAVING LOGIC: Save the full, unsliced arrays ---
         kp_filename = f"{job['save_name']}.npy"
@@ -109,7 +95,40 @@ def main():
         np.save(os.path.join(KEYPOINTS_DIR, kp_filename), keypoints)
         np.save(os.path.join(LABELS_DIR, bio_filename), bio_array)
         
-        print(f"✅ Saved full sequence {job['save_name']} successfully.")
+        return job, True, None
+    except Exception as e:
+        return job, False, str(e)
+
+def main():
+    setup_directories()
+    processed_set = get_already_processed_jobs()
+    jobs = match_files(processed_set)
+    print(f"Found {len(jobs)} remaining jobs to process.")
+    
+    if len(jobs) == 0:
+        print("🎉 All data has been processed!")
+        return
+        
+    max_workers = 3
+    print(f"🚀 Starting multi-threaded pipeline with {max_workers} workers...")
+    
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {}
+        for idx, job in enumerate(jobs):
+            # Assign a position to the worker's progress bar (1 through max_workers)
+            pos = (idx % max_workers) + 1 
+            future = executor.submit(process_job, job, pos)
+            futures[future] = job
+            
+        # Top-level progress bar sits at position 0
+        for future in tqdm(as_completed(futures), total=len(jobs), desc="Total Pipeline", position=0, leave=True):
+            job = futures[future]
+            try:
+                _, success, error_msg = future.result()
+                if not success:
+                    tqdm.write(f"⚠️ Skipping {job['save_name']}: {error_msg}")
+            except Exception as exc:
+                tqdm.write(f"❌ Fatal error on {job['save_name']}: {exc}")
 
 if __name__ == "__main__":
     main()
