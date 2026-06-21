@@ -36,10 +36,10 @@ EPOCHS = 30
 LEARNING_RATE = 1e-4
 
 # Options: "x-cord", "y-cord", "confidence"
-BASE_FEATURES = ["x-cord", "y-cord"]
+BASE_FEATURES = ["x-cord", "y-cord", "z-cord"]
 
 # Available options: "velocity", "acceleration", "jerk", "velocity-mag", "angular-vel"
-KINEMATIC_FEATURES = ["velocity", "acceleration", "jerk", "velocity-mag", "angular-vel"]
+KINEMATIC_FEATURES = []
 
 # (Window variables are ignored if USE_FULL_LENGTH is True)
 WINDOW_SIZE = 512
@@ -51,7 +51,7 @@ TOLERANCE_WINDOW = 5
 
 # --- NEW: LOSS FUNCTION TOGGLES ---
 # Options: "standard_ce", "weighted_ce", "bcl"
-LOSS_FUNCTION = "weighted_ce"  # Default is standard cross-entropy. Weighted CE and BCL are optional.
+LOSS_FUNCTION = "standard_ce"  # Default is standard cross-entropy. Weighted CE and BCL are optional.
 
 # Class weights for 'weighted_ce' [Class 0 (O), Class 1 (I), Class 2 (B)]
 # 1.0 means full penalty. 0.1 means 10% penalty.

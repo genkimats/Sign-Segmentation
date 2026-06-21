@@ -4,7 +4,6 @@ from mamba_ssm import Mamba
 from src.graph import SkeletonGraph
 from src.stgcn import STGCNBlock
 from src.stgcn import DecoupledSTGCNBlock
-from mamba_ssm import Mamba
 from torch.utils.checkpoint import checkpoint
 
 
