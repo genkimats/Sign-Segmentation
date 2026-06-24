@@ -32,19 +32,19 @@ MODELS_TO_TRAIN = [
 USE_FULL_LENGTH = False          # True = Entire videos. False = Sliding windows.
 
 BATCH_SIZE = 16
-EPOCHS = 30
+EPOCHS = 50
 LEARNING_RATE = 1e-4
 
 # Options: "x-cord", "y-cord", "confidence"
 BASE_FEATURES = ["x-cord", "y-cord", "z-cord"]
 
 # Available options: "velocity", "acceleration", "jerk", "velocity-mag", "angular-vel"
-KINEMATIC_FEATURES = []
+KINEMATIC_FEATURES = ["velocity", "acceleration", "jerk", "velocity-mag", "angular-vel"]
 
 # (Window variables are ignored if USE_FULL_LENGTH is True)
-WINDOW_SIZE = 128
+WINDOW_SIZE = 16
 
-OVERLAP = 50
+OVERLAP = 8
 
 NUM_VERTICES = 65
 TOLERANCE_WINDOW = 5       

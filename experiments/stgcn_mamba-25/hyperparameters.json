@@ -25,5 +25,6 @@
     "focal_loss_gamma": 2.0,
     "optimizer": "AdamW",
     "scheduler": "CosineAnnealingLR",
-    "basename": "stgcn_mamba"
+    "basename": "stgcn_mamba",
+    "description": "overlap ratio (300/512), but didn't use"
 }

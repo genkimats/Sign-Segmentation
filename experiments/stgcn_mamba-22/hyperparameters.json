@@ -22,5 +22,6 @@
     "focal_loss_gamma": 2.0,
     "optimizer": "AdamW",
     "scheduler": "CosineAnnealingLR",
-    "basename": "stgcn_mamba"
+    "basename": "stgcn_mamba",
+    "description": "v a j"
 }
