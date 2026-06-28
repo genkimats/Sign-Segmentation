@@ -35,16 +35,16 @@ BATCH_SIZE = 16
 EPOCHS = 50
 LEARNING_RATE = 1e-4
 
-# Options: "x-cord", "y-cord", "confidence"
+# Options: "x-cord", "y-cord", "z-cord"
 BASE_FEATURES = ["x-cord", "y-cord", "z-cord"]
 
 # Available options: "velocity", "acceleration", "jerk", "velocity-mag", "angular-vel"
-KINEMATIC_FEATURES = ["velocity", "acceleration", "velocity-mag"]  # Optional kinematic features to augment the base features
+KINEMATIC_FEATURES = ["velocity", "acceleration", "jerk", "velocity-mag", "angular-vel"]  # Optional kinematic features to augment the base features
 
 # (Window variables are ignored if USE_FULL_LENGTH is True)
 WINDOW_SIZE = 512
 
-OVERLAP = 382
+OVERLAP = 496
 
 NUM_VERTICES = 65
 TOLERANCE_WINDOW = 5       
