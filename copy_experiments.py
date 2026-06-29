@@ -1,42 +1,43 @@
 import shutil
-import os
 from pathlib import Path
 
+
+def flatten_filename(src_file, src_root):
+    """Return a filename that includes ancestor directory names as prefixes."""
+    rel_parts = src_file.relative_to(src_root).parts
+    if len(rel_parts) <= 1:
+        return src_file.name
+    return "_".join(rel_parts[:-1] + (src_file.name,))
+
+
 def copy_experiments_filtered(src_dir, dst_dir):
-    """
-    Copy experiments directory excluding PNG files and final_decoded_metrics.json files.
-    """
+    """Copy experiment files into a flat destination folder."""
     src_path = Path(src_dir)
     dst_path = Path(dst_dir)
-    
-    # Create destination directory if it doesn't exist
+
     dst_path.mkdir(parents=True, exist_ok=True)
-    
-    # Iterate through all items in source directory
-    for item in src_path.iterdir():
-        src_item = src_path / item.name
-        dst_item = dst_path / item.name
-        
-        if src_item.is_dir():
-            # Recursively copy directories
-            copy_experiments_filtered(src_item, dst_item)
-        elif src_item.is_file():
-            # Skip PNG files and final_decoded_metrics.json
-            if src_item.suffix.lower() == '.png' or src_item.name == 'final_decoded_metrics.json':
-                print(f"Skipping: {src_item}")
-            else:
-                # Copy the file
-                dst_item.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src_item, dst_item)
-                print(f"Copied: {src_item} -> {dst_item}")
+
+    for src_file in src_path.rglob("*"):
+        if not src_file.is_file():
+            continue
+
+        if src_file.suffix.lower() == ".png" or src_file.name == "final_decoded_metrics.json":
+            print(f"Skipping: {src_file}")
+            continue
+
+        flat_name = flatten_filename(src_file, src_path)
+        dst_file = dst_path / flat_name
+        shutil.copy2(src_file, dst_file)
+        print(f"Copied: {src_file} -> {dst_file}")
+
 
 if __name__ == "__main__":
-    src = "/mnt/d/Genki_GR/Sign-Segmentation/experiments"
-    dst = "/mnt/d/Genki_GR/Sign-Segmentation/experiments_filtered"
-    
+    src = "/home/genki/GR/Sign-Segmentation/experiments"
+    dst = "/home/genki/GR/Sign-Segmentation/experiments_filtered"
+
     print(f"Copying {src} to {dst}...")
     print("Excluding: .png files and final_decoded_metrics.json\n")
-    
+
     copy_experiments_filtered(src, dst)
-    
+
     print("\n✓ Copy complete!")
