@@ -2,6 +2,7 @@ import os
 import torch
 import numpy as np
 from torch.utils.data import Dataset
+from scipy.signal import medfilt
 
 def apply_label_smoothing(labels_array, window_size=5):
     """
@@ -123,8 +124,15 @@ class SignSegmentationDataset(Dataset):
             kp_array = np.load(kp_path, mmap_mode='c')[slice_info['start']:slice_info['end']]
             label_array = np.load(label_path, mmap_mode='c')[slice_info['start']:slice_info['end']]
         
+        # --- NEW: Apply Temporal Median Filter BEFORE tensor conversion ---
+        # kp_array shape is (Frames, Vertices, Channels)
+        # We apply medfilt over the Frames dimension (axis=0). 
+        # A kernel size of (5, 1, 1) means we filter across 5 frames for each independent x,y,z coordinate of each vertex.
+        clean_kp_array = medfilt(kp_array, kernel_size=(5, 1, 1))
+        
+        # Now proceed with the cleaned array
         # full_raw shape: (3, T, V) containing complete spatial coordinates
-        full_raw_tensor = torch.tensor(kp_array, dtype=torch.float32).permute(2, 0, 1) 
+        full_raw_tensor = torch.tensor(clean_kp_array, dtype=torch.float32).permute(2, 0, 1) 
         
         # Calculate ALL physics on the full 3D structure first
         v_full, a_full, j_full, v_mag, omega = self._compute_full_kinematics(full_raw_tensor)
