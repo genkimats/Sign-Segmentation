@@ -22,7 +22,7 @@ from src.models import (
 # 🎛️ CONFIGURATION
 # ==============================================================================
 CHOSEN_MODEL = "stgcn_mamba"
-PREFIX = "50"
+PREFIX = "59"
 WEIGHTS_PATH = f"saved_models/{CHOSEN_MODEL}-{PREFIX}.pth"
 HYPERPARAMETER_PATH = f"experiments/{CHOSEN_MODEL}-{PREFIX}/hyperparameters.json"
 
