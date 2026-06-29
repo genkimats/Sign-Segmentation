@@ -1,0 +1,32 @@
+{
+    "batch_size": 16,
+    "epochs": 30,
+    "learning_rate": 0.0001,
+    "window_size": 128,
+    "overlap": 50,
+    "num_vertices": 65,
+    "tolerance_window": 5,
+    "loss_function": "standard_ce",
+    "class_weights": [
+        0.1,
+        0.3,
+        1.0
+    ],
+    "use_full_length": false,
+    "base_features": [
+        "x-cord",
+        "y-cord",
+        "z-cord"
+    ],
+    "kinematic_features": [],
+    "in_channels": 3,
+    "decoder_strategy": "threshold",
+    "decoder_threshold": 0.5,
+    "d_model": 256,
+    "n_layers": 4,
+    "focal_loss_gamma": 2.0,
+    "optimizer": "AdamW",
+    "scheduler": "CosineAnnealingLR",
+    "basename": "stgcn_mamba",
+    "description": "start of 3D features"
+}
