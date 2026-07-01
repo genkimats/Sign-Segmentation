@@ -44,7 +44,7 @@ KINEMATIC_FEATURES = ["velocity", "acceleration", "jerk", "velocity-mag", "angul
 # (Window variables are ignored if USE_FULL_LENGTH is True)
 WINDOW_SIZE = 256
 
-OVERLAP = 224
+OVERLAP = 192
 
 NUM_VERTICES = 65
 TOLERANCE_WINDOW = 5       
