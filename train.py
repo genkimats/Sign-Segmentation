@@ -42,9 +42,9 @@ BASE_FEATURES = ["x-cord", "y-cord", "z-cord"]
 KINEMATIC_FEATURES = ["velocity", "acceleration", "jerk", "velocity-mag", "angular-vel"]  # Optional kinematic features to augment the base features
 
 # (Window variables are ignored if USE_FULL_LENGTH is True)
-WINDOW_SIZE = 2048
+WINDOW_SIZE = 256
 
-OVERLAP = 1792
+OVERLAP = 224
 
 NUM_VERTICES = 65
 TOLERANCE_WINDOW = 5       
