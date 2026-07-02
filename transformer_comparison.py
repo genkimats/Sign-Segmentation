@@ -120,10 +120,21 @@ if __name__ == "__main__":
                     with flop_counter:
                         _ = model(dummy_input)
                 
-                total_flops = sum(flop_counter.get_total_flops().values())
+                # Fixed to handle different PyTorch versions (int vs dict return types)
+                flops_res = flop_counter.get_total_flops()
+                total_flops = sum(flops_res.values()) if isinstance(flops_res, dict) else flops_res
+                
                 gflops = total_flops / 1e9
                 print(f"{w:<11} | {gflops:.4f}")
+                
+            except RuntimeError as e:
+                # Explicitly catch true CUDA memory issues
+                if "out of memory" in str(e).lower():
+                    print(f"{w:<11} | OUT OF MEMORY (OOM)")
+                else:
+                    print(f"{w:<11} | FAILED: {str(e)}")
+                torch.cuda.empty_cache() 
             except Exception as e:
-                print(f"{w:<11} | OUT OF MEMORY (OOM) / FAILED")
-                # Clear memory to allow the loop to continue
+                # Print actual trace issues instead of hiding them under an OOM label
+                print(f"{w:<11} | FAILED: {str(e)}")
                 torch.cuda.empty_cache()
