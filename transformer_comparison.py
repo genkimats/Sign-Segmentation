@@ -4,7 +4,7 @@ import math
 from torch.utils.flop_counter import FlopCounterMode
 
 # ==============================================================================
-# 1. "Hands-On" Transformer Proxy Architecture (NAIVE / EXPLICIT MATMUL)
+# 1. "Hands-On" Transformer Proxy Architecture (APPLES-TO-APPLES)
 # ==============================================================================
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model, max_len=5000):
@@ -20,11 +20,7 @@ class PositionalEncoding(nn.Module):
         return x + self.pe[:x.size(1)].transpose(0, 1)
 
 class NaiveAttention(nn.Module):
-    """
-    We MUST use a naive attention implementation. PyTorch's default nn.MultiheadAttention 
-    uses C++ fused kernels (SDPA/FlashAttention) which hide the O(N^2) FLOPs from the 
-    FlopCounterMode. This explicit version forces the counter to register the quadratic math.
-    """
+    """Explicit Attention to force FLOP counter to register O(N^2) math."""
     def __init__(self, d_model, nhead):
         super().__init__()
         self.nhead = nhead
@@ -34,17 +30,13 @@ class NaiveAttention(nn.Module):
         
     def forward(self, x):
         B, T, D = x.shape
-        # Project and reshape into (3, B, nhead, T, d_k)
         qkv = self.qkv_proj(x).reshape(B, T, 3, self.nhead, self.d_k).permute(2, 0, 3, 1, 4)
         q, k, v = qkv[0], qkv[1], qkv[2]
         
-        # EXPLICIT O(N^2) Matmul: (B, nhead, T, d_k) @ (B, nhead, d_k, T) -> (B, nhead, T, T)
         attn_scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(self.d_k)
         attn_probs = torch.softmax(attn_scores, dim=-1)
         
-        # EXPLICIT O(N^2) Matmul: (B, nhead, T, T) @ (B, nhead, T, d_k) -> (B, nhead, T, d_k)
         attn_output = torch.matmul(attn_probs, v)
-        
         attn_output = attn_output.permute(0, 2, 1, 3).reshape(B, T, D)
         return self.out_proj(attn_output)
 
@@ -63,17 +55,36 @@ class NaiveTransformerLayer(nn.Module):
         x = x + self.linear2(self.activation(self.linear1(self.norm2(x))))
         return x
 
-class HandsOnTransformerProxy(nn.Module):
+class MockSTGCN(nn.Module):
+    """
+    Simulates the computational footprint (FLOPs) of the ST-GCN front-end 
+    used in your STGCN_Mamba model to ensure an apples-to-apples comparison.
+    """
+    def __init__(self, in_channels=3, out_channels=256, num_vertices=65):
+        super().__init__()
+        # Approximates the MACs of processing 65 vertices over time
+        self.st_gcn_blocks = nn.Sequential(
+            nn.Conv2d(in_channels, 64, kernel_size=(9, 1), padding=(4, 0)),
+            nn.GELU(),
+            nn.Conv2d(64, 128, kernel_size=(5, 1), padding=(2, 0)),
+            nn.GELU(),
+            nn.Conv2d(128, out_channels, kernel_size=(3, 1), padding=(1, 0)),
+            nn.GELU()
+        )
+        self.vertex_pool = nn.AdaptiveAvgPool2d((None, 1))
+
+    def forward(self, x):
+        x = self.st_gcn_blocks(x)  # (B, 256, T, V)
+        x = self.vertex_pool(x)    # (B, 256, T, 1)
+        return x.squeeze(-1).permute(0, 2, 1)  # (B, T, 256)
+
+class Fair_STGCN_TransformerProxy(nn.Module):
     def __init__(self, num_vertices=65, in_channels=3, d_model=256, n_layers=4, nhead=8, num_classes=3, apply_downsampling=True):
         super().__init__()
         self.apply_downsampling = apply_downsampling
-        input_dim = num_vertices * in_channels
         
-        self.aux_mlp = nn.Sequential(
-            nn.Linear(input_dim, d_model), nn.GELU(),
-            nn.Linear(d_model, d_model), nn.GELU(),
-            nn.Linear(d_model, d_model)
-        )
+        # Replaced the cheap MLP with the heavy ST-GCN to match Mamba's baseline
+        self.stgcn_front_end = MockSTGCN(in_channels, d_model, num_vertices)
         
         if self.apply_downsampling:
             self.downsample = nn.Conv1d(d_model, d_model, kernel_size=2, stride=2)
@@ -86,19 +97,14 @@ class HandsOnTransformerProxy(nn.Module):
         )
 
         self.pos_encoder = PositionalEncoding(d_model)
-        
-        # Replace the opaque TransformerEncoder with our fully-exposed Naive layers
         self.transformer_encoder = nn.Sequential(
             *[NaiveTransformerLayer(d_model, nhead) for _ in range(n_layers)]
         )
-        
         self.classifier = nn.Linear(d_model, num_classes)
 
     def forward(self, x):
-        B, C, T, V = x.shape
-        x = x.permute(0, 2, 3, 1).contiguous().view(B, T, V * C)
-        
-        x = self.aux_mlp(x)
+        # x shape: (B, C, T, V) natively processed by ST-GCN
+        x = self.stgcn_front_end(x) 
         
         if self.apply_downsampling:
             x = x.permute(0, 2, 1) 
@@ -106,7 +112,6 @@ class HandsOnTransformerProxy(nn.Module):
             x = x.permute(0, 2, 1) 
             
         x = self.mixer_mlp(x)
-        
         x = self.pos_encoder(x)
         x = self.transformer_encoder(x) 
         
@@ -119,14 +124,14 @@ class HandsOnTransformerProxy(nn.Module):
         return logits.permute(0, 2, 1)
 
 # ==============================================================================
-# 2. FLOP Calculation Sweep
+# 2. Fair FLOP Calculation Sweep
 # ==============================================================================
 if __name__ == "__main__":
     device = "cuda" if torch.cuda.is_available() else "cpu"
     
     models_to_test = {
-        "Hands-On Transformer (with T/2 Downsampling)": True,
-        "Pure Transformer (No Downsampling)": False
+        "ST-GCN + Transformer (T/2 Downsampled)": True,
+        "ST-GCN + Pure Transformer (No Downsampling)": False
     }
     
     window_sizes = [16, 32, 64, 128, 256, 512, 1024, 2048, 4096]
@@ -138,7 +143,7 @@ if __name__ == "__main__":
         print("Window Size | GFLOPs")
         print("-" * 25)
         
-        model = HandsOnTransformerProxy(
+        model = Fair_STGCN_TransformerProxy(
             num_vertices=65, in_channels=3, d_model=256, n_layers=4, apply_downsampling=do_downsample
         ).to(device)
         model.eval()
