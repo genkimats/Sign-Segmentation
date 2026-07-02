@@ -4,7 +4,7 @@ import math
 from torch.utils.flop_counter import FlopCounterMode
 
 # ==============================================================================
-# 1. "Hands-On" Transformer Proxy Architecture (APPLES-TO-APPLES)
+# 1. "Hands-On" Exact Pipeline Architecture (512d, 1024d concat, T/2)
 # ==============================================================================
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model, max_len=5000):
@@ -55,47 +55,39 @@ class NaiveTransformerLayer(nn.Module):
         x = x + self.linear2(self.activation(self.linear1(self.norm2(x))))
         return x
 
-class MockSTGCN(nn.Module):
-    """
-    Simulates the computational footprint (FLOPs) of the ST-GCN front-end 
-    used in your STGCN_Mamba model to ensure an apples-to-apples comparison.
-    """
-    def __init__(self, in_channels=3, out_channels=256, num_vertices=65):
-        super().__init__()
-        # Approximates the MACs of processing 65 vertices over time
-        self.st_gcn_blocks = nn.Sequential(
-            nn.Conv2d(in_channels, 64, kernel_size=(9, 1), padding=(4, 0)),
-            nn.GELU(),
-            nn.Conv2d(64, 128, kernel_size=(5, 1), padding=(2, 0)),
-            nn.GELU(),
-            nn.Conv2d(128, out_channels, kernel_size=(3, 1), padding=(1, 0)),
-            nn.GELU()
-        )
-        self.vertex_pool = nn.AdaptiveAvgPool2d((None, 1))
-
-    def forward(self, x):
-        x = self.st_gcn_blocks(x)  # (B, 256, T, V)
-        x = self.vertex_pool(x)    # (B, 256, T, 1)
-        return x.squeeze(-1).permute(0, 2, 1)  # (B, T, 256)
-
-class Fair_STGCN_TransformerProxy(nn.Module):
-    def __init__(self, num_vertices=65, in_channels=3, d_model=256, n_layers=4, nhead=8, num_classes=3, apply_downsampling=True):
+class ExactHandsOnPipeline(nn.Module):
+    def __init__(self, num_body_vertices=33, num_hand_vertices=42, in_channels=3, d_model=512, n_layers=4, nhead=8, num_classes=3, apply_downsampling=True):
         super().__init__()
         self.apply_downsampling = apply_downsampling
+        self.num_body_vertices = num_body_vertices
+        self.num_hand_vertices = num_hand_vertices
         
-        # Replaced the cheap MLP with the heavy ST-GCN to match Mamba's baseline
-        self.stgcn_front_end = MockSTGCN(in_channels, d_model, num_vertices)
-        
-        if self.apply_downsampling:
-            self.downsample = nn.Conv1d(d_model, d_model, kernel_size=2, stride=2)
-            self.upsample = nn.ConvTranspose1d(d_model, d_model, kernel_size=2, stride=2)
-            
-        self.mixer_mlp = nn.Sequential(
-            nn.Linear(d_model, d_model), nn.GELU(),
+        # 1. Two Separate Auxiliary Modules (3-layer MLPs up-projecting to 512d)
+        self.body_mlp = nn.Sequential(
+            nn.Linear(num_body_vertices * in_channels, d_model), nn.GELU(),
             nn.Linear(d_model, d_model), nn.GELU(),
             nn.Linear(d_model, d_model)
         )
+        self.hand_mlp = nn.Sequential(
+            nn.Linear(num_hand_vertices * in_channels, d_model), nn.GELU(),
+            nn.Linear(d_model, d_model), nn.GELU(),
+            nn.Linear(d_model, d_model)
+        )
+        
+        # 2. Temporal Downsampling (Factor of 2)
+        if self.apply_downsampling:
+            self.body_downsample = nn.Conv1d(d_model, d_model, kernel_size=2, stride=2)
+            self.hand_downsample = nn.Conv1d(d_model, d_model, kernel_size=2, stride=2)
+            self.upsample = nn.ConvTranspose1d(d_model, d_model, kernel_size=2, stride=2)
+            
+        # 3. Multi-Modal Mixer (1024d -> 1024d -> 512d)
+        self.mixer_mlp = nn.Sequential(
+            nn.Linear(d_model * 2, d_model * 2), nn.GELU(),
+            nn.Linear(d_model * 2, d_model * 2), nn.GELU(),
+            nn.Linear(d_model * 2, d_model) # Project back to 512d for the Transformer
+        )
 
+        # 4. Transformer Encoder (d_model=512)
         self.pos_encoder = PositionalEncoding(d_model)
         self.transformer_encoder = nn.Sequential(
             *[NaiveTransformerLayer(d_model, nhead) for _ in range(n_layers)]
@@ -103,24 +95,40 @@ class Fair_STGCN_TransformerProxy(nn.Module):
         self.classifier = nn.Linear(d_model, num_classes)
 
     def forward(self, x):
-        # x shape: (B, C, T, V) natively processed by ST-GCN
-        x = self.stgcn_front_end(x) 
+        # x shape: (B, C, T, V) where V = 75
+        B, C, T, V = x.shape
+        
+        body_x = x[:, :, :, :self.num_body_vertices]
+        hand_x = x[:, :, :, self.num_body_vertices:]
+        
+        # Flatten spatial and channel dimensions
+        body_feat = body_x.permute(0, 2, 3, 1).contiguous().view(B, T, self.num_body_vertices * C)
+        hand_feat = hand_x.permute(0, 2, 3, 1).contiguous().view(B, T, self.num_hand_vertices * C)
+        
+        body_feat = self.body_mlp(body_feat)
+        hand_feat = self.hand_mlp(hand_feat)
         
         if self.apply_downsampling:
-            x = x.permute(0, 2, 1) 
-            x = self.downsample(x)
-            x = x.permute(0, 2, 1) 
+            body_feat = body_feat.permute(0, 2, 1)
+            body_feat = self.body_downsample(body_feat).permute(0, 2, 1)
             
-        x = self.mixer_mlp(x)
-        x = self.pos_encoder(x)
-        x = self.transformer_encoder(x) 
+            hand_feat = hand_feat.permute(0, 2, 1)
+            hand_feat = self.hand_downsample(hand_feat).permute(0, 2, 1)
+            
+        # Concatenate to 1024 dimensions
+        combined_feat = torch.cat([body_feat, hand_feat], dim=-1)
+        
+        # Mix and map down to 512 dimensions
+        mixed_feat = self.mixer_mlp(combined_feat)
+        
+        mixed_feat = self.pos_encoder(mixed_feat)
+        mixed_feat = self.transformer_encoder(mixed_feat) 
         
         if self.apply_downsampling:
-            x = x.permute(0, 2, 1) 
-            x = self.upsample(x)
-            x = x.permute(0, 2, 1) 
+            mixed_feat = mixed_feat.permute(0, 2, 1) 
+            mixed_feat = self.upsample(mixed_feat).permute(0, 2, 1) 
             
-        logits = self.classifier(x)
+        logits = self.classifier(mixed_feat)
         return logits.permute(0, 2, 1)
 
 # ==============================================================================
@@ -130,8 +138,8 @@ if __name__ == "__main__":
     device = "cuda" if torch.cuda.is_available() else "cpu"
     
     models_to_test = {
-        "ST-GCN + Transformer (T/2 Downsampled)": True,
-        "ST-GCN + Pure Transformer (No Downsampling)": False
+        "Exact Hands-On Pipeline (T/2 Downsampled)": True,
+        "Exact Hands-On Pipeline (Pure, No Downsampling)": False
     }
     
     window_sizes = [16, 32, 64, 128, 256, 512, 1024, 2048, 4096]
@@ -143,13 +151,14 @@ if __name__ == "__main__":
         print("Window Size | GFLOPs")
         print("-" * 25)
         
-        model = Fair_STGCN_TransformerProxy(
-            num_vertices=65, in_channels=3, d_model=256, n_layers=4, apply_downsampling=do_downsample
+        model = ExactHandsOnPipeline(
+            num_body_vertices=33, num_hand_vertices=42, in_channels=3, d_model=512, n_layers=4, apply_downsampling=do_downsample
         ).to(device)
         model.eval()
 
         for w in window_sizes:
-            dummy_input = torch.randn(1, 3, w, 65).to(device)
+            # Note: 75 vertices to match the Hands-On paper
+            dummy_input = torch.randn(1, 3, w, 75).to(device)
             flop_counter = FlopCounterMode(display=False)
             
             try:
