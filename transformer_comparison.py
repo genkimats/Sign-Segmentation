@@ -4,7 +4,8 @@ import math
 from torch.utils.flop_counter import FlopCounterMode
 
 # ==============================================================================
-# 1. "Hands-On" Exact Pipeline Architecture (512d, 1024d concat, T/2)
+# 1. "Hands-On" True Pipeline Architecture 
+# (4096d HaMeR / 150d Angles -> 512d -> 1024d Concat -> 1024d Transformer)
 # ==============================================================================
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model, max_len=5000):
@@ -44,7 +45,8 @@ class NaiveTransformerLayer(nn.Module):
     def __init__(self, d_model, nhead):
         super().__init__()
         self.self_attn = NaiveAttention(d_model, nhead)
-        self.linear1 = nn.Linear(d_model, d_model * 4)
+        # Standard Transformer FFN expands by 4x internally
+        self.linear1 = nn.Linear(d_model, d_model * 4) 
         self.linear2 = nn.Linear(d_model * 4, d_model)
         self.norm1 = nn.LayerNorm(d_model)
         self.norm2 = nn.LayerNorm(d_model)
@@ -55,70 +57,62 @@ class NaiveTransformerLayer(nn.Module):
         x = x + self.linear2(self.activation(self.linear1(self.norm2(x))))
         return x
 
-class ExactHandsOnPipeline(nn.Module):
-    def __init__(self, num_body_vertices=33, num_hand_vertices=42, in_channels=3, d_model=512, n_layers=4, nhead=8, num_classes=3, apply_downsampling=True):
+class TrueHandsOnPipeline(nn.Module):
+    def __init__(self, hamer_dim=4096, angle_dim=150, proj_dim=512, n_layers=4, nhead=8, num_classes=3, apply_downsampling=True):
         super().__init__()
         self.apply_downsampling = apply_downsampling
-        self.num_body_vertices = num_body_vertices
-        self.num_hand_vertices = num_hand_vertices
         
-        # 1. Two Separate Auxiliary Modules (3-layer MLPs up-projecting to 512d)
-        self.body_mlp = nn.Sequential(
-            nn.Linear(num_body_vertices * in_channels, d_model), nn.GELU(),
-            nn.Linear(d_model, d_model), nn.GELU(),
-            nn.Linear(d_model, d_model)
+        # 1. Feature-Specific Auxiliary Modules (Up-projects to 512d)
+        self.hamer_mlp = nn.Sequential(
+            nn.Linear(hamer_dim, proj_dim), nn.GELU(),
+            nn.Linear(proj_dim, proj_dim), nn.GELU(),
+            nn.Linear(proj_dim, proj_dim)
         )
-        self.hand_mlp = nn.Sequential(
-            nn.Linear(num_hand_vertices * in_channels, d_model), nn.GELU(),
-            nn.Linear(d_model, d_model), nn.GELU(),
-            nn.Linear(d_model, d_model)
+        self.angle_mlp = nn.Sequential(
+            nn.Linear(angle_dim, proj_dim), nn.GELU(),
+            nn.Linear(proj_dim, proj_dim), nn.GELU(),
+            nn.Linear(proj_dim, proj_dim)
         )
         
         # 2. Temporal Downsampling (Factor of 2)
         if self.apply_downsampling:
-            self.body_downsample = nn.Conv1d(d_model, d_model, kernel_size=2, stride=2)
-            self.hand_downsample = nn.Conv1d(d_model, d_model, kernel_size=2, stride=2)
-            self.upsample = nn.ConvTranspose1d(d_model, d_model, kernel_size=2, stride=2)
+            self.hamer_downsample = nn.Conv1d(proj_dim, proj_dim, kernel_size=2, stride=2)
+            self.angle_downsample = nn.Conv1d(proj_dim, proj_dim, kernel_size=2, stride=2)
+            # 1024d Upsampler for final output mapping
+            self.upsample = nn.ConvTranspose1d(proj_dim * 2, proj_dim * 2, kernel_size=2, stride=2)
             
-        # 3. Multi-Modal Mixer (1024d -> 1024d -> 512d)
+        # 3. Multi-Modal Mixer (1024d)
+        d_model = proj_dim * 2 # 1024 dimensions
+        
         self.mixer_mlp = nn.Sequential(
-            nn.Linear(d_model * 2, d_model * 2), nn.GELU(),
-            nn.Linear(d_model * 2, d_model * 2), nn.GELU(),
-            nn.Linear(d_model * 2, d_model) # Project back to 512d for the Transformer
+            nn.Linear(d_model, d_model), nn.GELU(),
+            nn.Linear(d_model, d_model), nn.GELU(),
+            nn.Linear(d_model, d_model)
         )
 
-        # 4. Transformer Encoder (d_model=512)
+        # 4. Transformer Encoder (Processing at the full 1024d concat dimension)
         self.pos_encoder = PositionalEncoding(d_model)
         self.transformer_encoder = nn.Sequential(
             *[NaiveTransformerLayer(d_model, nhead) for _ in range(n_layers)]
         )
+        
         self.classifier = nn.Linear(d_model, num_classes)
 
-    def forward(self, x):
-        # x shape: (B, C, T, V) where V = 75
-        B, C, T, V = x.shape
-        
-        body_x = x[:, :, :, :self.num_body_vertices]
-        hand_x = x[:, :, :, self.num_body_vertices:]
-        
-        # Flatten spatial and channel dimensions
-        body_feat = body_x.permute(0, 2, 3, 1).contiguous().view(B, T, self.num_body_vertices * C)
-        hand_feat = hand_x.permute(0, 2, 3, 1).contiguous().view(B, T, self.num_hand_vertices * C)
-        
-        body_feat = self.body_mlp(body_feat)
-        hand_feat = self.hand_mlp(hand_feat)
+    def forward(self, hamer_feat, angle_feat):
+        # Processing independent modalities
+        h_f = self.hamer_mlp(hamer_feat)
+        a_f = self.angle_mlp(angle_feat)
         
         if self.apply_downsampling:
-            body_feat = body_feat.permute(0, 2, 1)
-            body_feat = self.body_downsample(body_feat).permute(0, 2, 1)
+            h_f = h_f.permute(0, 2, 1)
+            h_f = self.hamer_downsample(h_f).permute(0, 2, 1)
             
-            hand_feat = hand_feat.permute(0, 2, 1)
-            hand_feat = self.hand_downsample(hand_feat).permute(0, 2, 1)
+            a_f = a_f.permute(0, 2, 1)
+            a_f = self.angle_downsample(a_f).permute(0, 2, 1)
             
-        # Concatenate to 1024 dimensions
-        combined_feat = torch.cat([body_feat, hand_feat], dim=-1)
+        # Concatenate into M in R^1024
+        combined_feat = torch.cat([h_f, a_f], dim=-1)
         
-        # Mix and map down to 512 dimensions
         mixed_feat = self.mixer_mlp(combined_feat)
         
         mixed_feat = self.pos_encoder(mixed_feat)
@@ -138,8 +132,8 @@ if __name__ == "__main__":
     device = "cuda" if torch.cuda.is_available() else "cpu"
     
     models_to_test = {
-        "Exact Hands-On Pipeline (T/2 Downsampled)": True,
-        "Exact Hands-On Pipeline (Pure, No Downsampling)": False
+        "True Hands-On Pipeline (T/2 Downsampled)": True,
+        "True Hands-On Pipeline (Pure, No Downsampling)": False
     }
     
     window_sizes = [16, 32, 64, 128, 256, 512, 1024, 2048, 4096]
@@ -151,20 +145,22 @@ if __name__ == "__main__":
         print("Window Size | GFLOPs")
         print("-" * 25)
         
-        model = ExactHandsOnPipeline(
-            num_body_vertices=33, num_hand_vertices=42, in_channels=3, d_model=512, n_layers=4, apply_downsampling=do_downsample
+        model = TrueHandsOnPipeline(
+            hamer_dim=4096, angle_dim=150, proj_dim=512, n_layers=4, apply_downsampling=do_downsample
         ).to(device)
         model.eval()
 
         for w in window_sizes:
-            # Note: 75 vertices to match the Hands-On paper
-            dummy_input = torch.randn(1, 3, w, 75).to(device)
+            # Explicitly modeling the frozen feature vectors rather than a generic 3D tensor
+            dummy_hamer = torch.randn(1, w, 4096).to(device)
+            dummy_angles = torch.randn(1, w, 150).to(device)
+            
             flop_counter = FlopCounterMode(display=False)
             
             try:
                 with torch.no_grad():
                     with flop_counter:
-                        _ = model(dummy_input)
+                        _ = model(dummy_hamer, dummy_angles)
                 
                 flops_res = flop_counter.get_total_flops()
                 total_flops = sum(flops_res.values()) if isinstance(flops_res, dict) else flops_res
