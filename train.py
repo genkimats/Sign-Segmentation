@@ -301,12 +301,20 @@ def train_model(config):
                     # Convert the final decoded sequence back to a 1D numpy array
                     pred_seq = pred_seq_tensor[0].cpu().numpy().astype(float)
                     
-                    # Cast directly to lists for proper evaluation scaling in metrics.py
+                    # Evaluate metrics (robust to dictionary or tuple returns, and correct args order)
                     try:
-                        f_f1, iou, s_f1 = evaluate_batch(np.array([true_seq.tolist()]), np.array([pred_seq.tolist()]))
-                        val_frame_f1.append(float(f_f1))
-                        val_iou.append(float(iou))
-                        val_seg_f1.append(float(s_f1))
+                        metrics_out = evaluate_batch(np.array([pred_seq]), np.array([true_seq]))
+                        
+                        if isinstance(metrics_out, dict):
+                            vals = list(metrics_out.values())
+                            val_frame_f1.append(float(vals[0]))
+                            val_iou.append(float(vals[1]))
+                            val_seg_f1.append(float(vals[2]))
+                        else:
+                            f_f1, iou, s_f1 = metrics_out
+                            val_frame_f1.append(float(f_f1))
+                            val_iou.append(float(iou))
+                            val_seg_f1.append(float(s_f1))
                     except Exception as e:
                         print(f"Error evaluating batch: {e}")
                     
