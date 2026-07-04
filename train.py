@@ -303,9 +303,12 @@ def train_model(config):
                     
                     # Pass the arrays directly, removing the extra list brackets
                     f_f1, iou, s_f1 = evaluate_batch(np.array([true_seq]), np.array([pred_seq]))
-                    val_frame_f1.append(float(f_f1))
-                    val_iou.append(float(iou))
-                    val_seg_f1.append(float(s_f1))
+                    if not isinstance(f_f1, str):
+                        val_frame_f1.append(float(f_f1))
+                    if not isinstance(iou, str):
+                        val_iou.append(float(iou))
+                    if not isinstance(s_f1, str):
+                        val_seg_f1.append(float(s_f1))
                     
         avg_val_loss = val_loss / len(val_loader)
         
