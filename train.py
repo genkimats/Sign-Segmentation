@@ -231,7 +231,8 @@ def train_model(config):
                     loss = criterion(logits, labels, embeddings)
                 else:
                     logits, _ = model(features)
-                    loss = criterion(logits, labels)
+                    # Reshape logits to (B*T, C) and labels to (B*T) for standard CrossEntropy
+                    loss = criterion(logits.reshape(-1, logits.size(-1)), labels.reshape(-1))
             
             scaler.scale(loss).backward()
             
@@ -267,7 +268,8 @@ def train_model(config):
                         loss = criterion(logits, labels, embeddings)
                     else:
                         logits, _ = model(features)
-                        loss = criterion(logits, labels)
+                        # Reshape logits to (B*T, C) and labels to (B*T) for standard CrossEntropy
+                        loss = criterion(logits.reshape(-1, logits.size(-1)), labels.reshape(-1))
                         
                 val_loss += loss.item()
                 
