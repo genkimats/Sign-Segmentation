@@ -210,9 +210,13 @@ def train_model(config):
     best_epoch = 0
     best_model_state = None
     
-    # 4. Training Loop
+    # Hardware monitoring setup
     start_train_time = time.time()
+    gpu_utilization_samples = []
+    if torch.cuda.is_available():
+        torch.cuda.reset_peak_memory_stats(device)
     
+    # 4. Training Loop
     for epoch in range(1, EPOCHS + 1):
         epoch_start_time = time.time()
         model.train()
@@ -247,6 +251,13 @@ def train_model(config):
             
             train_loss += loss.item()
             loop.set_postfix(loss=loss.item())
+
+            # Sample GPU utilization
+            try:
+                if torch.cuda.is_available():
+                    gpu_utilization_samples.append(torch.cuda.utilization(device))
+            except AttributeError:
+                pass
             
         avg_train_loss = train_loss / len(train_loader)
         
@@ -277,6 +288,13 @@ def train_model(config):
                         
                 val_loss += loss.item()
                 
+                # Sample GPU utilization
+                try:
+                    if torch.cuda.is_available():
+                        gpu_utilization_samples.append(torch.cuda.utilization(device))
+                except AttributeError:
+                    pass
+                
                 # Logits shape is (B, T, C). Decoder expects (B, C, T) as a PyTorch Tensor.
                 logits_bct = logits.permute(0, 2, 1)
                 
@@ -301,10 +319,9 @@ def train_model(config):
                     # Convert the final decoded sequence back to a 1D numpy array
                     pred_seq = pred_seq_tensor[0].cpu().numpy().astype(float)
                     
-                    # Evaluate metrics (robust to dictionary or tuple returns, and correct args order)
+                    # Cast directly to lists for proper evaluation scaling in metrics.py
                     try:
-                        metrics_out = evaluate_batch(np.array([pred_seq]), np.array([true_seq]))
-                        
+                        metrics_out = evaluate_batch(np.array([pred_seq.tolist()]), np.array([true_seq.tolist()]))
                         if isinstance(metrics_out, dict):
                             vals = list(metrics_out.values())
                             val_frame_f1.append(float(vals[0]))
@@ -350,11 +367,27 @@ def train_model(config):
     avg_epoch_time = int(total_time / EPOCHS)
     avg_minutes, avg_seconds = divmod(avg_epoch_time, 60)
     
-    with open(metrics_log_path, mode='a', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow(['Average Time Per Epoch:', f"{avg_minutes}m {avg_seconds}s"])
-        writer.writerow(['Total Training Time:', f"{total_minutes}m {total_seconds}s"])
+    # -------------------------------------------------------------
+    # SAVING HARDWARE & TRAINING SUMMARY TO A SEPARATE JSON
+    # -------------------------------------------------------------
+    avg_gpu_util = sum(gpu_utilization_samples) / len(gpu_utilization_samples) if gpu_utilization_samples else 0.0
+    max_mem_gb = torch.cuda.max_memory_allocated(device) / (1024 ** 3) if torch.cuda.is_available() else 0.0
+    
+    hardware_summary = {
+        "total_training_time": f"{int(total_minutes)}m {int(total_seconds)}s",
+        "total_training_seconds": round(total_time, 2),
+        "average_time_per_epoch": f"{int(avg_minutes)}m {int(avg_seconds)}s",
+        "max_gpu_memory_used_gb": round(max_mem_gb, 4),
+        "average_gpu_utilization_percent": round(avg_gpu_util, 2)
+    }
+
+    summary_save_path = os.path.join(exp_dir, f"{run_name}_hardware_summary.json")
+    with open(summary_save_path, "w") as f:
+        json.dump(hardware_summary, f, indent=4)
         
+    print(f"📊 Hardware summary saved to {summary_save_path}")
+        
+    # Save Model Weights
     model_save_path = os.path.join(model_dir, f"{run_name}.pth")
     if best_model_state:
         torch.save(best_model_state, model_save_path)
