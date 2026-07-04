@@ -301,10 +301,10 @@ def train_model(config):
                     # Convert the final decoded sequence back to a 1D numpy array
                     pred_seq = pred_seq_tensor[0].cpu().numpy()
                     
-                    f_f1, iou, s_f1 = evaluate_batch(np.array([true_seq]), np.array([pred_seq]))
-                    val_frame_f1.append(f_f1)
-                    val_iou.append(iou)
-                    val_seg_f1.append(s_f1)
+                    f_f1, iou, s_f1 = evaluate_batch([true_seq], [pred_seq])
+                    val_frame_f1.append(float(f_f1))
+                    val_iou.append(float(iou))
+                    val_seg_f1.append(float(s_f1))
                     
         avg_val_loss = val_loss / len(val_loader)
         
