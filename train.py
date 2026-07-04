@@ -277,20 +277,29 @@ def train_model(config):
                         
                 val_loss += loss.item()
                 
-                preds = torch.argmax(logits, dim=-1)
+                # Logits shape is (B, T, C). Decoder expects (B, C, T) as a PyTorch Tensor.
+                logits_bct = logits.permute(0, 2, 1)
                 
                 for i in range(features.size(0)):
-                    valid_len = features.size(1)
+                    # Get sequence length from the Time dimension of the labels (B, Classes, T)
+                    valid_len = labels.size(-1) 
                     if valid_len == 0: continue
                     
+                    # Target ground-truth sequence
                     true_seq = torch.argmax(labels[i, :, :valid_len], dim=0).cpu().numpy()
-                    pred_logits = logits[i, :valid_len].cpu().numpy() 
                     
-                    pred_seq = decode_predictions(
-                        pred_logits, 
+                    # Extract the Tensor for sequence 'i' with shape (1, C, valid_len)
+                    pred_logits_tensor = logits_bct[i:i+1, :, :valid_len]
+                    
+                    # Decode predictions purely using PyTorch tensors
+                    pred_seq_tensor = decode_predictions(
+                        pred_logits_tensor, 
                         strategy=DECODER_STRATEGY, 
                         threshold=DECODER_THRESHOLD
                     )
+                    
+                    # Convert the final decoded sequence back to a 1D numpy array
+                    pred_seq = pred_seq_tensor[0].cpu().numpy()
                     
                     f_f1, iou, s_f1 = evaluate_batch([true_seq], [pred_seq])
                     val_frame_f1.append(f_f1)
