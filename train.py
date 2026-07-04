@@ -301,6 +301,7 @@ def train_model(config):
                     # Convert the final decoded sequence back to a 1D numpy array
                     pred_seq = pred_seq_tensor[0].cpu().numpy()
                     
+                    # Ensure true_seq and pred_seq are passed as lists of arrays, not arrays themselves
                     f_f1, iou, s_f1 = evaluate_batch([true_seq], [pred_seq])
                     val_frame_f1.append(float(f_f1))
                     val_iou.append(float(iou))
