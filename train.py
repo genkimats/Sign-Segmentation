@@ -83,7 +83,7 @@ def get_next_experiment_prefix(model_name):
 
 def train_model(config):
     """Executes a single training run based on the provided configuration dictionary."""
-    print(f"\\n{'='*60}\\n🚀 STARTING QUEUED JOB\\n{'='*60}")
+    print(f"\n{'='*60}\n🚀 STARTING QUEUED JOB\n{'='*60}")
     print(json.dumps(config, indent=4))
     
     # Unpack config
@@ -219,7 +219,7 @@ def train_model(config):
         train_loss = 0.0
         
         loop = tqdm(train_loader, desc=f"Epoch {epoch}/{EPOCHS} [Train]", leave=False)
-        for features, masks, labels in loop:
+        for features, labels in loop:
             features = features.to(device)
             labels = labels.to(device)
             
@@ -257,7 +257,7 @@ def train_model(config):
         
         with torch.no_grad():
             val_loop = tqdm(val_loader, desc=f"Epoch {epoch}/{EPOCHS} [Val]", leave=False)
-            for features, masks, labels in val_loop:
+            for features, labels in val_loop:
                 features = features.to(device)
                 labels = labels.to(device)
                 
@@ -274,7 +274,7 @@ def train_model(config):
                 preds = torch.argmax(logits, dim=-1)
                 
                 for i in range(features.size(0)):
-                    valid_len = int(masks[i].sum().item())
+                    valid_len = features.size(1)
                     if valid_len == 0: continue
                     
                     true_seq = labels[i, :valid_len].cpu().numpy()
@@ -336,7 +336,7 @@ def train_model(config):
         torch.save(model.state_dict(), model_save_path)
         print(f"✅ Final Model saved to {model_save_path}")
         
-    print(f"🏁 Finished {run_name}\\n")
+    print(f"🏁 Finished {run_name}\n")
 
 if __name__ == "__main__":
     print("🚦 Starting Train Queue Manager...")
