@@ -301,8 +301,8 @@ def train_model(config):
                     # Convert the final decoded sequence back to a 1D numpy array
                     pred_seq = pred_seq_tensor[0].cpu().numpy().astype(float)
                     
-                    # Pass the arrays directly, removing the extra list brackets
-                    f_f1, iou, s_f1 = evaluate_batch(np.array([true_seq]), np.array([pred_seq]))
+                    # Cast directly to lists for proper evaluation scaling in metrics.py
+                    f_f1, iou, s_f1 = evaluate_batch(np.array([true_seq.tolist()]), np.array([pred_seq.tolist()]))
                     if not isinstance(f_f1, str):
                         val_frame_f1.append(float(f_f1))
                     if not isinstance(iou, str):
