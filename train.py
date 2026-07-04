@@ -286,7 +286,7 @@ def train_model(config):
                     if valid_len == 0: continue
                     
                     # Target ground-truth sequence
-                    true_seq = torch.argmax(labels[i, :, :valid_len], dim=0).cpu().numpy()
+                    true_seq = torch.argmax(labels[i, :, :valid_len], dim=0).cpu().numpy().astype(float)
                     
                     # Extract the Tensor for sequence 'i' with shape (1, C, valid_len)
                     pred_logits_tensor = logits_bct[i:i+1, :, :valid_len]
@@ -299,10 +299,10 @@ def train_model(config):
                     )
                     
                     # Convert the final decoded sequence back to a 1D numpy array
-                    pred_seq = pred_seq_tensor[0].cpu().numpy()
+                    pred_seq = pred_seq_tensor[0].cpu().numpy().astype(float)
                     
-                    # Ensure true_seq and pred_seq are passed as lists of arrays, not arrays themselves
-                    f_f1, iou, s_f1 = evaluate_batch([true_seq], [pred_seq])
+                    # Pass the arrays directly, removing the extra list brackets
+                    f_f1, iou, s_f1 = evaluate_batch(np.array([true_seq]), np.array([pred_seq]))
                     val_frame_f1.append(float(f_f1))
                     val_iou.append(float(iou))
                     val_seg_f1.append(float(s_f1))
