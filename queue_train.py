@@ -42,7 +42,7 @@ MAMBA_DEFAULTS = {
 LSTM_DEFAULTS = {
     "basename": "bilstm_baseline",
     "batch_size": 16,
-    "epochs": 100,
+    "epochs": 50,
     "learning_rate": 0.0001,
     "num_vertices": 65,
     "tolerance_window": 5,
