@@ -127,7 +127,7 @@ def train_model(config):
     # Dataset
     full_dataset = SignSegmentationDataset(
         keypoints_dir="processed_data/keypoints",
-        labels_dir="processed_data/labels",
+        labels_dir="processed_data/BIO_tags",
         window_size=WINDOW_SIZE,
         overlap=OVERLAP,
         tolerance_window=TOLERANCE_WINDOW,
