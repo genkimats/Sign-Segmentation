@@ -231,8 +231,10 @@ def train_model(config):
                     loss = criterion(logits, labels, embeddings)
                 else:
                     logits, _ = model(features)
+                    # Convert soft labels (B, 3, T) to hard class indices (B, T)
+                    hard_labels = torch.argmax(labels, dim=1)
                     # Reshape logits to (B*T, C) and labels to (B*T) for standard CrossEntropy
-                    loss = criterion(logits.reshape(-1, logits.size(-1)), labels.reshape(-1))
+                    loss = criterion(logits.reshape(-1, logits.size(-1)), hard_labels.reshape(-1))
             
             scaler.scale(loss).backward()
             
@@ -268,8 +270,10 @@ def train_model(config):
                         loss = criterion(logits, labels, embeddings)
                     else:
                         logits, _ = model(features)
+                        # Convert soft labels (B, 3, T) to hard class indices (B, T)
+                        hard_labels = torch.argmax(labels, dim=1)
                         # Reshape logits to (B*T, C) and labels to (B*T) for standard CrossEntropy
-                        loss = criterion(logits.reshape(-1, logits.size(-1)), labels.reshape(-1))
+                        loss = criterion(logits.reshape(-1, logits.size(-1)), hard_labels.reshape(-1))
                         
                 val_loss += loss.item()
                 
@@ -279,7 +283,7 @@ def train_model(config):
                     valid_len = features.size(1)
                     if valid_len == 0: continue
                     
-                    true_seq = labels[i, :valid_len].cpu().numpy()
+                    true_seq = torch.argmax(labels[i, :, :valid_len], dim=0).cpu().numpy()
                     pred_logits = logits[i, :valid_len].cpu().numpy() 
                     
                     pred_seq = decode_predictions(
