@@ -4,7 +4,6 @@ import csv
 import os
 import torch
 import numpy as np
-import matplotlib.pyplot as plt
 import torch.optim as optim
 from torch.utils.data import DataLoader, random_split
 from tqdm import tqdm
@@ -13,462 +12,127 @@ from torch.amp import GradScaler, autocast
 
 # Import our custom modules
 from src.dataset import SignSegmentationDataset
-from src.models import PureMambaBaseline, BiMambaBaseline, STGCN_Mamba, STGCN_BiMamba, Decoupled_STGCN_Mamba, Decoupled_STGCN_BiMamba
+from src.models import PureMambaBaseline, BiMambaBaseline, STGCN_Mamba, STGCN_BiMamba, Decoupled_STGCN_Mamba, Decoupled_STGCN_BiMamba, BiLSTM_Baseline
 from src.metrics import evaluate_batch
 from src.loss import CombinedBoundaryLoss, FocalLoss, StandardCrossEntropyLoss, WeightedCrossEntropyLoss
 from src.decoder import decode_predictions
 
+QUEUE_FILE = "train_queue.json"
 
 # ==============================================================================
-# 🎛️ EXPERIMENT CONFIGURATION PANEL
+# Model Registry Mapping
 # ==============================================================================
-RUN_ALL_MODELS = False
-
-# Options: "pure_mamba", "bi_mamba", "stgcn_mamba", "stgcn_bimamba", "decoupled_stgcn_mamba", "decoupled_stgcn_bimamba"
-MODELS_TO_TRAIN = [
-    "stgcn_mamba"
-]
-
-USE_FULL_LENGTH = False          # True = Entire videos. False = Sliding windows.
-
-BATCH_SIZE = 16
-EPOCHS = 50
-LEARNING_RATE = 1e-4
-
-# Options: "x-cord", "y-cord", "z-cord"
-BASE_FEATURES = ["x-cord", "y-cord", "z-cord"]
-
-# Available options: "velocity", "acceleration", "jerk", "velocity-mag", "angular-vel"
-KINEMATIC_FEATURES = ["velocity", "acceleration", "jerk", "velocity-mag", "angular-vel"]  # Optional kinematic features to augment the base features
-
-# (Window variables are ignored if USE_FULL_LENGTH is True)
-WINDOW_SIZE = 256
-
-OVERLAP = 224
-
-NUM_VERTICES = 65
-TOLERANCE_WINDOW = 5       
-
-# --- NEW: LOSS FUNCTION TOGGLES ---
-# Options: "standard_ce", "weighted_ce", "bcl"
-LOSS_FUNCTION = "standard_ce"  # Default is standard cross-entropy. Weighted CE and BCL are optional.
-
-# Class weights for 'weighted_ce' [Class 0 (O), Class 1 (I), Class 2 (B)]
-# 1.0 means full penalty. 0.1 means 10% penalty.
-CLASS_WEIGHTS = [0.1, 0.3, 1.0]  
-
-CONTRASTIVE_WEIGHT = 0.15 # Only used if LOSS_FUNCTION is "bcl"      
-
-# --- DECODING STRATEGY ---
-DECODER_STRATEGY = "threshold"  # Options: "argmax", "threshold", "linguistic"
-DECODER_THRESHOLD = 0.50      
-
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-
 MODEL_REGISTRY = {
     "pure_mamba": PureMambaBaseline,
     "bi_mamba": BiMambaBaseline,
     "stgcn_mamba": STGCN_Mamba,
     "stgcn_bimamba": STGCN_BiMamba,
     "decoupled_stgcn_mamba": Decoupled_STGCN_Mamba,
-    "decoupled_stgcn_bimamba": Decoupled_STGCN_BiMamba
+    "decoupled_stgcn_bimamba": Decoupled_STGCN_BiMamba,
+    "bilstm_baseline": BiLSTM_Baseline
 }
 
-# --- CALCULATE DYNAMIC INPUT CHANNELS ---
-num_base = len(BASE_FEATURES)
-
-# If no base features are selected, derivatives default to outputting 2 components (X and Y)
-num_deriv_components = num_base if num_base > 0 else 2
-
-DYNAMIC_IN_CHANNELS = num_base
-
-if "velocity" in KINEMATIC_FEATURES: DYNAMIC_IN_CHANNELS += num_deriv_components
-if "acceleration" in KINEMATIC_FEATURES: DYNAMIC_IN_CHANNELS += num_deriv_components
-if "jerk" in KINEMATIC_FEATURES: DYNAMIC_IN_CHANNELS += num_deriv_components
-if "velocity-mag" in KINEMATIC_FEATURES: DYNAMIC_IN_CHANNELS += 1
-if "angular-vel" in KINEMATIC_FEATURES: DYNAMIC_IN_CHANNELS += 1
-
-# ==============================================================================
-# 📝 METADATA & HYPERPARAMETER LOGGING
-# ==============================================================================
-HYPERPARAMETERS = {
-    "batch_size": BATCH_SIZE,
-    "epochs": EPOCHS,
-    "learning_rate": LEARNING_RATE,
-    "window_size": WINDOW_SIZE,
-    "overlap": OVERLAP,
-    "num_vertices": NUM_VERTICES,
-    "tolerance_window": TOLERANCE_WINDOW,
-    "loss_function": LOSS_FUNCTION,
-    "class_weights": CLASS_WEIGHTS,
-    "use_full_length": USE_FULL_LENGTH,
-    "base_features": BASE_FEATURES,              
-    "kinematic_features": KINEMATIC_FEATURES,    
-    "in_channels": DYNAMIC_IN_CHANNELS,          
-    "loss_function": LOSS_FUNCTION,
-    "decoder_strategy": DECODER_STRATEGY,      
-    "decoder_threshold": DECODER_THRESHOLD,    
-    "d_model": 256,
-    "n_layers": 4,
-    "focal_loss_gamma": 2.0,
-    "optimizer": "AdamW",
-    "scheduler": "CosineAnnealingLR"
-}
-# ==============================================================================
-
-def setup_experiment_dirs(basename):
-    logs_parent = "experiments"
-    models_parent = "saved_models"
-    
-    os.makedirs(logs_parent, exist_ok=True)
-    os.makedirs(models_parent, exist_ok=True)
-    
-    existing_dirs = os.listdir(logs_parent)
-    max_index = 0
-    
-    for d in existing_dirs:
-        if d.startswith(f"{basename}-"):
-            try:
-                idx = int(d.split('-')[-1])
-                if idx > max_index:
-                    max_index = idx
-            except ValueError:
-                continue
-                
-    next_index = max_index + 1
-    run_name = f"{basename}-{next_index:02d}"
-    
-    log_dir = os.path.join(logs_parent, run_name)
-    model_dir = models_parent 
-    
-    os.makedirs(log_dir, exist_ok=True)
-    
-    return log_dir, model_dir, run_name
-
-def format_time(seconds):
-    mins, secs = divmod(seconds, 60)
-    return f"{int(mins)}m {int(secs)}s"
-
-def save_plots(history, log_dir):
-    epochs = history['epoch']
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
-    
-    ax1.plot(epochs, history['train_loss'], label='Train Loss', color='blue', marker='o', markersize=4)
-    ax1.plot(epochs, history['val_loss'], label='Val Loss', color='red', marker='o', markersize=4)
-    ax1.set_title('Training and Validation Loss')
-    ax1.set_xlabel('Epoch')
-    ax1.set_ylabel('Focal Loss')
-    ax1.legend()
-    ax1.grid(True, linestyle='--', alpha=0.7)
-    
-    ax2.plot(epochs, history['frame_f1'], label='Frame F1', color='green', marker='s', markersize=4)
-    ax2.plot(epochs, history['mean_iou'], label='Mean IoU', color='purple', marker='^', markersize=4)
-    ax2.plot(epochs, history['segment_f1'], label='Segment % (F1@0.5)', color='orange', marker='D', markersize=4)
-    ax2.set_title('Validation Metrics over Time')
-    ax2.set_xlabel('Epoch')
-    ax2.set_ylabel('Score')
-    ax2.set_ylim(0, 1.0) 
-    ax2.legend()
-    ax2.grid(True, linestyle='--', alpha=0.7)
-    
-    plt.tight_layout()
-    plot_path = os.path.join(log_dir, "training_curves.png")
-    plt.savefig(plot_path, dpi=300)
-    plt.close()
-    print(f"✅ Saved training curves to '{plot_path}'")
-
-def train_model(model_name, model_class, train_loader, val_loader):
-    """Encapsulated training function so it can be looped."""
-    print("\n" + "="*50)
-    print(f"🚀 STARTING TRAINING: {model_name.upper()}")
-    print("="*50)
-    
-    log_dir, model_dir, run_name = setup_experiment_dirs(model_name)
-    print(f"📁 Run Path: {log_dir}/")
-    
-    # Inject dynamic basename and save hyperparams
-    local_hp = HYPERPARAMETERS.copy()
-    local_hp["basename"] = model_name
-    with open(os.path.join(log_dir, "hyperparameters.json"), "w") as f:
-        json.dump(local_hp, f, indent=4)
-    
-    # 2. Initialize Model, Loss, and Optimizer
-    model = model_class(num_vertices=NUM_VERTICES, in_channels=DYNAMIC_IN_CHANNELS, d_model=256, n_layers=4).to(DEVICE)
-    
-    if HYPERPARAMETERS['loss_function'] == "standard_ce":
-        print("⚖️ Loss Function: Standard Cross-Entropy")
-        criterion = StandardCrossEntropyLoss().to(DEVICE)
+def get_next_job():
+    """Reads the queue file, pops the first job, updates the file, and returns the job."""
+    if not os.path.exists(QUEUE_FILE):
+        return None
         
-    elif HYPERPARAMETERS['loss_function'] == "weighted_ce":
-        print(f"⚖️ Loss Function: Weighted Cross-Entropy (Weights: {HYPERPARAMETERS['class_weights']})")
-        criterion = WeightedCrossEntropyLoss(weights=HYPERPARAMETERS['class_weights']).to(DEVICE)
+    with open(QUEUE_FILE, "r") as f:
+        try:
+            queue = json.load(f)
+        except json.JSONDecodeError:
+            return None
+            
+    if not queue:
+        return None
         
-    elif HYPERPARAMETERS['loss_function'] == "bcl":
-        print(f"⚖️ Loss Function: Combined BCL (Weight: {HYPERPARAMETERS['contrastive_weight']})")
-        criterion = CombinedBoundaryLoss(focal_gamma=2.0, contrastive_weight=HYPERPARAMETERS['contrastive_weight']).to(DEVICE)
+    # Pop the top job
+    next_job = queue.pop(0)
+    
+    # Save the remaining queue
+    with open(QUEUE_FILE, "w") as f:
+        json.dump(queue, f, indent=4)
         
-    else:
-        raise ValueError(f"Unknown Loss Function: {HYPERPARAMETERS['loss_function']}")
-    
-    optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=0.01)
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS)
-    
-    training_start_time = time.time()
-    epoch_durations = []
-    
-    history = {
-        'epoch': [], 'train_loss': [], 'val_loss': [],
-        'frame_f1': [], 'mean_iou': [], 'segment_f1': [], 'epoch_time': []
-    }
-    
-    # --- NEW: Track the best model state ---
-    best_iou = -1.0
-    best_epoch = 0
-    best_model_state = None
+    return next_job
 
-    # Inside train_model(), right before the epoch loop starts
-    scaler = GradScaler("cuda" if torch.cuda.is_available() else "cpu")
+def get_next_experiment_prefix(model_name):
+    """Finds the next available prefix like 01, 02, etc."""
+    experiments_dir = "experiments"
+    if not os.path.exists(experiments_dir):
+        return "01"
+        
+    existing_dirs = os.listdir(experiments_dir)
+    model_dirs = [d for d in existing_dirs if d.startswith(f"{model_name}-")]
     
-    # 3. Training Loop
-    for epoch in range(1, EPOCHS + 1):
-        epoch_start_time = time.time()
+    if not model_dirs:
+        return "01"
         
-        model.train()
-        total_train_loss = 0.0
-        
-        loop = tqdm(train_loader, desc=f"Epoch {epoch}/{EPOCHS} [Train]", leave=False)
-        # --- NEW: Calculate Accumulation Steps ---
-        accumulation_steps = BATCH_SIZE if USE_FULL_LENGTH else 1
-        
-        # Zero gradients at the START of the epoch
-        optimizer.zero_grad() 
-        
-        for i, (features, targets) in enumerate(loop):
-            features, targets = features.to(DEVICE), targets.to(DEVICE)
+    prefixes = []
+    for d in model_dirs:
+        try:
+            prefix = int(d.split('-')[-1])
+            prefixes.append(prefix)
+        except ValueError:
+            continue
             
-            # 🛑 DEBUG CATCH 1: Bad Input Data
-            if torch.isnan(features).any():
-                print(f"\n🚨 FATAL: NaN detected in INPUT FEATURES at Epoch {epoch}, Batch {i}")
-                break
+    if not prefixes:
+        return "01"
+        
+    next_prefix = max(prefixes) + 1
+    return f"{next_prefix:02d}"
 
-            optimizer.zero_grad() 
-            
-            # --- FIX 1: Use bfloat16 to prevent Mamba math overflows ---
-            # If your GPU doesn't support bfloat16, it gracefully falls back to float16
-            amp_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-            
-            with autocast(dtype=amp_dtype, device_type=DEVICE):
-                outputs = model(features)
-                if isinstance(outputs, tuple):
-                    logits, embeddings = outputs
-                else:
-                    logits = outputs
-                    embeddings = None
-            
-            # --- FIX 2: Step out of autocast and calculate Loss in pure FP32 ---
-            # This prevents F.normalize() and F.exp() from triggering Infinity overflows
-            logits = logits.float()
-            if embeddings is not None:
-                embeddings = embeddings.float()
-                
-            # 🛑 DEBUG CATCH 2: Model exploded
-            if torch.isnan(logits).any():
-                print(f"\n🚨 FATAL: NaN detected in MODEL OUTPUTS at Epoch {epoch}, Batch {i}")
-                break
-
-            # Dynamic Loss routing
-            if HYPERPARAMETERS['loss_function'] == "bcl":
-                loss, focal_val, contrastive_val = criterion(logits, embeddings, targets)
-                loop.set_postfix(Focal=f"{focal_val.item():.3f}", BCL=f"{contrastive_val.item():.3f}")
-            else:
-                loss = criterion(logits, targets)
-                loop.set_postfix(Loss=f"{loss.item():.4f}")
-                
-            # 🛑 DEBUG CATCH 3: Loss Function exploded
-            if torch.isnan(loss):
-                print(f"\n🚨 FATAL: NaN detected in LOSS CALCULATION at Epoch {epoch}, Batch {i}")
-                break
-            
-            # --- Gradient Accumulation ---
-            scaled_loss = loss / accumulation_steps
-            scaler.scale(scaled_loss).backward()
-            
-            if (i + 1) % accumulation_steps == 0 or (i + 1) == len(train_loader):
-                scaler.unscale_(optimizer)
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-                
-                scaler.step(optimizer)
-                scaler.update()
-                
-                optimizer.zero_grad()
-            
-            total_train_loss += loss.item()
-            
-        scheduler.step()
-        avg_train_loss = total_train_loss / len(train_loader)
-        
-        # 4. Validation Loop
-        model.eval()
-        total_val_loss = 0.0
-        val_frame_f1, val_iou, val_seg_f1 = [], [], []
-        
-        with torch.no_grad():
-            for features, targets in val_loader:
-                features, targets = features.to(DEVICE), targets.to(DEVICE)
-                # --- FIX: Safely unpack during inference ---
-                outputs = model(features) 
-                if isinstance(outputs, tuple):
-                    logits, _ = outputs
-                else:
-                    logits = outputs
-                
-                # Dynamically calculate pure classification error
-                if HYPERPARAMETERS['loss_function'] == "bcl":
-                    loss = criterion.focal(logits, targets)
-                else:
-                    loss = criterion(logits, targets)
-                
-                total_val_loss += loss.item()
-                
-                # --- FIX: Force FAST argmax during training to save time ---
-                predictions = decode_predictions(logits, strategy="argmax")
-                preds_np = predictions.cpu().numpy()
-                
-                if targets.dim() == 3:
-                    hard_targets = torch.argmax(targets, dim=1)
-                    targets_np = hard_targets.cpu().numpy()
-                else:
-                    targets_np = targets.cpu().numpy()
-                
-                batch_metrics = evaluate_batch(preds_np, targets_np)
-                val_frame_f1.append(batch_metrics['Frame_F1'])
-                val_iou.append(batch_metrics['Mean_IoU'])
-                val_seg_f1.append(batch_metrics['Segment_F1_05'])
-                
-        avg_val_loss = total_val_loss / len(val_loader)
-        epoch_f1 = float(np.mean(val_frame_f1))
-        epoch_iou = float(np.mean(val_iou))
-        epoch_seg = float(np.mean(val_seg_f1))
-        
-        epoch_time_taken = time.time() - epoch_start_time
-        epoch_durations.append(epoch_time_taken)
-        
-        history['epoch'].append(epoch)
-        history['train_loss'].append(avg_train_loss)
-        history['val_loss'].append(avg_val_loss)
-        history['frame_f1'].append(epoch_f1)
-        history['mean_iou'].append(epoch_iou)
-        history['segment_f1'].append(epoch_seg)
-        history['epoch_time'].append(round(epoch_time_taken, 2))
-        
-        print(f"Epoch {epoch:02d} | Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f} | ⏱️ {format_time(epoch_time_taken)}")
-        print(f"         └─> Frame F1: {epoch_f1:.4f} | Mean IoU: {epoch_iou:.4f} | Segments %: {epoch_seg:.4f}")
-
-        # --- NEW: Checkpoint the best model based on Mean IoU ---
-        if epoch_iou > best_iou:
-            best_iou = epoch_iou
-            best_epoch = epoch
-            best_model_state = copy.deepcopy(model.state_dict())
-
-    # --- Exports ---
-    total_training_time = time.time() - training_start_time
-    average_epoch_time = sum(epoch_durations) / len(epoch_durations)
+def train_model(config):
+    """Executes a single training run based on the provided configuration dictionary."""
+    print(f"\\n{'='*60}\\n🚀 STARTING QUEUED JOB\\n{'='*60}")
+    print(json.dumps(config, indent=4))
     
-    csv_path = os.path.join(log_dir, "training_metrics.csv")
-    with open(csv_path, "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(history.keys())
-        for row_data in zip(*history.values()):
-            writer.writerow(row_data)
-        writer.writerow([]) 
-        writer.writerow(["Average Time Per Epoch:", format_time(average_epoch_time)])
-        writer.writerow(["Total Training Time:", format_time(total_training_time)])
-
-    save_plots(history, log_dir)
-
-    # ====================================================================
-    # 🏆 FINAL EVALUATION: APPLY HEAVY DECODER TO BEST MODEL
-    # ====================================================================
-    print(f"\n🌟 Training Complete. Loading Best Model (Epoch {best_epoch}) for Final Decoding...")
-    model.load_state_dict(best_model_state)
-    model.eval()
+    # Unpack config
+    BATCH_SIZE = config["batch_size"]
+    EPOCHS = config["epochs"]
+    LEARNING_RATE = config["learning_rate"]
+    WINDOW_SIZE = config["window_size"]
+    OVERLAP = config["overlap"]
+    NUM_VERTICES = config["num_vertices"]
+    TOLERANCE_WINDOW = config["tolerance_window"]
+    LOSS_FUNCTION = config["loss_function"]
+    CLASS_WEIGHTS = config["class_weights"]
+    USE_FULL_LENGTH = config["use_full_length"]
+    BASE_FEATURES = config["base_features"]
+    KINEMATIC_FEATURES = config["kinematic_features"]
+    IN_CHANNELS = config["in_channels"]
+    DECODER_STRATEGY = config["decoder_strategy"]
+    DECODER_THRESHOLD = config["decoder_threshold"]
+    D_MODEL = config["d_model"]
+    N_LAYERS = config["n_layers"]
+    FOCAL_LOSS_GAMMA = config["focal_loss_gamma"]
+    OPTIMIZER_NAME = config["optimizer"]
+    SCHEDULER_NAME = config["scheduler"]
+    MODEL_NAME = config["basename"]
     
-    final_val_frame_f1, final_val_iou, final_val_seg_f1 = [], [], []
+    prefix = get_next_experiment_prefix(MODEL_NAME)
+    run_name = f"{MODEL_NAME}-{prefix}"
+    print(f"📁 Assigned Run Name: {run_name}")
     
-    with torch.no_grad():
-        for features, targets in tqdm(val_loader, desc=f"Final Decoding ({HYPERPARAMETERS['decoder_strategy']})"):
-            features, targets = features.to(DEVICE), targets.to(DEVICE)
-            
-            outputs = model(features) 
-            if isinstance(outputs, tuple):
-                logits, _ = outputs
-            else:
-                logits = outputs
-                
-            # --- APPLY THE EXPENSIVE DECODER ONCE ---
-            predictions = decode_predictions(
-                logits, 
-                strategy=HYPERPARAMETERS['decoder_strategy'], 
-                threshold=HYPERPARAMETERS['decoder_threshold']
-            )
-            preds_np = predictions.cpu().numpy()
-            
-            if targets.dim() == 3:
-                hard_targets = torch.argmax(targets, dim=1)
-                targets_np = hard_targets.cpu().numpy()
-            else:
-                targets_np = targets.cpu().numpy()
-            
-            batch_metrics = evaluate_batch(preds_np, targets_np)
-            final_val_frame_f1.append(batch_metrics['Frame_F1'])
-            final_val_iou.append(batch_metrics['Mean_IoU'])
-            final_val_seg_f1.append(batch_metrics['Segment_F1_05'])
-            
-    final_f1 = float(np.mean(final_val_frame_f1))
-    final_iou = float(np.mean(final_val_iou))
-    final_seg = float(np.mean(final_val_seg_f1))
+    # Setup directories
+    model_dir = "saved_models"
+    os.makedirs(model_dir, exist_ok=True)
     
-    print("\n" + "="*50)
-    print(f"🎯 FINAL DECODED METRICS (Epoch {best_epoch})")
-    print(f"Strategy: {HYPERPARAMETERS['decoder_strategy'].upper()} | Threshold: {HYPERPARAMETERS['decoder_threshold']}")
-    print(f"Frame F1: {final_f1:.4f} | Mean IoU: {final_iou:.4f} | Segments %: {final_seg:.4f}")
-    print("="*50)
+    exp_dir = os.path.join("experiments", run_name)
+    os.makedirs(exp_dir, exist_ok=True)
     
-    # Save the final results to a new JSON file
-    with open(os.path.join(log_dir, "final_decoded_metrics.json"), "w") as f:
-        json.dump({
-            "best_epoch": best_epoch,
-            "decoder_strategy": HYPERPARAMETERS['decoder_strategy'],
-            "decoder_threshold": HYPERPARAMETERS['decoder_threshold'],
-            "frame_f1": final_f1,
-            "mean_iou": final_iou,
-            "segment_f1": final_seg
-        }, f, indent=4)
-
-    # Save the BEST model state, not the overfitted epoch 30 state
-    model_save_path = os.path.join(model_dir, f"{run_name}.pth")
-    torch.save(best_model_state, model_save_path)
-    
-    print("\n" + "-"*40)
-    print(f"🏁 {run_name.upper()} COMPLETE 🏁")
-    print(f"Total Time: {format_time(total_training_time)}")
-    print("-" * 40)
-
-    # --- CRITICAL MEMORY FLUSH ---
-    del model
-    del optimizer
-    torch.cuda.empty_cache()
-
-if __name__ == "__main__":
-    print("📦 Loading Dataset into RAM (Only happens once)...")
+    # Save hyperparams
+    with open(os.path.join(exp_dir, "hyperparameters.json"), 'w') as f:
+        json.dump(config, f, indent=4)
+        
+    # Dataset
     full_dataset = SignSegmentationDataset(
         keypoints_dir="processed_data/keypoints",
-        labels_dir="processed_data/BIO_tags",
+        labels_dir="processed_data/labels",
         window_size=WINDOW_SIZE,
         overlap=OVERLAP,
         tolerance_window=TOLERANCE_WINDOW,
         use_full_length=USE_FULL_LENGTH,
-        base_features=BASE_FEATURES,           # <-- NEW
+        base_features=BASE_FEATURES,
         kinematic_features=KINEMATIC_FEATURES 
     )
     
@@ -476,26 +140,217 @@ if __name__ == "__main__":
     val_size = len(full_dataset) - train_size
     train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
     
-    # --- NEW: Safe Batch Sizing ---
-    # Variable lengths require batch size 1. 
     loader_batch_size = 1 if USE_FULL_LENGTH else BATCH_SIZE
-    
     train_loader = DataLoader(train_dataset, batch_size=loader_batch_size, shuffle=True, num_workers=4, pin_memory=True)
     val_loader = DataLoader(val_dataset, batch_size=loader_batch_size, shuffle=False, num_workers=4, pin_memory=True)
     
-    if RUN_ALL_MODELS:
-        print("🔄 RUN_ALL_MODELS is TRUE. Training all architectures sequentially...")
-        models_to_run = list(MODEL_REGISTRY.keys())
+    # Model Init
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model_class = MODEL_REGISTRY.get(MODEL_NAME)
+    
+    if not model_class:
+        print(f"❌ Error: Model '{MODEL_NAME}' not found in registry. Skipping.")
+        return
+        
+    if MODEL_NAME == "bilstm_baseline":
+        model = model_class(
+            in_channels=IN_CHANNELS,
+            num_vertices=NUM_VERTICES,
+            num_classes=3,
+            d_model=D_MODEL,
+            n_layers=N_LAYERS
+        ).to(device)
     else:
-        print(f"▶️ RUN_ALL_MODELS is FALSE. Training selected subset: {MODELS_TO_TRAIN}")
-        models_to_run = MODELS_TO_TRAIN
+        model = model_class(
+            in_channels=IN_CHANNELS,
+            num_vertices=NUM_VERTICES,
+            num_classes=3,
+            d_model=D_MODEL,
+            n_layers=N_LAYERS
+        ).to(device)
 
-    # Loop through the target models and train them safely
-    for model_name in models_to_run:
-        if model_name in MODEL_REGISTRY:
-            model_class = MODEL_REGISTRY[model_name]
-            train_model(model_name, model_class, train_loader, val_loader)
-        else:
-            print(f"❌ ERROR: Model '{model_name}' is not in the MODEL_REGISTRY. Skipping...")
+    # Loss Selection
+    weights = torch.tensor(CLASS_WEIGHTS, dtype=torch.float).to(device)
+    
+    if LOSS_FUNCTION == "bcl":
+        criterion = CombinedBoundaryLoss(
+            gamma=FOCAL_LOSS_GAMMA, 
+            weights=weights, 
+            contrastive_weight=config.get("contrastive_weight", 0.15)
+        )
+    elif LOSS_FUNCTION == "standard_ce":
+        criterion = StandardCrossEntropyLoss()
+    elif LOSS_FUNCTION == "weighted_ce":
+        criterion = WeightedCrossEntropyLoss(weights=weights)
+    elif LOSS_FUNCTION == "focal":
+        criterion = FocalLoss(gamma=FOCAL_LOSS_GAMMA, weights=weights)
+    else:
+        raise ValueError(f"Unknown loss function '{LOSS_FUNCTION}'")
+
+    # Optimizer & Scheduler
+    if OPTIMIZER_NAME == "AdamW":
+        optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=0.01)
+    else:
+        optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+        
+    if SCHEDULER_NAME == "CosineAnnealingLR":
+        scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS)
+    else:
+        scheduler = None
+        
+    scaler = GradScaler('cuda')
+    metrics_log_path = os.path.join(exp_dir, f"{run_name}_training_metrics.csv")
+    
+    with open(metrics_log_path, mode='w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(['epoch', 'train_loss', 'val_loss', 'frame_f1', 'mean_iou', 'segment_f1', 'epoch_time'])
+    
+    # Trackers for Checkpointing
+    best_iou = -1.0
+    best_epoch = 0
+    best_model_state = None
+    
+    # 4. Training Loop
+    start_train_time = time.time()
+    
+    for epoch in range(1, EPOCHS + 1):
+        epoch_start_time = time.time()
+        model.train()
+        train_loss = 0.0
+        
+        loop = tqdm(train_loader, desc=f"Epoch {epoch}/{EPOCHS} [Train]", leave=False)
+        for features, masks, labels in loop:
+            features = features.to(device)
+            labels = labels.to(device)
             
-    print("\n🎉 ALL SCHEDULED TRAININGS HAVE FINISHED 🎉")
+            optimizer.zero_grad()
+            
+            with autocast('cuda'):
+                if LOSS_FUNCTION == "bcl":
+                    logits, embeddings = model(features)
+                    loss = criterion(logits, labels, embeddings)
+                else:
+                    logits, _ = model(features)
+                    loss = criterion(logits, labels)
+            
+            scaler.scale(loss).backward()
+            
+            # Gradient clipping to prevent exploding gradients
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            
+            scaler.step(optimizer)
+            scaler.update()
+            
+            train_loss += loss.item()
+            loop.set_postfix(loss=loss.item())
+            
+        avg_train_loss = train_loss / len(train_loader)
+        
+        if scheduler:
+            scheduler.step()
+            
+        # Validation Phase
+        model.eval()
+        val_loss = 0.0
+        val_frame_f1, val_iou, val_seg_f1 = [], [], []
+        
+        with torch.no_grad():
+            val_loop = tqdm(val_loader, desc=f"Epoch {epoch}/{EPOCHS} [Val]", leave=False)
+            for features, masks, labels in val_loop:
+                features = features.to(device)
+                labels = labels.to(device)
+                
+                with autocast('cuda'):
+                    if LOSS_FUNCTION == "bcl":
+                        logits, embeddings = model(features)
+                        loss = criterion(logits, labels, embeddings)
+                    else:
+                        logits, _ = model(features)
+                        loss = criterion(logits, labels)
+                        
+                val_loss += loss.item()
+                
+                preds = torch.argmax(logits, dim=-1)
+                
+                for i in range(features.size(0)):
+                    valid_len = int(masks[i].sum().item())
+                    if valid_len == 0: continue
+                    
+                    true_seq = labels[i, :valid_len].cpu().numpy()
+                    pred_logits = logits[i, :valid_len].cpu().numpy() 
+                    
+                    pred_seq = decode_predictions(
+                        pred_logits, 
+                        strategy=DECODER_STRATEGY, 
+                        threshold=DECODER_THRESHOLD
+                    )
+                    
+                    f_f1, iou, s_f1 = evaluate_batch([true_seq], [pred_seq])
+                    val_frame_f1.append(f_f1)
+                    val_iou.append(iou)
+                    val_seg_f1.append(s_f1)
+                    
+        avg_val_loss = val_loss / len(val_loader)
+        
+        epoch_f1 = float(np.mean(val_frame_f1)) if val_frame_f1 else 0.0
+        epoch_iou = float(np.mean(val_iou)) if val_iou else 0.0
+        epoch_seg = float(np.mean(val_seg_f1)) if val_seg_f1 else 0.0
+        
+        epoch_end_time = time.time()
+        epoch_duration = round(epoch_end_time - epoch_start_time, 2)
+        
+        # --- Checkpoint Best Model ---
+        if epoch_iou > best_iou:
+            best_iou = epoch_iou
+            best_epoch = epoch
+            best_model_state = copy.deepcopy(model.state_dict())
+            
+        print(f"Epoch [{epoch:02d}/{EPOCHS}] "
+              f"Train Loss: {avg_train_loss:.4f} | "
+              f"Val Loss: {avg_val_loss:.4f} | "
+              f"Frame F1: {epoch_f1:.4f} | "
+              f"Mean IoU: {epoch_iou:.4f} | "
+              f"Seg F1: {epoch_seg:.4f} | "
+              f"Time: {epoch_duration}s")
+              
+        with open(metrics_log_path, mode='a', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow([epoch, avg_train_loss, avg_val_loss, epoch_f1, epoch_iou, epoch_seg, epoch_duration])
+
+    total_time = time.time() - start_train_time
+    total_minutes, total_seconds = divmod(int(total_time), 60)
+    avg_epoch_time = int(total_time / EPOCHS)
+    avg_minutes, avg_seconds = divmod(avg_epoch_time, 60)
+    
+    with open(metrics_log_path, mode='a', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(['Average Time Per Epoch:', f"{avg_minutes}m {avg_seconds}s"])
+        writer.writerow(['Total Training Time:', f"{total_minutes}m {total_seconds}s"])
+        
+    model_save_path = os.path.join(model_dir, f"{run_name}.pth")
+    if best_model_state:
+        torch.save(best_model_state, model_save_path)
+        print(f"✅ Best Model (Epoch {best_epoch} | IoU: {best_iou:.4f}) saved to {model_save_path}")
+    else:
+        torch.save(model.state_dict(), model_save_path)
+        print(f"✅ Final Model saved to {model_save_path}")
+        
+    print(f"🏁 Finished {run_name}\\n")
+
+if __name__ == "__main__":
+    print("🚦 Starting Train Queue Manager...")
+    
+    jobs_processed = 0
+    while True:
+        job_config = get_next_job()
+        
+        if job_config is None:
+            if jobs_processed == 0:
+                print("📭 Queue is empty. No jobs to run.")
+            else:
+                print(f"🎉 All {jobs_processed} queued jobs completed successfully. Shutting down.")
+            break
+            
+        train_model(job_config)
+        jobs_processed += 1

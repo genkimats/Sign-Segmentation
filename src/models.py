@@ -354,17 +354,66 @@ class PureMambaBaseline(nn.Module):
         # So we permute before returning -> (4, 3, 1000)
         return logits.permute(0, 2, 1)
 
-# --- Quick Test ---
-if __name__ == "__main__":
-    # Simulate a batch from your DataLoader (Batch=4, Channels=3, Frames=1000, Vertices=65)
-    dummy_input = torch.randn(4, 3, 1000, 65).cuda() 
+
+class BiLSTM_Baseline(nn.Module):
+    """
+    A direct implementation of the architecture from the "Linguistically Motivated 
+    Sign Language Segmentation" paper for baseline ablation testing.
     
-    # Initialize the model and move to GPU
-    model = PureMambaBaseline(num_vertices=65, d_model=256, n_layers=4).cuda()
-    
-    # Forward pass
-    output = model(dummy_input)
-    
-    print(f"Input Shape: {dummy_input.shape}")
-    print(f"Output Shape: {output.shape}") 
-    # Output should be [4, 3, 1000] -> Ready for Loss Calculation!
+    Architecture:
+    - Linear feature projection (No GCN, matching their "Feature Engineering" approach)
+    - 4-Layer Bidirectional LSTM
+    - Hidden Size: 512 (256 per direction)
+    - Dropout: 0.2
+    - Linear classification head for BIO tags
+    """
+    def __init__(self, in_channels, num_vertices, num_classes=3, d_model=256, n_layers=4, dropout=0.2):
+        super(BiLSTM_Baseline, self).__init__()
+        
+        # 1. Feature Projection (Flatten spatial nodes, mimicking their MLP setup)
+        # Input shape from dataset: (Batch, Channels, Frames, Vertices)
+        # Flattened size per frame = in_channels * num_vertices
+        self.feature_dim = in_channels * num_vertices
+        
+        self.projection = nn.Sequential(
+            nn.Linear(self.feature_dim, d_model * 2),
+            nn.LayerNorm(d_model * 2),
+            nn.ReLU(),
+            nn.Dropout(dropout)
+        )
+        
+        # 2. Sequence Encoder (4-Layer BiLSTM)
+        # We use d_model as the hidden size per direction, so the total hidden state is d_model * 2
+        self.lstm = nn.LSTM(
+            input_size=d_model * 2,
+            hidden_size=d_model,
+            num_layers=n_layers,
+            batch_first=True,
+            dropout=dropout if n_layers > 1 else 0,
+            bidirectional=True
+        )
+        
+        # 3. Output Head
+        # Output of BiLSTM is (Batch, Seq_Len, d_model * 2)
+        self.classifier = nn.Linear(d_model * 2, num_classes)
+
+    def forward(self, x):
+        # Current x shape: (B, C, T, V)
+        B, C, T, V = x.shape
+        
+        # Step 1: Flatten spatial dimension and move time to seq_len position
+        # (B, C, T, V) -> (B, T, C, V) -> (B, T, C * V)
+        x = x.permute(0, 2, 1, 3).reshape(B, T, C * V)
+        
+        # Step 2: Linear Projection
+        features = self.projection(x)  # Shape: (B, T, d_model * 2)
+        
+        # Step 3: BiLSTM Sequence Encoding
+        # lstm_out shape: (B, T, hidden_size * 2)
+        lstm_out, _ = self.lstm(features)
+        
+        # Step 4: Classification
+        logits = self.classifier(lstm_out)  # Shape: (B, T, num_classes)
+        
+        # Return logits and the intermediate embeddings (for BCL compatibility!)
+        return logits, lstm_out
