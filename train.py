@@ -302,13 +302,13 @@ def train_model(config):
                     pred_seq = pred_seq_tensor[0].cpu().numpy().astype(float)
                     
                     # Cast directly to lists for proper evaluation scaling in metrics.py
-                    f_f1, iou, s_f1 = evaluate_batch(np.array([true_seq.tolist()]), np.array([pred_seq.tolist()]))
-                    if not isinstance(f_f1, str):
+                    try:
+                        f_f1, iou, s_f1 = evaluate_batch(np.array([true_seq.tolist()]), np.array([pred_seq.tolist()]))
                         val_frame_f1.append(float(f_f1))
-                    if not isinstance(iou, str):
                         val_iou.append(float(iou))
-                    if not isinstance(s_f1, str):
                         val_seg_f1.append(float(s_f1))
+                    except Exception as e:
+                        print(f"Error evaluating batch: {e}")
                     
         avg_val_loss = val_loss / len(val_loader)
         
