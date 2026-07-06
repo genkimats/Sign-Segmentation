@@ -21,11 +21,20 @@ def analyze_dataset():
     for file_path in tqdm(label_files, desc="Analyzing labels"):
         filename = os.path.basename(file_path)
         
-        # Load the (3, T) Gaussian soft-label array
-        soft_labels = np.load(file_path)
+        # Load the label array
+        labels = np.load(file_path)
         
-        # Convert soft labels back to hard indices (0=O, 1=I, 2=B) for counting
-        hard_labels = np.argmax(soft_labels, axis=0)
+        # Check dimensionality. If it's a 2D soft-label array, convert to 1D hard labels.
+        # If it's already a 1D hard-label array, keep it as is!
+        if labels.ndim > 1:
+            if labels.shape[0] == 3:
+                hard_labels = np.argmax(labels, axis=0)
+            elif labels.shape[1] == 3:
+                hard_labels = np.argmax(labels, axis=1)
+            else:
+                hard_labels = np.argmax(labels, axis=-1)
+        else:
+            hard_labels = labels
         
         # Count the frames for each class safely
         o_count = int(np.sum(hard_labels == 0))
