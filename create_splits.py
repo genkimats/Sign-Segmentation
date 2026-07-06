@@ -27,21 +27,24 @@ def analyze_dataset():
         # Convert soft labels back to hard indices (0=O, 1=I, 2=B) for counting
         hard_labels = np.argmax(soft_labels, axis=0)
         
-        # Count the frames for each class
-        o_count = np.sum(hard_labels == 0)
-        i_count = np.sum(hard_labels == 1)
-        b_count = np.sum(hard_labels == 2)
+        # Count the frames for each class safely
+        o_count = int(np.sum(hard_labels == 0))
+        i_count = int(np.sum(hard_labels == 1))
+        b_count = int(np.sum(hard_labels == 2))
         
         # In BIO tagging, the number of 'B' tags equals the number of glosses!
         total_glosses = b_count
         
+        # Use .size to safely get the length of the numpy array
+        total_frames = int(hard_labels.size)
+        
         video_stats.append({
             "filename": filename,
-            "gloss_count": int(total_glosses),
-            "b_frames": int(b_count),
-            "i_frames": int(i_count),
-            "o_frames": int(o_count),
-            "total_frames": len(hard_labels)
+            "gloss_count": total_glosses,
+            "b_frames": b_count,
+            "i_frames": i_count,
+            "o_frames": o_count,
+            "total_frames": total_frames
         })
         
     return video_stats
@@ -93,7 +96,7 @@ def create_balanced_split(video_stats, target_ratios=(0.8, 0.1, 0.1)):
     for name in ["train", "val", "test"]:
         b = buckets[name]
         total_frames = b["b"] + b["i"] + b["o"]
-        actual_ratio = b["glosses"] / total_glosses_dataset
+        actual_ratio = b["glosses"] / total_glosses_dataset if total_glosses_dataset > 0 else 0
         
         b_pct = (b["b"] / total_frames) * 100 if total_frames > 0 else 0
         i_pct = (b["i"] / total_frames) * 100 if total_frames > 0 else 0
