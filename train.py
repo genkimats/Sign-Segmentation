@@ -5,7 +5,7 @@ import os
 import torch
 import numpy as np
 import torch.optim as optim
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 import copy
 from torch.amp import GradScaler, autocast
@@ -124,10 +124,12 @@ def train_model(config):
     with open(os.path.join(exp_dir, "hyperparameters.json"), 'w') as f:
         json.dump(config, f, indent=4)
         
-    # Dataset
-    full_dataset = SignSegmentationDataset(
+    # --- Strict Dataset Spiting ---
+    train_dataset = SignSegmentationDataset(
         keypoints_dir="processed_data/keypoints",
         labels_dir="processed_data/BIO_tags",
+        split_file="dataset_splits.json",
+        split="train",
         window_size=WINDOW_SIZE,
         overlap=OVERLAP,
         tolerance_window=TOLERANCE_WINDOW,
@@ -136,9 +138,18 @@ def train_model(config):
         kinematic_features=KINEMATIC_FEATURES 
     )
     
-    train_size = int(0.8 * len(full_dataset))
-    val_size = len(full_dataset) - train_size
-    train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
+    val_dataset = SignSegmentationDataset(
+        keypoints_dir="processed_data/keypoints",
+        labels_dir="processed_data/BIO_tags",
+        split_file="dataset_splits.json",
+        split="val",
+        window_size=WINDOW_SIZE,
+        overlap=OVERLAP,
+        tolerance_window=TOLERANCE_WINDOW,
+        use_full_length=USE_FULL_LENGTH,
+        base_features=BASE_FEATURES,
+        kinematic_features=KINEMATIC_FEATURES 
+    )
     
     loader_batch_size = 1 if USE_FULL_LENGTH else BATCH_SIZE
     train_loader = DataLoader(train_dataset, batch_size=loader_batch_size, shuffle=True, num_workers=4, pin_memory=True)

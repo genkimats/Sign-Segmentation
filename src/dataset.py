@@ -1,4 +1,5 @@
 import os
+import json
 import torch
 import numpy as np
 from torch.utils.data import Dataset
@@ -45,9 +46,11 @@ def apply_label_smoothing(labels_array, window_size=5):
     return soft_labels
 
 class SignSegmentationDataset(Dataset):
-    def __init__(self, keypoints_dir, labels_dir, window_size=1000, overlap=200, tolerance_window=5, use_full_length=False, base_features=None, kinematic_features=None):
+    def __init__(self, keypoints_dir, labels_dir, split_file="dataset_splits.json", split="train", window_size=1000, overlap=200, tolerance_window=5, use_full_length=False, base_features=None, kinematic_features=None):
         self.keypoints_dir = keypoints_dir
         self.labels_dir = labels_dir
+        self.split_file = split_file
+        self.split = split
         self.window_size = window_size
         self.step_size = window_size - overlap
         self.tolerance_window = tolerance_window
@@ -64,13 +67,25 @@ class SignSegmentationDataset(Dataset):
         self._build_index()
 
     def _build_index(self):
-        files = [f for f in os.listdir(self.keypoints_dir) if f.endswith('.npy')]
-        for file_name in files:
+        # Load the split blueprint
+        with open(self.split_file, "r") as f:
+            splits = json.load(f)
+            
+        # Get only the files assigned to the current split (train, val, or test)
+        allowed_files = splits.get(self.split, [])
+        
+        if not allowed_files:
+            print(f"⚠️ Warning: No files found for split '{self.split}' in {self.split_file}")
+            
+        for file_name in allowed_files:
             base_name = file_name.replace('.npy', '')
             if self.use_full_length:
                 self.slice_index.append({'base_name': base_name, 'start': None, 'end': None})
             else:
                 kp_path = os.path.join(self.keypoints_dir, file_name)
+                # Ensure the file exists before attempting to load
+                if not os.path.exists(kp_path):
+                    continue
                 total_frames = np.load(kp_path, mmap_mode='r').shape[0]
                 for start in range(0, total_frames - self.window_size + 1, self.step_size):
                     self.slice_index.append({'base_name': base_name, 'start': start, 'end': start + self.window_size})
