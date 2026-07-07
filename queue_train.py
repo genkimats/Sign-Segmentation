@@ -9,7 +9,7 @@ QUEUE_FILE = "train_queue.json"
 # Change this variable to determine which defaults and experiments are queued:
 # Options: 'mamba'  - Queues ST-GCN Mamba models with their optimized hyper-redundant settings.
 #          'lstm'   - Queues Bidirectional LSTM baselines with sequence-adapted settings.
-CHOSEN_TYPE = 'lstm'
+CHOSEN_TYPE = 'mamba'
 
 # ==============================================================================
 # 🐍 MAMBA-BASED DEFAULT HYPERPARAMETERS
