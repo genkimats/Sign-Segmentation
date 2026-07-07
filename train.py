@@ -124,7 +124,7 @@ def train_model(config):
     with open(os.path.join(exp_dir, "hyperparameters.json"), 'w') as f:
         json.dump(config, f, indent=4)
         
-    # --- Strict Dataset Spiting ---
+    # --- Strict Dataset Spiting ---[cite: 4]
     train_dataset = SignSegmentationDataset(
         keypoints_dir="processed_data/keypoints",
         labels_dir="processed_data/BIO_tags",
@@ -248,8 +248,8 @@ def train_model(config):
                     logits, _ = model(features)
                     # Convert soft labels (B, 3, T) to hard class indices (B, T)
                     hard_labels = torch.argmax(labels, dim=1)
-                    # Reshape logits to (B*T, C) and labels to (B*T) for standard CrossEntropy
-                    loss = criterion(logits.reshape(-1, logits.size(-1)), hard_labels.reshape(-1))
+                    # PyTorch CE natively accepts logits (B, C, T) and targets (B, T)
+                    loss = criterion(logits, hard_labels)
             
             scaler.scale(loss).backward()
             
@@ -294,8 +294,8 @@ def train_model(config):
                         logits, _ = model(features)
                         # Convert soft labels (B, 3, T) to hard class indices (B, T)
                         hard_labels = torch.argmax(labels, dim=1)
-                        # Reshape logits to (B*T, C) and labels to (B*T) for standard CrossEntropy
-                        loss = criterion(logits.reshape(-1, logits.size(-1)), hard_labels.reshape(-1))
+                        # PyTorch CE natively accepts logits (B, C, T) and targets (B, T)
+                        loss = criterion(logits, hard_labels)
                         
                 val_loss += loss.item()
                 
@@ -306,9 +306,6 @@ def train_model(config):
                 except AttributeError:
                     pass
                 
-                # Logits shape is (B, T, C). Decoder expects (B, C, T) as a PyTorch Tensor.
-                logits_bct = logits.permute(0, 2, 1)
-                
                 for i in range(features.size(0)):
                     # Get sequence length from the Time dimension of the labels (B, Classes, T)
                     valid_len = labels.size(-1) 
@@ -317,8 +314,8 @@ def train_model(config):
                     # Target ground-truth sequence
                     true_seq = torch.argmax(labels[i, :, :valid_len], dim=0).cpu().numpy().astype(float)
                     
-                    # Extract the Tensor for sequence 'i' with shape (1, C, valid_len)
-                    pred_logits_tensor = logits_bct[i:i+1, :, :valid_len]
+                    # Extract the Tensor for sequence 'i' with shape (1, C, valid_len). Logits are already (B, C, T).
+                    pred_logits_tensor = logits[i:i+1, :, :valid_len]
                     
                     # Decode predictions purely using PyTorch tensors
                     pred_seq_tensor = decode_predictions(
