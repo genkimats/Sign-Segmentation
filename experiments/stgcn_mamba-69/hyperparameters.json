@@ -1,11 +1,11 @@
 {
-    "basename": "bilstm_baseline",
+    "basename": "stgcn_mamba",
     "batch_size": 16,
-    "epochs": 100,
+    "epochs": 50,
     "learning_rate": 0.0001,
     "num_vertices": 65,
     "tolerance_window": 5,
-    "loss_function": "weighted_ce",
+    "loss_function": "standard_ce",
     "class_weights": [
         0.1,
         0.3,
@@ -32,7 +32,7 @@
     "focal_loss_gamma": 2.0,
     "optimizer": "AdamW",
     "scheduler": "CosineAnnealingLR",
-    "window_size": 128,
-    "overlap": 64,
-    "description": "LSTM-baseline overlap ratio (64/128)"
+    "window_size": 64,
+    "overlap": 56,
+    "description": "Mamba SOTA: 64 Window | 56 Overlap (87.5% Overlap)"
 }
