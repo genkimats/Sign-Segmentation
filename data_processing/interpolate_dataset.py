@@ -39,13 +39,13 @@ def fix_and_interpolate_dataset():
         # We detect this by checking if an entire hand has ~0 variance (all 21 points overlapping).
         if V >= 65:
             # Left hand: indices 23 to 44
-            lh_var = np.var(data[:, 23:44, :2], axis=1) # Variance of X and Y
-            lh_bad = lh_var < 1e-5
+            lh_var = np.var(data[:, 23:44, :2], axis=1) # Variance of X and Y -> Shape: (T, 2)
+            lh_bad = np.all(lh_var < 1e-5, axis=1)      # True if both X and Y variance is ~0 -> Shape: (T,)
             bad_mask[lh_bad, 23:44, :] = True
             
             # Right hand: indices 44 to 65
             rh_var = np.var(data[:, 44:65, :2], axis=1)
-            rh_bad = rh_var < 1e-5
+            rh_bad = np.all(rh_var < 1e-5, axis=1)
             bad_mask[rh_bad, 44:65, :] = True
         else:
             # Fallback for dynamic shapes: check adjacent vertices
