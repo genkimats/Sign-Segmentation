@@ -1,0 +1,7 @@
+{
+    "total_training_time": "574m 17s",
+    "total_training_seconds": 34457.45,
+    "average_time_per_epoch": "11m 29s",
+    "max_gpu_memory_used_gb": 1.02,
+    "average_gpu_utilization_percent": 90.89
+}
