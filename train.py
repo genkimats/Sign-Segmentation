@@ -2,6 +2,7 @@ import time
 import json
 import csv
 import os
+import socket
 import torch
 import numpy as np
 import torch.optim as optim
@@ -32,7 +33,7 @@ MODEL_REGISTRY = {
 }
 
 def get_next_job():
-    """Reads the queue file, pops the first job, updates the file, and returns the job."""
+    """Reads the queue file, pops the first job (at index 1), updates the file, and returns the job."""
     if not os.path.exists(QUEUE_FILE):
         return None
         
@@ -42,43 +43,18 @@ def get_next_job():
         except json.JSONDecodeError:
             return None
             
-    if not queue:
+    # If the queue only contains the prefixes array (len <= 1), there are no jobs
+    if not queue or len(queue) <= 1:
         return None
         
-    # Pop the top job
-    next_job = queue.pop(0)
+    # Pop the first actual job (index 1) to leave the prefixes array at index 0 intact
+    next_job = queue.pop(1)
     
     # Save the remaining queue
     with open(QUEUE_FILE, "w") as f:
         json.dump(queue, f, indent=4)
         
     return next_job
-
-def get_next_experiment_prefix(model_name):
-    """Finds the next available prefix like 01, 02, etc."""
-    experiments_dir = "experiments"
-    if not os.path.exists(experiments_dir):
-        return "01"
-        
-    existing_dirs = os.listdir(experiments_dir)
-    model_dirs = [d for d in existing_dirs if d.startswith(f"{model_name}-")]
-    
-    if not model_dirs:
-        return "01"
-        
-    prefixes = []
-    for d in model_dirs:
-        try:
-            prefix = int(d.split('-')[-1])
-            prefixes.append(prefix)
-        except ValueError:
-            continue
-            
-    if not prefixes:
-        return "01"
-        
-    next_prefix = max(prefixes) + 1
-    return f"{next_prefix:02d}"
 
 def train_model(config):
     """Executes a single training run based on the provided configuration dictionary."""
@@ -108,7 +84,9 @@ def train_model(config):
     SCHEDULER_NAME = config["scheduler"]
     MODEL_NAME = config["basename"]
     
-    prefix = get_next_experiment_prefix(MODEL_NAME)
+    # Retrieve the explicitly assigned prefix from the config
+    prefix = config.get("prefix", "01")
+    
     run_name = f"{MODEL_NAME}-{prefix}"
     print(f"📁 Assigned Run Name: {run_name}")
     
@@ -376,7 +354,12 @@ def train_model(config):
     avg_gpu_util = sum(gpu_utilization_samples) / len(gpu_utilization_samples) if gpu_utilization_samples else 0.0
     max_mem_gb = torch.cuda.max_memory_allocated(device) / (1024 ** 3) if torch.cuda.is_available() else 0.0
     
+    hostname = socket.gethostname()
+    gpu_name = torch.cuda.get_device_name(device) if torch.cuda.is_available() else "CPU"
+    
     hardware_summary = {
+        "machine_hostname": hostname,
+        "gpu_name": gpu_name,
         "total_training_time": f"{int(total_minutes)}m {int(total_seconds)}s",
         "total_training_seconds": round(total_time, 2),
         "average_time_per_epoch": f"{int(avg_minutes)}m {int(avg_seconds)}s",
