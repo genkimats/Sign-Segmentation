@@ -31,17 +31,28 @@ def fix_and_interpolate_dataset():
             print(f"\n⚠️ Failed to read {file_path}. Skipping. Error: {e}")
             continue
         
-        # 1. Identify literal 0.0s or NaNs (The exact issue you spotted)
-        bad_mask = (data == 0.0) | np.isnan(data)
+        # 1. Identify literal near-zeros or NaNs (Using isclose prevents floating point misses)
+        bad_mask = np.isclose(data, 0.0, atol=1e-5) | np.isnan(data)
         
-        # 2. Identify fake normalized zeros (Collapsed Joints)
-        # If the 0s were already passed through the 3D normalization, they became a fake non-zero coordinate.
-        # We can find them because all vertices in a dropped hand will perfectly overlap each other.
-        for v in range(V - 1):
-            # If a vertex has the exact same X and Y as the next vertex, it's a dead collapsed joint
-            collapsed = np.all(data[:, v, :2] == data[:, v+1, :2], axis=1)
-            bad_mask[collapsed, v, :] = True
-            bad_mask[collapsed, v+1, :] = True
+        # 2. Identify fake normalized zeros (Collapsed Hands)
+        # If 0s were passed through 3D normalization, they turned into identical non-zero values.
+        # We detect this by checking if an entire hand has ~0 variance (all 21 points overlapping).
+        if V >= 65:
+            # Left hand: indices 23 to 44
+            lh_var = np.var(data[:, 23:44, :2], axis=1) # Variance of X and Y
+            lh_bad = lh_var < 1e-5
+            bad_mask[lh_bad, 23:44, :] = True
+            
+            # Right hand: indices 44 to 65
+            rh_var = np.var(data[:, 44:65, :2], axis=1)
+            rh_bad = rh_var < 1e-5
+            bad_mask[rh_bad, 44:65, :] = True
+        else:
+            # Fallback for dynamic shapes: check adjacent vertices
+            for v in range(V - 1):
+                collapsed = np.all(np.isclose(data[:, v, :2], data[:, v+1, :2], atol=1e-5), axis=1)
+                bad_mask[collapsed, v, :] = True
+                bad_mask[collapsed, v+1, :] = True
             
         if not bad_mask.any():
             continue  # File is perfectly clean, move to the next one
