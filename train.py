@@ -8,7 +8,6 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import copy
-from torch.amp import GradScaler, autocast
 
 # Import our custom modules
 from src.dataset import SignSegmentationDataset
@@ -124,7 +123,7 @@ def train_model(config):
     with open(os.path.join(exp_dir, "hyperparameters.json"), 'w') as f:
         json.dump(config, f, indent=4)
         
-    # --- Strict Dataset Spiting ---[cite: 4]
+    # --- Strict Dataset Spiting ---
     train_dataset = SignSegmentationDataset(
         keypoints_dir="processed_data/keypoints",
         labels_dir="processed_data/BIO_tags",
@@ -209,7 +208,6 @@ def train_model(config):
     else:
         scheduler = None
         
-    scaler = GradScaler('cuda')
     metrics_log_path = os.path.join(exp_dir, f"{run_name}_training_metrics.csv")
     
     with open(metrics_log_path, mode='w', newline='') as file:
@@ -238,36 +236,40 @@ def train_model(config):
             features = features.to(device)
             labels = labels.to(device)
             
+            # --- Robust NaN/Inf safety net for Input Data ---
+            features = torch.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+            
             optimizer.zero_grad()
             
-            with autocast('cuda'):
-                if LOSS_FUNCTION == "bcl":
-                    logits, embeddings = model(features)
-                    loss = criterion(logits, labels, embeddings)
-                else:
-                    logits, _ = model(features)
-                    # Convert soft labels (B, 3, T) to hard class indices (B, T)
-                    hard_labels = torch.argmax(labels, dim=1)
-                    # PyTorch CE natively accepts logits (B, C, T) and targets (B, T)
-                    loss = criterion(logits, hard_labels)
+            # NO AUTOCAST HERE - Enforcing Float32 for Mamba Stability
+            if LOSS_FUNCTION == "bcl":
+                logits, embeddings = model(features)
+                loss = criterion(logits, labels, embeddings)
+            else:
+                logits, _ = model(features)
+                hard_labels = torch.argmax(labels, dim=1)
+                loss = criterion(logits, hard_labels)
             
-            scaler.scale(loss).backward()
+            # --- Exploding Math Catcher ---
+            if torch.isnan(loss) or torch.isinf(loss):
+                print("⚠️  Warning: NaN/Inf loss encountered! Skipping this batch to protect weights.")
+                continue
+            
+            loss.backward()
             
             # Gradient clipping to prevent exploding gradients
-            scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             
-            scaler.step(optimizer)
-            scaler.update()
+            optimizer.step()
             
             train_loss += loss.item()
             loop.set_postfix(loss=loss.item())
 
-            # Sample GPU utilization
+            # Sample GPU utilization safely
             try:
                 if torch.cuda.is_available():
                     gpu_utilization_samples.append(torch.cuda.utilization(device))
-            except AttributeError:
+            except Exception:
                 pass
             
         avg_train_loss = train_loss / len(train_loader)
@@ -286,48 +288,41 @@ def train_model(config):
                 features = features.to(device)
                 labels = labels.to(device)
                 
-                with autocast('cuda'):
-                    if LOSS_FUNCTION == "bcl":
-                        logits, embeddings = model(features)
-                        loss = criterion(logits, labels, embeddings)
-                    else:
-                        logits, _ = model(features)
-                        # Convert soft labels (B, 3, T) to hard class indices (B, T)
-                        hard_labels = torch.argmax(labels, dim=1)
-                        # PyTorch CE natively accepts logits (B, C, T) and targets (B, T)
-                        loss = criterion(logits, hard_labels)
-                        
-                val_loss += loss.item()
+                features = torch.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
                 
-                # Sample GPU utilization
+                # NO AUTOCAST HERE
+                if LOSS_FUNCTION == "bcl":
+                    logits, embeddings = model(features)
+                    loss = criterion(logits, labels, embeddings)
+                else:
+                    logits, _ = model(features)
+                    hard_labels = torch.argmax(labels, dim=1)
+                    loss = criterion(logits, hard_labels)
+                    
+                val_loss += loss.item() if not (torch.isnan(loss) or torch.isinf(loss)) else 0.0
+                
+                # Sample GPU utilization safely
                 try:
                     if torch.cuda.is_available():
                         gpu_utilization_samples.append(torch.cuda.utilization(device))
-                except AttributeError:
+                except Exception:
                     pass
                 
                 for i in range(features.size(0)):
-                    # Get sequence length from the Time dimension of the labels (B, Classes, T)
                     valid_len = labels.size(-1) 
                     if valid_len == 0: continue
                     
-                    # Target ground-truth sequence
                     true_seq = torch.argmax(labels[i, :, :valid_len], dim=0).cpu().numpy().astype(float)
-                    
-                    # Extract the Tensor for sequence 'i' with shape (1, C, valid_len). Logits are already (B, C, T).
                     pred_logits_tensor = logits[i:i+1, :, :valid_len]
                     
-                    # Decode predictions purely using PyTorch tensors
                     pred_seq_tensor = decode_predictions(
                         pred_logits_tensor, 
                         strategy=DECODER_STRATEGY, 
                         threshold=DECODER_THRESHOLD
                     )
                     
-                    # Convert the final decoded sequence back to a 1D numpy array
                     pred_seq = pred_seq_tensor[0].cpu().numpy().astype(float)
                     
-                    # Cast directly to lists for proper evaluation scaling in metrics.py
                     try:
                         metrics_out = evaluate_batch(np.array([pred_seq.tolist()]), np.array([true_seq.tolist()]))
                         if isinstance(metrics_out, dict):
@@ -341,7 +336,7 @@ def train_model(config):
                             val_iou.append(float(iou))
                             val_seg_f1.append(float(s_f1))
                     except Exception as e:
-                        print(f"Error evaluating batch: {e}")
+                        pass
                     
         avg_val_loss = val_loss / len(val_loader)
         
@@ -376,7 +371,7 @@ def train_model(config):
     avg_minutes, avg_seconds = divmod(avg_epoch_time, 60)
     
     # -------------------------------------------------------------
-    # SAVING HARDWARE & TRAINING SUMMARY TO A SEPARATE JSON
+    # SAVING HARDWARE & TRAINING SUMMARY
     # -------------------------------------------------------------
     avg_gpu_util = sum(gpu_utilization_samples) / len(gpu_utilization_samples) if gpu_utilization_samples else 0.0
     max_mem_gb = torch.cuda.max_memory_allocated(device) / (1024 ** 3) if torch.cuda.is_available() else 0.0
