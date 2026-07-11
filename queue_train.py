@@ -71,14 +71,14 @@ if __name__ == "__main__":
                 "window_size": 128,
                 "overlap": 50,
                 "loss_function": "standard_ce",
-                "learning_rate": 0.0005,
-                "description": "ST-GCN Mamba: overlap ratio (50/128)"
+                "learning_rate": 0.0001,
+                "description": "ST-GCN Mamba: overlap ratio (50/128), learning rate 0.0001"
             },
             {
                 "window_size": 64,
                 "overlap": 25,
                 "loss_function": "standard_ce",
-                "learning_rate": 0.0005,
+                "learning_rate": 0.0001,
                 "description": "ST-GCN Mamba: overlap ratio (25/64)"
             }
         ]
