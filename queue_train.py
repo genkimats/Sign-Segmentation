@@ -68,16 +68,11 @@ if __name__ == "__main__":
         # Define Mamba ablation experiments you wish to queue
         experiments_to_run = [
             {
-                "window_size": 64,
-                "overlap": 56,
+                "window_size": 128,
+                "overlap": 112,
                 "loss_function": "standard_ce",
-                "description": "Mamba SOTA: 64 Window | 56 Overlap (87.5% Overlap)"
-            },
-            {
-                "window_size": 512,
-                "overlap": 448,
-                "loss_function": "weighted_ce",
-                "description": "Mamba SOTA: 512 Window | 448 Overlap (87.5% Overlap, Weighted CE)"
+                "learning_rate": 0.0005,
+                "description": "ST-GCN Mamba: learning rate 0.0005"
             }
         ]
         
