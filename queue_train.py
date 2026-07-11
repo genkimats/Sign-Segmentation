@@ -69,10 +69,17 @@ if __name__ == "__main__":
         experiments_to_run = [
             {
                 "window_size": 128,
-                "overlap": 112,
+                "overlap": 50,
                 "loss_function": "standard_ce",
                 "learning_rate": 0.0005,
-                "description": "ST-GCN Mamba: learning rate 0.0005"
+                "description": "ST-GCN Mamba: overlap ratio (50/128)"
+            },
+            {
+                "window_size": 64,
+                "overlap": 25,
+                "loss_function": "standard_ce",
+                "learning_rate": 0.0005,
+                "description": "ST-GCN Mamba: overlap ratio (25/64)"
             }
         ]
         
