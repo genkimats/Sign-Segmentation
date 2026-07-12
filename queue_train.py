@@ -83,7 +83,7 @@ if __name__ == "__main__":
         defaults = MAMBA_DEFAULTS
         experiments_to_run = [
             {
-                "window_size": 256,
+                "window_size": 128,
                 "overlap": 50,
                 "temporal_downsample_factor": 2, # <--- The experiment
                 "description": "Mamba ST-GCN 2x downsampled (256/50)"
