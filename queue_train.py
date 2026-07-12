@@ -43,7 +43,7 @@ LSTM_DEFAULTS = {
     "basename": "bilstm_baseline",
     "batch_size": 16,
     "epochs": 50,
-    "learning_rate": 0.0001,
+    "learning_rate": 0.0003,
     "num_vertices": 65,
     "tolerance_window": 5,
     "loss_function": "standard_ce",
@@ -70,16 +70,20 @@ if __name__ == "__main__":
             {
                 "window_size": 128,
                 "overlap": 50,
-                "learning_rate": 0.0003,
                 "tolerance_window": 1,
-                "description": "ST-GCN Mamba: tolerance_window 1"
-            },
-            {
-                "window_size": 128,
-                "overlap": 112,
-                "learning_rate": 0.0003,
-                "description": "ST-GCN Mamba: tolerance_window 1"
+                "description": "ST-GCN Mamba: tolerance_window 1, made learning_rate default to 0.0003"
             }
+            # {
+            #     "window_size": 128,
+            #     "overlap": 112,
+            #     "description": "ST-GCN Mamba: overlap ratio (112/128)"
+            # },
+            # {
+            #     "window_size": 16,
+            #     "overlap": 0,
+            #     "tolerance_window": 1,
+            #     "description": "ST-GCN Mamba: over"
+            # }
         ]
         
     elif CHOSEN_TYPE == 'lstm':
