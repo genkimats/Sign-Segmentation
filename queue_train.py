@@ -95,39 +95,21 @@ if __name__ == "__main__":
             {
                 "window_size": 128,
                 "overlap": 50,
-                "kinematic_features": [],
-                "description": "ST-GCN Mamba: no kinematic features"
+                "kinematic_features": ["velocity", "acceleration", "jerk"],
+                "description": "ST-GCN Mamba: vel acc jerk"
             },
             {
                 "window_size": 128,
                 "overlap": 50,
-                "kinematic_features": ["velocity"],
-                "description": "ST-GCN Mamba: vel"
+                "kinematic_features": ["velocity", "acceleration", "jerk", "velocity-mag"],
+                "description": "ST-GCN Mamba: vel acc jerk mag"
             },
             {
                 "window_size": 128,
                 "overlap": 50,
-                "kinematic_features": ["velocity", "acceleration"],
-                "description": "ST-GCN Mamba: vel acc"
+                "kinematic_features": ["velocity", "acceleration", "jerk", "velocity-mag", "angular-vel"],
+                "description": "ST-GCN Mamba: vel acc jerk mag angular"
             }
-            # {
-            #     "window_size": 128,
-            #     "overlap": 50,
-            #     "kinematic_features": ["velocity", "acceleration", "jerk"],
-            #     "description": "ST-GCN Mamba: overlap ratio (50/128) with tolerance_window=1"
-            # },
-            # {
-            #     "window_size": 128,
-            #     "overlap": 50,
-            #     "kinematic_features": ["velocity", "acceleration", "jerk", "velocity-mag"],
-            #     "description": "ST-GCN Mamba: overlap ratio (50/128) with tolerance_window=1"
-            # },
-            # {
-            #     "window_size": 128,
-            #     "overlap": 50,
-            #     "kinematic_features": ["velocity", "acceleration", "jerk", "velocity-mag", "angular-vel"],
-            #     "description": "ST-GCN Mamba: overlap ratio (50/128) with tolerance_window=1"
-            # }
         ]
         
     elif CHOSEN_TYPE == 'lstm':
