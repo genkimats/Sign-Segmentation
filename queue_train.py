@@ -81,13 +81,13 @@ if __name__ == "__main__":
                 "window_size": 128,
                 "overlap": 50,
                 "kinematic_features": ["velocity"],
-                "description": "ST-GCN Mamba: overlap ratio (50/128) with tolerance_window=1"
+                "description": "ST-GCN Mamba: vel"
             },
             {
                 "window_size": 128,
                 "overlap": 50,
                 "kinematic_features": ["velocity", "acceleration"],
-                "description": "ST-GCN Mamba: overlap ratio (50/128) with tolerance_window=1"
+                "description": "ST-GCN Mamba: vel acc"
             }
             # {
             #     "window_size": 128,
