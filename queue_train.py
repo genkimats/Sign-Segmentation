@@ -84,9 +84,9 @@ if __name__ == "__main__":
         experiments_to_run = [
             {
                 "window_size": 256,
-                "overlap": 128,
+                "overlap": 50,
                 "temporal_downsample_factor": 2, # <--- The experiment
-                "description": "Mamba SOTA: 2x Temp Downsample (Network sees 128 frames spanning 10 seconds)"
+                "description": "Mamba ST-GCN 2x downsampled (256/50)"
             }
         ]
         
