@@ -71,8 +71,14 @@ if __name__ == "__main__":
                 "window_size": 128,
                 "overlap": 50,
                 "learning_rate": 0.0003,
-                "tolerance_window": 0,
-                "description": "ST-GCN Mamba: tolerance_window 0"
+                "tolerance_window": 1,
+                "description": "ST-GCN Mamba: tolerance_window 1"
+            },
+            {
+                "window_size": 128,
+                "overlap": 112,
+                "learning_rate": 0.0003,
+                "description": "ST-GCN Mamba: tolerance_window 1"
             }
         ]
         
