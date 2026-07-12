@@ -71,6 +71,7 @@ def train_model(config):
     OVERLAP = config["overlap"]
     NUM_VERTICES = config["num_vertices"]
     TOLERANCE_WINDOW = config["tolerance_window"]
+    DOWNSAMPLE_FACTOR = config.get("temporal_downsample_factor", 1)  # Fetch downsample factor
     LOSS_FUNCTION = config["loss_function"]
     CLASS_WEIGHTS = config["class_weights"]
     USE_FULL_LENGTH = config["use_full_length"]
@@ -86,9 +87,7 @@ def train_model(config):
     SCHEDULER_NAME = config["scheduler"]
     MODEL_NAME = config["basename"]
     
-    # Retrieve the explicitly assigned prefix from the config
     prefix = config.get("prefix", "01")
-    
     run_name = f"{MODEL_NAME}-{prefix}"
     print(f"📁 Assigned Run Name: {run_name}")
     
@@ -103,7 +102,7 @@ def train_model(config):
     with open(os.path.join(exp_dir, "hyperparameters.json"), 'w') as f:
         json.dump(config, f, indent=4)
         
-    # --- Strict Dataset Spiting ---
+    # --- Strict Dataset Splitting ---
     train_dataset = SignSegmentationDataset(
         keypoints_dir="processed_data/keypoints",
         labels_dir="processed_data/BIO_tags",
@@ -114,7 +113,8 @@ def train_model(config):
         tolerance_window=TOLERANCE_WINDOW,
         use_full_length=USE_FULL_LENGTH,
         base_features=BASE_FEATURES,
-        kinematic_features=KINEMATIC_FEATURES 
+        kinematic_features=KINEMATIC_FEATURES,
+        temporal_downsample_factor=DOWNSAMPLE_FACTOR
     )
     
     val_dataset = SignSegmentationDataset(
@@ -127,7 +127,8 @@ def train_model(config):
         tolerance_window=TOLERANCE_WINDOW,
         use_full_length=USE_FULL_LENGTH,
         base_features=BASE_FEATURES,
-        kinematic_features=KINEMATIC_FEATURES 
+        kinematic_features=KINEMATIC_FEATURES,
+        temporal_downsample_factor=DOWNSAMPLE_FACTOR
     )
     
     loader_batch_size = 1 if USE_FULL_LENGTH else BATCH_SIZE
@@ -178,7 +179,6 @@ def train_model(config):
     else:
         scheduler = None
         
-    # Updated: Saving metrics strictly as 'training_metrics.csv'
     metrics_log_path = os.path.join(exp_dir, "training_metrics.csv")
     
     with open(metrics_log_path, mode='w', newline='') as file:
@@ -210,12 +210,9 @@ def train_model(config):
             features = features.to(device)
             labels = labels.to(device)
             
-            # --- Robust NaN/Inf safety net for Input Data ---
             features = torch.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
-            
             optimizer.zero_grad()
             
-            # NO AUTOCAST HERE - Enforcing Float32 for Mamba Stability
             if LOSS_FUNCTION == "bcl":
                 logits, embeddings = model(features)
                 loss, _, _ = criterion(logits, embeddings, labels)
@@ -224,22 +221,17 @@ def train_model(config):
                 hard_labels = torch.argmax(labels, dim=1)
                 loss = criterion(logits, hard_labels)
             
-            # --- Exploding Math Catcher ---
             if torch.isnan(loss) or torch.isinf(loss):
                 print("⚠️  Warning: NaN/Inf loss encountered! Skipping this batch to protect weights.")
                 continue
             
             loss.backward()
-            
-            # Gradient clipping to prevent exploding gradients
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-            
             optimizer.step()
             
             train_loss += loss.item()
             loop.set_postfix(loss=loss.item())
 
-            # Sample GPU utilization safely
             try:
                 if torch.cuda.is_available():
                     gpu_utilization_samples.append(torch.cuda.utilization(device))
@@ -264,7 +256,6 @@ def train_model(config):
                 
                 features = torch.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
                 
-                # NO AUTOCAST HERE
                 if LOSS_FUNCTION == "bcl":
                     logits, embeddings = model(features)
                     loss, _, _ = criterion(logits, embeddings, labels)
@@ -275,7 +266,6 @@ def train_model(config):
                     
                 val_loss += loss.item() if not (torch.isnan(loss) or torch.isinf(loss)) else 0.0
                 
-                # Sample GPU utilization safely
                 try:
                     if torch.cuda.is_available():
                         gpu_utilization_samples.append(torch.cuda.utilization(device))
@@ -353,13 +343,9 @@ def train_model(config):
     total_time = time.time() - start_train_time
     total_minutes, total_seconds = divmod(int(total_time), 60)
     
-    # Calculate average time dynamically based on epochs actually ran before stopping
     avg_epoch_time = int(total_time / actual_epochs_ran) if actual_epochs_ran > 0 else 0
     avg_minutes, avg_seconds = divmod(avg_epoch_time, 60)
     
-    # -------------------------------------------------------------
-    # SAVING HARDWARE & TRAINING SUMMARY
-    # -------------------------------------------------------------
     avg_gpu_util = sum(gpu_utilization_samples) / len(gpu_utilization_samples) if gpu_utilization_samples else 0.0
     max_mem_gb = torch.cuda.max_memory_allocated(device) / (1024 ** 3) if torch.cuda.is_available() else 0.0
     
@@ -378,7 +364,6 @@ def train_model(config):
         "average_gpu_utilization_percent": round(avg_gpu_util, 2)
     }
 
-    # Updated: Saving summary strictly as 'hardware_summary.json'
     summary_save_path = os.path.join(exp_dir, "hardware_summary.json")
     with open(summary_save_path, "w") as f:
         json.dump(hardware_summary, f, indent=4)
