@@ -19,8 +19,10 @@
         "y-cord",
         "z-cord"
     ],
-    "kinematic_features": [],
-    "in_channels": 3,
+    "kinematic_features": [
+        "velocity"
+    ],
+    "in_channels": 6,
     "decoder_strategy": "threshold",
     "decoder_threshold": 0.5,
     "d_model": 256,
@@ -30,6 +32,6 @@
     "scheduler": "CosineAnnealingLR",
     "window_size": 128,
     "overlap": 50,
-    "description": "ST-GCN Mamba: no kinematic features",
-    "prefix": "74"
+    "description": "ST-GCN Mamba: vel",
+    "prefix": "75"
 }
