@@ -186,7 +186,7 @@ def train_model(config):
     else:
         scheduler = None
         
-    metrics_log_path = os.path.join(exp_dir, f"{run_name}_training_metrics.csv")
+    metrics_log_path = os.path.join(exp_dir, "training_metrics.csv")
     
     with open(metrics_log_path, mode='w', newline='') as file:
         writer = csv.writer(file)
@@ -367,7 +367,7 @@ def train_model(config):
         "average_gpu_utilization_percent": round(avg_gpu_util, 2)
     }
 
-    summary_save_path = os.path.join(exp_dir, f"{run_name}_hardware_summary.json")
+    summary_save_path = os.path.join(exp_dir, "hardware_summary.json")
     with open(summary_save_path, "w") as f:
         json.dump(hardware_summary, f, indent=4)
         
