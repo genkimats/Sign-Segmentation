@@ -73,15 +73,41 @@ if __name__ == "__main__":
         experiments_to_run = [
             {
                 "window_size": 128,
-                "overlap": 112,
-                "description": "ST-GCN Mamba: overlap ratio (112/128)"
+                "overlap": 50,
+                "kinematic_features": [],
+                "description": "ST-GCN Mamba: no kinematic features"
             },
             {
                 "window_size": 128,
                 "overlap": 50,
-                "tolerance_window": 1,
+                "kinematic_features": ["velocity"],
+                "description": "ST-GCN Mamba: overlap ratio (50/128) with tolerance_window=1"
+            },
+            {
+                "window_size": 128,
+                "overlap": 50,
+                "kinematic_features": ["velocity", "acceleration"],
                 "description": "ST-GCN Mamba: overlap ratio (50/128) with tolerance_window=1"
             }
+            # {
+            #     "window_size": 128,
+            #     "overlap": 50,
+            #     "kinematic_features": ["velocity", "acceleration", "jerk"],
+            #     "description": "ST-GCN Mamba: overlap ratio (50/128) with tolerance_window=1"
+            # },
+            # {
+            #     "window_size": 128,
+            #     "overlap": 50,
+            #     "kinematic_features": ["velocity", "acceleration", "jerk", "velocity-mag"],
+            #     "description": "ST-GCN Mamba: overlap ratio (50/128) with tolerance_window=1"
+            # },
+            # {
+            #     "window_size": 128,
+            #     "overlap": 50,
+            #     "kinematic_features": ["velocity", "acceleration", "jerk", "velocity-mag", "angular-vel"],
+            #     "description": "ST-GCN Mamba: overlap ratio (50/128) with tolerance_window=1"
+            # }
+            
         ]
         
     elif CHOSEN_TYPE == 'lstm':
