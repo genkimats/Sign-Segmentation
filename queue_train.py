@@ -18,6 +18,8 @@ MAMBA_DEFAULTS = {
     "basename": "stgcn_mamba",  # "stgcn_mamba" or "stgcn_bimamba"
     "batch_size": 16,
     "epochs": 50,
+    "early_stopping": True,
+    "patience": 10,
     "learning_rate": 0.0001,
     "num_vertices": 65,
     "tolerance_window": 5,
@@ -43,7 +45,9 @@ LSTM_DEFAULTS = {
     "basename": "bilstm_baseline",
     "batch_size": 16,
     "epochs": 50,
-    "learning_rate": 0.0003,
+    "early_stopping": True,
+    "patience": 10,
+    "learning_rate": 0.0001,
     "num_vertices": 65,
     "tolerance_window": 5,
     "loss_function": "standard_ce",
@@ -68,22 +72,17 @@ if __name__ == "__main__":
         # Define Mamba ablation experiments you wish to queue
         experiments_to_run = [
             {
-                "window_size": 128,
-                "overlap": 50,
-                "tolerance_window": 1,
-                "description": "ST-GCN Mamba: tolerance_window 1, made learning_rate default to 0.0003"
+                "window_size": 64,
+                "overlap": 56,
+                "loss_function": "standard_ce",
+                "description": "Mamba SOTA: 64 Window | 56 Overlap (87.5% Overlap)"
+            },
+            {
+                "window_size": 512,
+                "overlap": 448,
+                "loss_function": "weighted_ce",
+                "description": "Mamba SOTA: 512 Window | 448 Overlap (87.5% Overlap, Weighted CE)"
             }
-            # {
-            #     "window_size": 128,
-            #     "overlap": 112,
-            #     "description": "ST-GCN Mamba: overlap ratio (112/128)"
-            # },
-            # {
-            #     "window_size": 16,
-            #     "overlap": 0,
-            #     "tolerance_window": 1,
-            #     "description": "ST-GCN Mamba: over"
-            # }
         ]
         
     elif CHOSEN_TYPE == 'lstm':

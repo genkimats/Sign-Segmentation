@@ -64,6 +64,8 @@ def train_model(config):
     # Unpack config
     BATCH_SIZE = config["batch_size"]
     EPOCHS = config["epochs"]
+    EARLY_STOPPING = config.get("early_stopping", True)
+    PATIENCE = config.get("patience", 10)
     LEARNING_RATE = config["learning_rate"]
     WINDOW_SIZE = config["window_size"]
     OVERLAP = config["overlap"]
@@ -79,7 +81,7 @@ def train_model(config):
     DECODER_THRESHOLD = config["decoder_threshold"]
     D_MODEL = config["d_model"]
     N_LAYERS = config["n_layers"]
-    FOCAL_LOSS_GAMMA = config["focal_loss_gamma"]
+    FOCAL_LOSS_GAMMA = config.get("focal_loss_gamma", 2.0)
     OPTIMIZER_NAME = config["optimizer"]
     SCHEDULER_NAME = config["scheduler"]
     MODEL_NAME = config["basename"]
@@ -140,30 +142,20 @@ def train_model(config):
         print(f"❌ Error: Model '{MODEL_NAME}' not found in registry. Skipping.")
         return
         
-    if MODEL_NAME == "bilstm_baseline":
-        model = model_class(
-            in_channels=IN_CHANNELS,
-            num_vertices=NUM_VERTICES,
-            num_classes=3,
-            d_model=D_MODEL,
-            n_layers=N_LAYERS
-        ).to(device)
-    else:
-        model = model_class(
-            in_channels=IN_CHANNELS,
-            num_vertices=NUM_VERTICES,
-            num_classes=3,
-            d_model=D_MODEL,
-            n_layers=N_LAYERS
-        ).to(device)
+    model = model_class(
+        in_channels=IN_CHANNELS,
+        num_vertices=NUM_VERTICES,
+        num_classes=3,
+        d_model=D_MODEL,
+        n_layers=N_LAYERS
+    ).to(device)
 
     # Loss Selection
     weights = torch.tensor(CLASS_WEIGHTS, dtype=torch.float).to(device)
     
     if LOSS_FUNCTION == "bcl":
         criterion = CombinedBoundaryLoss(
-            gamma=FOCAL_LOSS_GAMMA, 
-            weights=weights, 
+            focal_gamma=FOCAL_LOSS_GAMMA, 
             contrastive_weight=config.get("contrastive_weight", 0.15)
         )
     elif LOSS_FUNCTION == "standard_ce":
@@ -171,7 +163,7 @@ def train_model(config):
     elif LOSS_FUNCTION == "weighted_ce":
         criterion = WeightedCrossEntropyLoss(weights=weights)
     elif LOSS_FUNCTION == "focal":
-        criterion = FocalLoss(gamma=FOCAL_LOSS_GAMMA, weights=weights)
+        criterion = FocalLoss(gamma=FOCAL_LOSS_GAMMA)
     else:
         raise ValueError(f"Unknown loss function '{LOSS_FUNCTION}'")
 
@@ -186,16 +178,18 @@ def train_model(config):
     else:
         scheduler = None
         
-    metrics_log_path = os.path.join(exp_dir, "training_metrics.csv")
+    metrics_log_path = os.path.join(exp_dir, f"{run_name}_training_metrics.csv")
     
     with open(metrics_log_path, mode='w', newline='') as file:
         writer = csv.writer(file)
         writer.writerow(['epoch', 'train_loss', 'val_loss', 'frame_f1', 'mean_iou', 'segment_f1', 'epoch_time'])
     
-    # Trackers for Checkpointing
-    best_iou = -1.0
+    # Trackers for Checkpointing & Early Stopping
+    best_combined_score = -1.0
     best_epoch = 0
     best_model_state = None
+    epochs_without_improvement = 0
+    actual_epochs_ran = 0
     
     # Hardware monitoring setup
     start_train_time = time.time()
@@ -205,6 +199,7 @@ def train_model(config):
     
     # 4. Training Loop
     for epoch in range(1, EPOCHS + 1):
+        actual_epochs_ran = epoch
         epoch_start_time = time.time()
         model.train()
         train_loss = 0.0
@@ -222,7 +217,7 @@ def train_model(config):
             # NO AUTOCAST HERE - Enforcing Float32 for Mamba Stability
             if LOSS_FUNCTION == "bcl":
                 logits, embeddings = model(features)
-                loss = criterion(logits, labels, embeddings)
+                loss, _, _ = criterion(logits, embeddings, labels)
             else:
                 logits, _ = model(features)
                 hard_labels = torch.argmax(labels, dim=1)
@@ -271,7 +266,7 @@ def train_model(config):
                 # NO AUTOCAST HERE
                 if LOSS_FUNCTION == "bcl":
                     logits, embeddings = model(features)
-                    loss = criterion(logits, labels, embeddings)
+                    loss, _, _ = criterion(logits, embeddings, labels)
                 else:
                     logits, _ = model(features)
                     hard_labels = torch.argmax(labels, dim=1)
@@ -325,11 +320,18 @@ def train_model(config):
         epoch_end_time = time.time()
         epoch_duration = round(epoch_end_time - epoch_start_time, 2)
         
-        # --- Checkpoint Best Model ---
-        if epoch_iou > best_iou:
-            best_iou = epoch_iou
+        # --- Checkpoint Best Model & Early Stopping ---
+        combined_score = epoch_f1 + epoch_iou + epoch_seg
+        
+        if combined_score > best_combined_score:
+            best_combined_score = combined_score
             best_epoch = epoch
             best_model_state = copy.deepcopy(model.state_dict())
+            epochs_without_improvement = 0
+            is_best = True
+        else:
+            epochs_without_improvement += 1
+            is_best = False
             
         print(f"Epoch [{epoch:02d}/{EPOCHS}] "
               f"Train Loss: {avg_train_loss:.4f} | "
@@ -337,15 +339,21 @@ def train_model(config):
               f"Frame F1: {epoch_f1:.4f} | "
               f"Mean IoU: {epoch_iou:.4f} | "
               f"Seg F1: {epoch_seg:.4f} | "
-              f"Time: {epoch_duration}s")
+              f"Time: {epoch_duration}s" + (" 🌟 (New Best!)" if is_best else f" (No improvement x{epochs_without_improvement})"))
               
         with open(metrics_log_path, mode='a', newline='') as file:
             writer = csv.writer(file)
             writer.writerow([epoch, avg_train_loss, avg_val_loss, epoch_f1, epoch_iou, epoch_seg, epoch_duration])
 
+        if EARLY_STOPPING and epochs_without_improvement >= PATIENCE:
+            print(f"\n🛑 Early stopping triggered! No improvement in combined score for {PATIENCE} epochs.")
+            break
+
     total_time = time.time() - start_train_time
     total_minutes, total_seconds = divmod(int(total_time), 60)
-    avg_epoch_time = int(total_time / EPOCHS)
+    
+    # Calculate average time dynamically based on epochs actually ran before stopping
+    avg_epoch_time = int(total_time / actual_epochs_ran) if actual_epochs_ran > 0 else 0
     avg_minutes, avg_seconds = divmod(avg_epoch_time, 60)
     
     # -------------------------------------------------------------
@@ -362,6 +370,8 @@ def train_model(config):
         "gpu_name": gpu_name,
         "total_training_time": f"{int(total_minutes)}m {int(total_seconds)}s",
         "total_training_seconds": round(total_time, 2),
+        "total_epochs_ran": actual_epochs_ran,
+        "early_stopping_triggered": epochs_without_improvement >= PATIENCE,
         "average_time_per_epoch": f"{int(avg_minutes)}m {int(avg_seconds)}s",
         "max_gpu_memory_used_gb": round(max_mem_gb, 4),
         "average_gpu_utilization_percent": round(avg_gpu_util, 2)
@@ -377,7 +387,7 @@ def train_model(config):
     model_save_path = os.path.join(model_dir, f"{run_name}.pth")
     if best_model_state:
         torch.save(best_model_state, model_save_path)
-        print(f"✅ Best Model (Epoch {best_epoch} | IoU: {best_iou:.4f}) saved to {model_save_path}")
+        print(f"✅ Best Model (Epoch {best_epoch} | Combined Score: {best_combined_score:.4f}) saved to {model_save_path}")
     else:
         torch.save(model.state_dict(), model_save_path)
         print(f"✅ Final Model saved to {model_save_path}")
