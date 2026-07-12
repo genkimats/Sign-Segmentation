@@ -82,19 +82,28 @@ if __name__ == "__main__":
     if CHOSEN_TYPE == 'mamba':
         defaults = MAMBA_DEFAULTS
         experiments_to_run = [
+            # {
+            #     "window_size": 128,
+            #     "overlap": 50,
+            #     "temporal_downsample_factor": 2,
+            #     "description": "Mamba ST-GCN: 2x temporal downsampling (50/128)"
+            # },
             {
                 "window_size": 128,
                 "overlap": 0,
+                "kinematic_features": [],
                 "description": "Mamba ST-GCN: overlap ratio (0/128)"
             },
             {
                 "window_size": 256,
                 "overlap": 0,
+                "kinematic_features": [],
                 "description": "Mamba ST-GCN: overlap ratio (0/256)"
             },
             {
                 "window_size": 512,
                 "overlap": 0,
+                "kinematic_features": [],
                 "description": "Mamba ST-GCN: overlap ratio (0/512)"
             }
         ]
