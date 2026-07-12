@@ -86,6 +86,21 @@ if __name__ == "__main__":
                 "window_size": 128,
                 "overlap": 50,
                 "temporal_downsample_factor": 2, # <--- The experiment
+                "description": "Mamba ST-GCN 2x downsampled (128/50)"
+            },
+            {
+                "window_size": 16,
+                "overlap": 0,
+                "description": "Mamba ST-GCN 2x downsampled (256/50)"
+            },
+            {
+                "window_size": 32,
+                "overlap": 0,
+                "description": "Mamba ST-GCN 2x downsampled (256/50)"
+            },
+            {
+                "window_size": 64,
+                "overlap": 0,
                 "description": "Mamba ST-GCN 2x downsampled (256/50)"
             }
         ]
