@@ -84,24 +84,18 @@ if __name__ == "__main__":
         experiments_to_run = [
             {
                 "window_size": 128,
-                "overlap": 50,
-                "temporal_downsample_factor": 2, # <--- The experiment
-                "description": "Mamba ST-GCN: 2x downsampled (128/50)"
+                "overlap": 0,
+                "description": "Mamba ST-GCN: overlap ratio (0/128)"
             },
             {
-                "window_size": 16,
+                "window_size": 256,
                 "overlap": 0,
-                "description": "Mamba ST-GCN: overlap ratio (0/16)"
+                "description": "Mamba ST-GCN: overlap ratio (0/256)"
             },
             {
-                "window_size": 32,
+                "window_size": 512,
                 "overlap": 0,
-                "description": "Mamba ST-GCN: overlap ratio (0/32)"
-            },
-            {
-                "window_size": 64,
-                "overlap": 0,
-                "description": "Mamba ST-GCN: overlap ratio (0/64)"
+                "description": "Mamba ST-GCN: overlap ratio (0/512)"
             }
         ]
         
