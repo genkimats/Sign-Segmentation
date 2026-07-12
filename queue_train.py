@@ -28,7 +28,7 @@ MAMBA_DEFAULTS = {
     "use_full_length": False,
     "base_features": ["x-cord", "y-cord", "z-cord"],
     "kinematic_features": ["velocity", "acceleration", "jerk", "velocity-mag", "angular-vel"],
-    "in_channels": 14,
+    "in_channels": 14, # This is now a placeholder; it gets overwritten dynamically!
     "decoder_strategy": "threshold",
     "decoder_threshold": 0.5,
     "d_model": 256,
@@ -55,7 +55,7 @@ LSTM_DEFAULTS = {
     "use_full_length": False,
     "base_features": ["x-cord", "y-cord", "z-cord"],
     "kinematic_features": ["velocity", "acceleration", "jerk", "velocity-mag", "angular-vel"],
-    "in_channels": 14,
+    "in_channels": 14, # This is now a placeholder; it gets overwritten dynamically!
     "decoder_strategy": "threshold",
     "decoder_threshold": 0.5,
     "d_model": 256,  # Note: Serves as hidden_dim for LSTM
@@ -65,6 +65,27 @@ LSTM_DEFAULTS = {
     "scheduler": "CosineAnnealingLR"
 }
 
+def calculate_in_channels(base_features, kinematic_features):
+    """Dynamically calculates the exact number of input channels based on requested features."""
+    base_count = len(base_features)
+    
+    # If no base features are passed, the dataset defaults to pulling X and Y (2 channels) for derivatives
+    deriv_count = base_count if base_count > 0 else 2
+    
+    total_channels = base_count
+    
+    if "velocity" in kinematic_features:
+        total_channels += deriv_count
+    if "acceleration" in kinematic_features:
+        total_channels += deriv_count
+    if "jerk" in kinematic_features:
+        total_channels += deriv_count
+    if "velocity-mag" in kinematic_features:
+        total_channels += 1
+    if "angular-vel" in kinematic_features:
+        total_channels += 1
+        
+    return total_channels
 
 if __name__ == "__main__":
     if CHOSEN_TYPE == 'mamba':
@@ -107,7 +128,6 @@ if __name__ == "__main__":
             #     "kinematic_features": ["velocity", "acceleration", "jerk", "velocity-mag", "angular-vel"],
             #     "description": "ST-GCN Mamba: overlap ratio (50/128) with tolerance_window=1"
             # }
-            
         ]
         
     elif CHOSEN_TYPE == 'lstm':
@@ -180,6 +200,13 @@ if __name__ == "__main__":
         full_config = defaults.copy()
         full_config.update(exp)
         
+        # --- DYNAMIC CHANNEL CALCULATION ---
+        calculated_channels = calculate_in_channels(
+            base_features=full_config.get("base_features", []),
+            kinematic_features=full_config.get("kinematic_features", [])
+        )
+        full_config["in_channels"] = calculated_channels
+        
         # Inject the designated prefix string
         prefix_str = f"{next_prefix:02d}"
         full_config["prefix"] = prefix_str
@@ -189,7 +216,7 @@ if __name__ == "__main__":
         if next_prefix not in queue[0]["prefixes"]:
             queue[0]["prefixes"].append(next_prefix)
         
-        print(f"Added to queue (Prefix {prefix_str}): {full_config['description']}")
+        print(f"Added to queue (Prefix {prefix_str} | Channels: {calculated_channels}): {full_config['description']}")
         next_prefix += 1
         count += 1
         
