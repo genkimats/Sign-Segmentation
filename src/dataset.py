@@ -2,6 +2,7 @@ import os
 import json
 import torch
 import numpy as np
+import pandas as pd
 from torch.utils.data import Dataset
 from scipy.signal import medfilt
 
@@ -46,7 +47,7 @@ def apply_label_smoothing(labels_array, window_size=5):
     return soft_labels
 
 class SignSegmentationDataset(Dataset):
-    def __init__(self, keypoints_dir, labels_dir, split_file="dataset_splits.json", split="train", window_size=1000, overlap=200, tolerance_window=5, use_full_length=False, base_features=None, kinematic_features=None):
+    def __init__(self, keypoints_dir, labels_dir, split_file="dataset_splits.json", split="train", window_size=1000, overlap=200, tolerance_window=5, use_full_length=False, base_features=None, kinematic_features=None, temporal_downsample_factor=1):
         self.keypoints_dir = keypoints_dir
         self.labels_dir = labels_dir
         self.split_file = split_file
@@ -55,6 +56,7 @@ class SignSegmentationDataset(Dataset):
         self.step_size = window_size - overlap
         self.tolerance_window = tolerance_window
         self.use_full_length = use_full_length
+        self.temporal_downsample_factor = temporal_downsample_factor
         
         # Track parameters or fall back to defaults
         self.base_features = base_features if base_features is not None else ["x-cord", "y-cord", "confidence"]
@@ -109,7 +111,6 @@ class SignSegmentationDataset(Dataset):
         j[:, 1:, :] = a[:, 1:, :] - a[:, :-1, :]
         
         # 4. Scalar Speed Magnitude (1 channel per vertex)
-        # Always uses full spatial velocity components
         v_mag = torch.norm(v, p=2, dim=0, keepdim=True)
         
         # 5. Trajectory Angular Velocity (1 channel per vertex)
@@ -139,29 +140,24 @@ class SignSegmentationDataset(Dataset):
             kp_array = np.load(kp_path, mmap_mode='c')[slice_info['start']:slice_info['end']]
             label_array = np.load(label_path, mmap_mode='c')[slice_info['start']:slice_info['end']]
         
-        # --- NEW: Apply Temporal Median Filter BEFORE tensor conversion ---
-        # kp_array shape is (Frames, Vertices, Channels)
-        # We apply medfilt over the Frames dimension (axis=0). 
-        # A kernel size of (5, 1, 1) means we filter across 5 frames for each independent x,y,z coordinate of each vertex.
+        # Scrub NaNs safely
+        kp_array = np.nan_to_num(kp_array, nan=0.0, posinf=0.0, neginf=0.0)
+        
+        # Median Filter
         clean_kp_array = medfilt(kp_array, kernel_size=(5, 1, 1))
         
-        # Now proceed with the cleaned array
-        # full_raw shape: (3, T, V) containing complete spatial coordinates
+        # Tensor conversion (C, T, V)
         full_raw_tensor = torch.tensor(clean_kp_array, dtype=torch.float32).permute(2, 0, 1) 
         
-        # Calculate ALL physics on the full 3D structure first
+        # Physics
         v_full, a_full, j_full, v_mag, omega = self._compute_full_kinematics(full_raw_tensor)
         
-        # Build list of feature streams to concatenate
         final_channels = []
         
-        # 1. Add requested Base Spatial Features (can be empty list []!)
         if self.base_features:
             base_indices = [self.feature_map[f] for f in self.base_features if f in self.feature_map]
             final_channels.append(full_raw_tensor[base_indices, :, :])
             
-        # 2. Add requested Kinematic Derivatives filtered by what components you want
-        # Note: If base_features is empty, we default the derivatives to pull X and Y components (0 and 1)
         deriv_indices = [self.feature_map[f] for f in self.base_features if f in self.feature_map] if self.base_features else [0, 1]
         
         if "velocity" in self.kinematic_features:
@@ -175,10 +171,16 @@ class SignSegmentationDataset(Dataset):
         if "angular-vel" in self.kinematic_features:
             final_channels.append(omega)
             
-        # Group everything into our final network input tensor
+        # Cat channels
         final_input_tensor = torch.cat(final_channels, dim=0)
         
         soft_labels = apply_label_smoothing(label_array, self.tolerance_window)
         labels_tensor = torch.tensor(soft_labels, dtype=torch.float32).permute(1, 0)
         
+        # --- NOVELTY: Temporal Downsampling ---
+        # Slices the tensors to take every Nth frame, halving the sequence length but preserving accuracy!
+        if self.temporal_downsample_factor > 1:
+            final_input_tensor = final_input_tensor[:, ::self.temporal_downsample_factor, :]
+            labels_tensor = labels_tensor[:, ::self.temporal_downsample_factor]
+            
         return final_input_tensor, labels_tensor
