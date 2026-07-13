@@ -415,5 +415,5 @@ class BiLSTM_Baseline(nn.Module):
         # Step 4: Classification
         logits = self.classifier(lstm_out)  # Shape: (B, T, num_classes)
         
-        # Return logits and the intermediate embeddings (for BCL compatibility!)
-        return logits, lstm_out
+        # 🚨 THE FIX: Permute logits to (B, C, T) to match PyTorch's native sequence CrossEntropyLoss!
+        return logits.permute(0, 2, 1), lstm_out.permute(0, 2, 1)
