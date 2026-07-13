@@ -6,13 +6,17 @@ QUEUE_FILE = "train_queue.json"
 # ==============================================================================
 # 🚦 MODEL TYPE SELECTOR
 # ==============================================================================
-CHOSEN_TYPE = 'lstm'
+# Change this variable to determine which defaults and experiments are queued:
+# Options: 'mamba'      - ST-GCN + Mamba architecture
+#          'lstm'       - Baseline BiLSTM architecture (No GCN)
+#          'stgcn_lstm' - Hybrid ST-GCN + BiLSTM architecture
+CHOSEN_TYPE = 'stgcn_lstm'
 
 # ==============================================================================
 # 🐍 MAMBA-BASED DEFAULT HYPERPARAMETERS
 # ==============================================================================
 MAMBA_DEFAULTS = {
-    "basename": "stgcn_mamba",
+    "basename": "stgcn_mamba",  
     "batch_size": 16,
     "epochs": 50,
     "early_stopping": True,
@@ -20,13 +24,13 @@ MAMBA_DEFAULTS = {
     "learning_rate": 0.0003,
     "num_vertices": 65,
     "tolerance_window": 5,
-    "temporal_downsample_factor": 1,  # Default: No downsampling (1x)
+    "temporal_downsample_factor": 1, 
     "loss_function": "standard_ce",
     "class_weights": [0.1, 0.3, 1.0],
     "use_full_length": False,
     "base_features": ["x-cord", "y-cord", "z-cord"],
     "kinematic_features": ["velocity", "acceleration", "jerk", "velocity-mag", "angular-vel"],
-    "in_channels": 14,
+    "in_channels": 14, 
     "decoder_strategy": "threshold",
     "decoder_threshold": 0.5,
     "d_model": 256,
@@ -37,7 +41,7 @@ MAMBA_DEFAULTS = {
 }
 
 # ==============================================================================
-# 🔄 LSTM-BASED DEFAULT HYPERPARAMETERS
+# 🔄 LSTM-BASED DEFAULT HYPERPARAMETERS (Baseline)
 # ==============================================================================
 LSTM_DEFAULTS = {
     "basename": "bilstm_baseline",
@@ -45,15 +49,43 @@ LSTM_DEFAULTS = {
     "epochs": 50,
     "early_stopping": True,
     "patience": 10,
-    "learning_rate": 0.0003,
+    "learning_rate": 0.0001,
     "num_vertices": 65,
     "tolerance_window": 5,
-    "temporal_downsample_factor": 1,  # Default: No downsampling (1x)
+    "temporal_downsample_factor": 1, 
     "loss_function": "standard_ce",
     "class_weights": [0.1, 0.3, 1.0],
     "use_full_length": False,
     "base_features": ["x-cord", "y-cord", "z-cord"],
-    "kinematic_features": [],
+    "kinematic_features": ["velocity", "acceleration", "jerk", "velocity-mag", "angular-vel"],
+    "in_channels": 14, 
+    "decoder_strategy": "threshold",
+    "decoder_threshold": 0.5,
+    "d_model": 256,  
+    "n_layers": 4,   
+    "focal_loss_gamma": 2.0,
+    "optimizer": "AdamW",
+    "scheduler": "CosineAnnealingLR"
+}
+
+# ==============================================================================
+# 🔗 HYBRID STGCN + LSTM DEFAULTS
+# ==============================================================================
+STGCN_LSTM_DEFAULTS = {
+    "basename": "stgcn_bilstm",
+    "batch_size": 16,
+    "epochs": 50,
+    "early_stopping": True,
+    "patience": 10,
+    "learning_rate": 0.0001,
+    "num_vertices": 65,
+    "tolerance_window": 5,
+    "temporal_downsample_factor": 1,
+    "loss_function": "standard_ce",
+    "class_weights": [0.1, 0.3, 1.0],
+    "use_full_length": False,
+    "base_features": ["x-cord", "y-cord", "z-cord"],
+    "kinematic_features": ["velocity", "acceleration", "jerk", "velocity-mag", "angular-vel"],
     "in_channels": 14,
     "decoder_strategy": "threshold",
     "decoder_threshold": 0.5,
@@ -78,33 +110,16 @@ def calculate_in_channels(base_features, kinematic_features):
         
     return total_channels
 
+
 if __name__ == "__main__":
     if CHOSEN_TYPE == 'mamba':
         defaults = MAMBA_DEFAULTS
         experiments_to_run = [
             {
-                "window_size": 128,
-                "overlap": 50,
-                "temporal_downsample_factor": 2,
-                "description": "Mamba ST-GCN: 2x temporal downsampling (50/128)"
-            },
-            {
-                "window_size": 16,
-                "overlap": 0,
-                "kinematic_features": [],
-                "description": "Mamba ST-GCN: overlap ratio (0/128)"
-            },
-            {
-                "window_size": 32,
-                "overlap": 0,
-                "kinematic_features": [],
-                "description": "Mamba ST-GCN: overlap ratio (0/256)"
-            },
-            {
-                "window_size": 64,
-                "overlap": 0,
-                "kinematic_features": [],
-                "description": "Mamba ST-GCN: overlap ratio (0/512)"
+                "window_size": 256,
+                "overlap": 128,
+                "temporal_downsample_factor": 2, 
+                "description": "Mamba SOTA: 2x Temp Downsample (Network sees 128 frames spanning 10 seconds)"
             }
         ]
         
@@ -112,39 +127,24 @@ if __name__ == "__main__":
         defaults = LSTM_DEFAULTS
         experiments_to_run = [
             {
-                "window_size": 16,
-                "overlap": 0,
-                "description": "LSTM-baseline: overlap ratio (0/16)"
-            },
-            {
-                "window_size": 32,
-                "overlap": 0,
-                "description": "LSTM-baseline: overlap ratio (0/32)"
-            },
-            {
-                "window_size": 64,
-                "overlap": 0,
-                "description": "LSTM-baseline: overlap ratio (0/64)"
-            },
+                "window_size": 128,
+                "overlap": 64,
+                "description": "LSTM-baseline overlap ratio (64/128)"
+            }
+        ]
+        
+    elif CHOSEN_TYPE == 'stgcn_lstm':
+        defaults = STGCN_LSTM_DEFAULTS
+        experiments_to_run = [
             {
                 "window_size": 128,
-                "overlap": 0,
-                "description": "LSTM-baseline: overlap ratio (0/128)"
-            },
-            {
-                "window_size": 256,
-                "overlap": 0,
-                "description": "LSTM-baseline: overlap ratio (0/256)"
-            },
-            {
-                "window_size": 512,
-                "overlap": 0,
-                "description": "LSTM-baseline: overlap ratio (0/512)"
+                "overlap": 64,
+                "description": "Hybrid ST-GCN + BiLSTM (Evaluating GCN impact over standard MLPs)"
             }
         ]
         
     else:
-        raise ValueError(f"Unknown CHOSEN_TYPE: '{CHOSEN_TYPE}'. Choose either 'mamba' or 'lstm'.")
+        raise ValueError(f"Unknown CHOSEN_TYPE: '{CHOSEN_TYPE}'. Choose either 'mamba', 'lstm', or 'stgcn_lstm'.")
 
     # Load existing queue to maintain the "prefixes" tracker
     if os.path.exists(QUEUE_FILE):

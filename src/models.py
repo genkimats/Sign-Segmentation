@@ -417,3 +417,63 @@ class BiLSTM_Baseline(nn.Module):
         
         # 🚨 THE FIX: Permute logits to (B, C, T) to match PyTorch's native sequence CrossEntropyLoss!
         return logits.permute(0, 2, 1), lstm_out.permute(0, 2, 1)
+    
+
+class STGCN_BiLSTM(nn.Module):
+    """
+    Hybrid Architecture:
+    Extracts spatial relationships using Graph Convolutions, then uses a BiLSTM 
+    for sequence modeling. Directly bridges the gap between GCNs and baseline LSTMs.
+    """
+    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3, dropout=0.2):
+        super(STGCN_BiLSTM, self).__init__()
+        
+        # 1. Graph Convolutional Front-End
+        graph = SkeletonGraph(num_vertices=num_vertices)
+        A = graph.A
+        self.stgcn_blocks = nn.Sequential(
+            STGCNBlock(in_channels, stgcn_channels, A),
+            STGCNBlock(stgcn_channels, stgcn_channels, A)
+        )
+        
+        # 2. Bridge (Match the BiLSTM Baseline's entry dimensions)
+        self.bridge_dim = num_vertices * stgcn_channels
+        self.projection = nn.Sequential(
+            nn.Linear(self.bridge_dim, d_model * 2),
+            nn.LayerNorm(d_model * 2),
+            nn.ReLU(),
+            nn.Dropout(dropout)
+        )
+        
+        # 3. BiLSTM Sequence Back-End
+        self.lstm = nn.LSTM(
+            input_size=d_model * 2,
+            hidden_size=d_model,
+            num_layers=n_layers,
+            batch_first=True,
+            dropout=dropout if n_layers > 1 else 0,
+            bidirectional=True
+        )
+        
+        # 4. Output Head
+        self.classifier = nn.Linear(d_model * 2, num_classes)
+
+    def forward(self, x):
+        B, C, T, V = x.shape
+        
+        # Phase 1: GCN extracts spatial kinematics
+        x = self.stgcn_blocks(x) # Shape: (B, 64, T, 65)
+        
+        # Phase 2: Flatten spatial graphs into 1D vectors per frame
+        x = x.permute(0, 2, 3, 1).contiguous() # (B, T, V, C)
+        x = x.view(B, T, -1)                   # (B, T, V*C)
+        features = self.projection(x)          # (B, T, d_model * 2)
+        
+        # Phase 3: BiLSTM Sequence Modeling
+        lstm_out, _ = self.lstm(features)      # (B, T, d_model * 2)
+        
+        # Phase 4: Classification
+        logits = self.classifier(lstm_out)     # (B, T, num_classes)
+        
+        # Match PyTorch CrossEntropy sequence signature: (B, C, T)
+        return logits.permute(0, 2, 1), lstm_out.permute(0, 2, 1)

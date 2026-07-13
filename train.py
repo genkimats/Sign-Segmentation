@@ -12,7 +12,7 @@ import copy
 
 # Import our custom modules
 from src.dataset import SignSegmentationDataset
-from src.models import PureMambaBaseline, BiMambaBaseline, STGCN_Mamba, STGCN_BiMamba, Decoupled_STGCN_Mamba, Decoupled_STGCN_BiMamba, BiLSTM_Baseline
+from src.models import PureMambaBaseline, BiMambaBaseline, STGCN_Mamba, STGCN_BiMamba, Decoupled_STGCN_Mamba, Decoupled_STGCN_BiMamba, BiLSTM_Baseline, STGCN_BiLSTM
 from src.metrics import evaluate_batch
 from src.loss import CombinedBoundaryLoss, FocalLoss, StandardCrossEntropyLoss, WeightedCrossEntropyLoss
 from src.decoder import decode_predictions
@@ -29,7 +29,8 @@ MODEL_REGISTRY = {
     "stgcn_bimamba": STGCN_BiMamba,
     "decoupled_stgcn_mamba": Decoupled_STGCN_Mamba,
     "decoupled_stgcn_bimamba": Decoupled_STGCN_BiMamba,
-    "bilstm_baseline": BiLSTM_Baseline
+    "bilstm_baseline": BiLSTM_Baseline,
+    "stgcn_bilstm": STGCN_BiLSTM  # <-- Added the new architecture here!
 }
 
 def get_next_job():
