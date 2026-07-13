@@ -45,7 +45,7 @@ LSTM_DEFAULTS = {
     "epochs": 50,
     "early_stopping": True,
     "patience": 10,
-    "learning_rate": 0.0001,
+    "learning_rate": 0.0003,
     "num_vertices": 65,
     "tolerance_window": 5,
     "temporal_downsample_factor": 1,  # Default: No downsampling (1x)
@@ -53,7 +53,7 @@ LSTM_DEFAULTS = {
     "class_weights": [0.1, 0.3, 1.0],
     "use_full_length": False,
     "base_features": ["x-cord", "y-cord", "z-cord"],
-    "kinematic_features": ["velocity", "acceleration", "jerk", "velocity-mag", "angular-vel"],
+    "kinematic_features": [],
     "in_channels": 14,
     "decoder_strategy": "threshold",
     "decoder_threshold": 0.5,
@@ -113,8 +113,8 @@ if __name__ == "__main__":
         experiments_to_run = [
             {
                 "window_size": 128,
-                "overlap": 64,
-                "description": "LSTM-baseline overlap ratio (64/128)"
+                "overlap": 0,
+                "description": "LSTM-baseline: overlap ratio (0/128)"
             }
         ]
         
