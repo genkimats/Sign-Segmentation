@@ -7,16 +7,45 @@ QUEUE_FILE = "train_queue.json"
 # 🚦 MODEL TYPE SELECTOR
 # ==============================================================================
 # Change this variable to determine which defaults and experiments are queued:
-# Options: 'mamba'      - ST-GCN + Mamba architecture
-#          'lstm'       - Baseline BiLSTM architecture (No GCN)
-#          'stgcn_lstm' - Hybrid ST-GCN + BiLSTM architecture
-CHOSEN_TYPE = 'stgcn_lstm'
+# Options: 'mamba'        - ST-GCN + Mamba architecture
+#          'pure_mamba'   - Pure Mamba baseline architecture (No GCN)
+#          'lstm'         - Baseline BiLSTM architecture (No GCN)
+#          'stgcn_lstm'   - Hybrid ST-GCN + BiLSTM architecture
+CHOSEN_TYPE = 'pure_mamba'
 
 # ==============================================================================
-# 🐍 MAMBA-BASED DEFAULT HYPERPARAMETERS
+# 🐍 MAMBA-BASED DEFAULT HYPERPARAMETERS (ST-GCN + Mamba)
 # ==============================================================================
 MAMBA_DEFAULTS = {
     "basename": "stgcn_mamba",  
+    "batch_size": 16,
+    "epochs": 50,
+    "early_stopping": True,
+    "patience": 10,
+    "learning_rate": 0.0003,
+    "num_vertices": 65,
+    "tolerance_window": 5,
+    "temporal_downsample_factor": 1, 
+    "loss_function": "standard_ce",
+    "class_weights": [0.1, 0.3, 1.0],
+    "use_full_length": False,
+    "base_features": ["x-cord", "y-cord", "z-cord"],
+    "kinematic_features": ["velocity", "acceleration", "jerk", "velocity-mag", "angular-vel"],
+    "in_channels": 14, 
+    "decoder_strategy": "threshold",
+    "decoder_threshold": 0.5,
+    "d_model": 256,
+    "n_layers": 4,
+    "focal_loss_gamma": 2.0,
+    "optimizer": "AdamW",
+    "scheduler": "CosineAnnealingLR"
+}
+
+# ==============================================================================
+# 🐍 PURE MAMBA DEFAULT HYPERPARAMETERS (No GCN)
+# ==============================================================================
+PURE_MAMBA_DEFAULTS = {
+    "basename": "pure_mamba",  
     "batch_size": 16,
     "epochs": 50,
     "early_stopping": True,
@@ -49,7 +78,7 @@ LSTM_DEFAULTS = {
     "epochs": 50,
     "early_stopping": True,
     "patience": 10,
-    "learning_rate": 0.0001,
+    "learning_rate": 0.0003,
     "num_vertices": 65,
     "tolerance_window": 5,
     "temporal_downsample_factor": 1, 
@@ -77,7 +106,7 @@ STGCN_LSTM_DEFAULTS = {
     "epochs": 50,
     "early_stopping": True,
     "patience": 10,
-    "learning_rate": 0.0001,
+    "learning_rate": 0.0003,
     "num_vertices": 65,
     "tolerance_window": 5,
     "temporal_downsample_factor": 1,
@@ -123,6 +152,41 @@ if __name__ == "__main__":
             }
         ]
         
+    elif CHOSEN_TYPE == 'pure_mamba':
+        defaults = PURE_MAMBA_DEFAULTS
+        experiments_to_run = [
+            {
+                "window_size": 16,
+                "overlap": 0,
+                "description": "Pure Mamba: overlap ratio (0/16)"
+            },
+            {
+                "window_size": 32,
+                "overlap": 0,
+                "description": "Pure Mamba: overlap ratio (0/32)"
+            },
+            {
+                "window_size": 64,
+                "overlap": 0,
+                "description": "Pure Mamba: overlap ratio (0/64)"
+            },
+            {
+                "window_size": 128,
+                "overlap": 0,
+                "description": "Pure Mamba: overlap ratio (0/128)"
+            },
+            {
+                "window_size": 256,
+                "overlap": 0,
+                "description": "Pure Mamba: overlap ratio (0/256)"
+            },
+            {
+                "window_size": 512,
+                "overlap": 0,
+                "description": "Pure Mamba: overlap ratio (0/512)"
+            }
+        ]
+        
     elif CHOSEN_TYPE == 'lstm':
         defaults = LSTM_DEFAULTS
         experiments_to_run = [
@@ -144,7 +208,7 @@ if __name__ == "__main__":
         ]
         
     else:
-        raise ValueError(f"Unknown CHOSEN_TYPE: '{CHOSEN_TYPE}'. Choose either 'mamba', 'lstm', or 'stgcn_lstm'.")
+        raise ValueError(f"Unknown CHOSEN_TYPE: '{CHOSEN_TYPE}'. Choose either 'mamba', 'pure_mamba', 'lstm', or 'stgcn_lstm'.")
 
     # Load existing queue to maintain the "prefixes" tracker
     if os.path.exists(QUEUE_FILE):
