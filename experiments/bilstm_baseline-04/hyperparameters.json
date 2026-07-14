@@ -1,0 +1,36 @@
+{
+    "basename": "bilstm_baseline",
+    "batch_size": 16,
+    "epochs": 50,
+    "early_stopping": true,
+    "patience": 10,
+    "learning_rate": 0.0003,
+    "num_vertices": 65,
+    "tolerance_window": 5,
+    "temporal_downsample_factor": 1,
+    "loss_function": "standard_ce",
+    "class_weights": [
+        0.1,
+        0.3,
+        1.0
+    ],
+    "use_full_length": false,
+    "base_features": [
+        "x-cord",
+        "y-cord",
+        "z-cord"
+    ],
+    "kinematic_features": [],
+    "in_channels": 3,
+    "decoder_strategy": "threshold",
+    "decoder_threshold": 0.5,
+    "d_model": 256,
+    "n_layers": 4,
+    "focal_loss_gamma": 2.0,
+    "optimizer": "AdamW",
+    "scheduler": "CosineAnnealingLR",
+    "window_size": 128,
+    "overlap": 0,
+    "description": "LSTM-baseline: overlap ratio (0/128)",
+    "prefix": "04"
+}
