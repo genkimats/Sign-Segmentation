@@ -184,30 +184,6 @@ if __name__ == "__main__":
                 "window_size": 512,
                 "overlap": 0,
                 "description": "Pure Mamba: overlap ratio (0/512)"
-            },
-            {
-                "window_size": 128,
-                "overlap": 0,
-                "batch_size": 8,
-                "description": "Pure Mamba: overlap ratio (0/128), batch size 8"
-            },
-            {
-                "window_size": 128,
-                "overlap": 0,
-                "batch_size": 4,
-                "description": "Pure Mamba: overlap ratio (0/128), batch size 4"
-            },
-            {
-                "window_size": 64,
-                "overlap": 0,
-                "batch_size": 2,
-                "description": "Pure Mamba: overlap ratio (0/64), batch size 2"
-            },
-            {
-                "window_size": 128,
-                "overlap": 0,
-                "batch_size": 1,
-                "description": "Pure Mamba: overlap ratio (0/128), batch size 1"
             }
         ]
         
@@ -225,9 +201,34 @@ if __name__ == "__main__":
         defaults = STGCN_LSTM_DEFAULTS
         experiments_to_run = [
             {
+                "window_size": 16,
+                "overlap": 0,
+                "description": "ST-GCN + LSTM: overlap ratio (0/16)"
+            },
+            {
+                "window_size": 32,
+                "overlap": 0,
+                "description": "ST-GCN + LSTM: overlap ratio (0/32)"
+            },
+            {
+                "window_size": 64,
+                "overlap": 0,
+                "description": "ST-GCN + LSTM: overlap ratio (0/64)"
+            },
+            {
                 "window_size": 128,
-                "overlap": 64,
-                "description": "Hybrid ST-GCN + BiLSTM (Evaluating GCN impact over standard MLPs)"
+                "overlap": 0,
+                "description": "ST-GCN + LSTM: overlap ratio (0/128)"
+            },
+            {
+                "window_size": 256,
+                "overlap": 0,
+                "description": "ST-GCN + LSTM: overlap ratio (0/256)"
+            },
+            {
+                "window_size": 512,
+                "overlap": 0,
+                "description": "ST-GCN + LSTM: overlap ratio (0/512)"
             }
         ]
         
