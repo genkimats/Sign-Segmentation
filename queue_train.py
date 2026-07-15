@@ -11,7 +11,7 @@ QUEUE_FILE = "train_queue.json"
 #          'pure_mamba'   - Pure Mamba baseline architecture (No GCN)
 #          'lstm'         - Baseline BiLSTM architecture (No GCN)
 #          'stgcn_lstm'   - Hybrid ST-GCN + BiLSTM architecture
-CHOSEN_TYPE = 'pure_mamba'
+CHOSEN_TYPE = 'stgcn_lstm'  # Change this to 'mamba', 'pure_mamba', 'lstm', or 'stgcn_lstm'
 
 # ==============================================================================
 # 🐍 MAMBA-BASED DEFAULT HYPERPARAMETERS (ST-GCN + Mamba)
