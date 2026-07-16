@@ -275,63 +275,37 @@ class STGCN_BiMamba(nn.Module):
 class STGCN_Mamba(nn.Module):
     def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3):
         super().__init__()
-        
-        # 1. Get the physical skeleton graph
         graph = SkeletonGraph(num_vertices=num_vertices)
         A = graph.A
-        
-        # 2. ST-GCN Front-End (Spatial Encoder)
-        # Maps 3 (x,y,z) channels to stgcn_channels (e.g., 64) through structural context
         self.stgcn_blocks = nn.Sequential(
             STGCNBlock(in_channels, stgcn_channels, A),
             STGCNBlock(stgcn_channels, stgcn_channels, A)
         )
-        
-        # 3. Graph-to-Sequence Bridge
-        # We flatten the (Vertices * Channels) into a 1D vector per frame
         self.bridge_dim = num_vertices * stgcn_channels
         self.feature_proj = nn.Sequential(
             nn.Linear(self.bridge_dim, d_model),
             nn.LayerNorm(d_model),
             nn.GELU(),
-            nn.Dropout(0.1) # Added slight dropout to prevent ST-GCN overfitting
+            nn.Dropout(0.1) 
         )
-        
-        # 4. Mamba Back-End (Temporal Encoder)
         self.mamba_layers = nn.ModuleList([
             Mamba(d_model=d_model, d_state=16, d_conv=4, expand=2) for _ in range(n_layers)
         ])
-        
         self.classifier = nn.Linear(d_model, num_classes)
 
     def forward(self, x):
-        """ x shape expected: (Batch, Channels, Frames, Vertices) -> (B, 3, 1000, 65) """
         B, C, T, V = x.shape
-        
-        # Phase 1: Spatial-Temporal Graph Parsing
-        x = self.stgcn_blocks(x) # Shape becomes (B, 64, 1000, 65)
-        
-        # Phase 2: Bridge Formatting
-        # Permute to (B, T, V, C_new) -> (B, 1000, 65, 64)
+        x = self.stgcn_blocks(x) 
         x = x.permute(0, 2, 3, 1).contiguous()
-        # Flatten spatial info -> (B, 1000, 65 * 64)
         x = x.view(B, T, -1) 
+        x = self.feature_proj(x + 1e-5) # Epsilon
         
-        # Project down to d_model -> (B, 1000, 256)
-        x = self.feature_proj(x)
-        
-        # Phase 3: Mamba Sequence Parsing
         for layer in self.mamba_layers:
             x = layer(x)
             
-        # --- NEW: Extract Latent Embeddings before Classification ---
-        embeddings = x.permute(0, 2, 1) # Shape: (B, 256, 1000)
-        
-        # Phase 4: Classification
+        embeddings = x.permute(0, 2, 1) 
         logits = self.classifier(x)
-        logits = logits.permute(0, 2, 1) # Shape: (B, 3, 1000)
-        
-        # Return BOTH for the combined loss function
+        logits = logits.permute(0, 2, 1) 
         return logits, embeddings
 
 class BiMambaBaseline(nn.Module):
