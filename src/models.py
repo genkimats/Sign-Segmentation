@@ -7,6 +7,88 @@ from src.stgcn import DecoupledSTGCNBlock
 from torch.utils.checkpoint import checkpoint
 
 
+# ==============================================================================
+# TRANSFORMER UTILITIES
+# ==============================================================================
+class PositionalEncoding(nn.Module):
+    """
+    Injects information about the relative or absolute position of the tokens 
+    in the sequence. Required for pure Transformers since they have no inherent 
+    sense of time/order.
+    """
+    def __init__(self, d_model: int, dropout: float = 0.1, max_len: int = 5000):
+        super().__init__()
+        self.dropout = nn.Dropout(p=dropout)
+
+        position = torch.arange(max_len).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
+        pe = torch.zeros(1, max_len, d_model)
+        pe[0, :, 0::2] = torch.sin(position * div_term)
+        pe[0, :, 1::2] = torch.cos(position * div_term)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """ x shape: (Batch, Sequence Length, d_model) """
+        x = x + self.pe[:, :x.size(1), :]
+        return self.dropout(x)
+
+# ==============================================================================
+# ARCHITECTURES
+# ==============================================================================
+class TransformerBaseline(nn.Module):
+    """
+    A pure Multi-Head Self-Attention model. 
+    Flattens the spatial graph entirely and relies purely on standard Transformer 
+    Encoders and Positional Encodings to map temporal dependencies.
+    """
+    def __init__(self, in_channels, num_vertices, num_classes=3, d_model=256, n_layers=4, nhead=8, dim_feedforward=1024, dropout=0.2):
+        super().__init__()
+        
+        # 1. Feature Projection (Flatten spatial nodes into 1D embedding)
+        self.feature_dim = in_channels * num_vertices
+        self.projection = nn.Sequential(
+            nn.Linear(self.feature_dim, d_model),
+            nn.LayerNorm(d_model),
+            nn.ReLU(),
+            nn.Dropout(dropout)
+        )
+        
+        # 2. Sequence Encoder (Positional Encoding + Transformer)
+        self.pos_encoder = PositionalEncoding(d_model, dropout)
+        
+        encoder_layers = nn.TransformerEncoderLayer(
+            d_model=d_model, 
+            nhead=nhead, 
+            dim_feedforward=dim_feedforward, 
+            dropout=dropout, 
+            batch_first=True # Ensures input is (Batch, Time, Features)
+        )
+        self.transformer_encoder = nn.TransformerEncoder(encoder_layers, num_layers=n_layers)
+        
+        # 3. Output Head
+        self.classifier = nn.Linear(d_model, num_classes)
+
+    def forward(self, x):
+        # Current x shape: (B, C, T, V)
+        B, C, T, V = x.shape
+        
+        # Phase 1: Flatten spatial dimension
+        x = x.permute(0, 2, 1, 3).reshape(B, T, C * V) # (B, T, C*V)
+        features = self.projection(x)                  # (B, T, d_model)
+        
+        # Phase 2: Add temporal position awareness
+        features = self.pos_encoder(features)
+        
+        # Phase 3: Global Multi-Head Self Attention
+        embeddings = self.transformer_encoder(features) # (B, T, d_model)
+        
+        # Phase 4: Classification
+        logits = self.classifier(embeddings)            # (B, T, num_classes)
+        
+        # Match PyTorch CrossEntropy sequence signature: (B, C, T)
+        return logits.permute(0, 2, 1), embeddings.permute(0, 2, 1)
+
+
 class Decoupled_STGCN_Mamba(nn.Module):
     def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3):
         super().__init__()

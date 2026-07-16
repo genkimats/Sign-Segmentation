@@ -12,7 +12,7 @@ import copy
 
 # Import our custom modules
 from src.dataset import SignSegmentationDataset
-from src.models import PureMambaBaseline, BiMambaBaseline, STGCN_Mamba, STGCN_BiMamba, Decoupled_STGCN_Mamba, Decoupled_STGCN_BiMamba, BiLSTM_Baseline, STGCN_BiLSTM
+from src.models import PureMambaBaseline, BiMambaBaseline, STGCN_Mamba, STGCN_BiMamba, Decoupled_STGCN_Mamba, Decoupled_STGCN_BiMamba, BiLSTM_Baseline, STGCN_BiLSTM, TransformerBaseline
 from src.metrics import evaluate_batch
 from src.loss import CombinedBoundaryLoss, FocalLoss, StandardCrossEntropyLoss, WeightedCrossEntropyLoss
 from src.decoder import decode_predictions
@@ -30,7 +30,8 @@ MODEL_REGISTRY = {
     "decoupled_stgcn_mamba": Decoupled_STGCN_Mamba,
     "decoupled_stgcn_bimamba": Decoupled_STGCN_BiMamba,
     "bilstm_baseline": BiLSTM_Baseline,
-    "stgcn_bilstm": STGCN_BiLSTM  # <-- Added the new architecture here!
+    "stgcn_bilstm": STGCN_BiLSTM,
+    "transformer_baseline": TransformerBaseline
 }
 
 def get_next_job():
@@ -144,13 +145,20 @@ def train_model(config):
         print(f"❌ Error: Model '{MODEL_NAME}' not found in registry. Skipping.")
         return
         
-    model = model_class(
-        in_channels=IN_CHANNELS,
-        num_vertices=NUM_VERTICES,
-        num_classes=3,
-        d_model=D_MODEL,
-        n_layers=N_LAYERS
-    ).to(device)
+    # Safely unpack standard arguments + architecture-specific arguments
+    model_kwargs = {
+        "in_channels": IN_CHANNELS,
+        "num_vertices": NUM_VERTICES,
+        "num_classes": 3,
+        "d_model": D_MODEL,
+        "n_layers": N_LAYERS
+    }
+    
+    if MODEL_NAME == "transformer_baseline":
+        model_kwargs["nhead"] = config.get("nhead", 8)
+        model_kwargs["dim_feedforward"] = config.get("dim_feedforward", D_MODEL * 4)
+
+    model = model_class(**model_kwargs).to(device)
 
     # Loss Selection
     weights = torch.tensor(CLASS_WEIGHTS, dtype=torch.float).to(device)
