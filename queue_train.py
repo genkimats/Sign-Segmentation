@@ -12,7 +12,7 @@ QUEUE_FILE = "train_queue.json"
 #          'lstm'         - Baseline BiLSTM architecture (No GCN)
 #          'stgcn_lstm'   - Hybrid ST-GCN + BiLSTM architecture
 #          'transformer'  - Pure Multi-Head Attention architecture (No GCN)
-CHOSEN_TYPE = 'transformer'
+CHOSEN_TYPE = 'mamba'  # Change this to select the model type for queuing experiments
 
 # ==============================================================================
 # 🐍 MAMBA-BASED DEFAULT HYPERPARAMETERS (ST-GCN + Mamba)
@@ -23,7 +23,7 @@ MAMBA_DEFAULTS = {
     "epochs": 50,
     "early_stopping": True,
     "patience": 10,
-    "learning_rate": 0.0003,
+    "learning_rate": 0.0001,
     "num_vertices": 65,
     "tolerance_window": 5,
     "temporal_downsample_factor": 1, 
@@ -51,7 +51,7 @@ PURE_MAMBA_DEFAULTS = {
     "epochs": 50,
     "early_stopping": True,
     "patience": 10,
-    "learning_rate": 0.0003,
+    "learning_rate": 0.0001,
     "num_vertices": 65,
     "tolerance_window": 5,
     "temporal_downsample_factor": 1, 
@@ -176,10 +176,34 @@ if __name__ == "__main__":
         defaults = MAMBA_DEFAULTS
         experiments_to_run = [
             {
+                "window_size": 16,
+                "overlap": 0,
+                "description": "overlap (0/16), lea"
+            },
+            {
+                "window_size": 32,
+                "overlap": 0,
+                "description": "overlap (0/32)"
+            },
+            {
+                "window_size": 64,
+                "overlap": 0,
+                "description": "overlap (0/64)"
+            },
+            {
+                "window_size": 128,
+                "overlap": 0,
+                "description": "overlap (0/128)"
+            },
+            {
                 "window_size": 256,
-                "overlap": 128,
-                "temporal_downsample_factor": 2, 
-                "description": "Mamba SOTA: 2x Temp Downsample (Network sees 128 frames spanning 10 seconds)"
+                "overlap": 0,
+                "description": "overlap (0/256)"
+            },
+            {
+                "window_size": 512,
+                "overlap": 0,
+                "description": "overlap (0/512)"
             }
         ]
         
