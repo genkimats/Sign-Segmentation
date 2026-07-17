@@ -28,7 +28,6 @@ MODEL_REGISTRY = {
     "stgcn_mamba": STGCN_Mamba,
     "stgcn_bimamba": STGCN_BiMamba,
     "decoupled_stgcn_mamba": Decoupled_STGCN_Mamba,
-    "decoupled_stgcn_bimamba": Decoupled_STGCN_BiMamba,
     "bilstm_baseline": BiLSTM_Baseline,
     "stgcn_bilstm": STGCN_BiLSTM,
     "transformer_baseline": TransformerBaseline,
