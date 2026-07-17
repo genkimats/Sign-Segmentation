@@ -13,7 +13,7 @@ QUEUE_FILE = "train_queue.json"
 #          'stgcn_lstm'        - Hybrid ST-GCN + BiLSTM architecture
 #          'transformer'       - Pure Multi-Head Attention architecture (No GCN)
 #          'stgcn_transformer' - Hybrid ST-GCN + Transformer architecture
-CHOSEN_TYPE = 'stgcn_transformer'
+CHOSEN_TYPE = 'mamba'
 
 # ==============================================================================
 # 🐍 MAMBA-BASED DEFAULT HYPERPARAMETERS (ST-GCN + Mamba)
@@ -207,10 +207,34 @@ if __name__ == "__main__":
         defaults = MAMBA_DEFAULTS
         experiments_to_run = [
             {
+                "window_size": 16,
+                "overlap": 0,
+                "description": "overlap (0/16), Start of removing checkpoints"
+            },
+            {
+                "window_size": 32,
+                "overlap": 0,
+                "description": "overlap (0/32)"
+            },
+            {
+                "window_size": 64,
+                "overlap": 0,
+                "description": "overlap (0/64)"
+            },
+            {
+                "window_size": 128,
+                "overlap": 0,
+                "description": "overlap (0/128)"
+            },
+            {
                 "window_size": 256,
-                "overlap": 128,
-                "temporal_downsample_factor": 2, 
-                "description": "Mamba SOTA: 2x Temp Downsample (Network sees 128 frames spanning 10 seconds)"
+                "overlap": 0,
+                "description": "overlap (0/256)"
+            },
+            {
+                "window_size": 512,
+                "overlap": 0,
+                "description": "overlap (0/512)"
             }
         ]
         
@@ -238,9 +262,34 @@ if __name__ == "__main__":
         defaults = STGCN_LSTM_DEFAULTS
         experiments_to_run = [
             {
+                "window_size": 16,
+                "overlap": 0,
+                "description": "overlap (0/16), Start of removing checkpoints"
+            },
+            {
+                "window_size": 32,
+                "overlap": 0,
+                "description": "overlap (0/32)"
+            },
+            {
+                "window_size": 64,
+                "overlap": 0,
+                "description": "overlap (0/64)"
+            },
+            {
                 "window_size": 128,
-                "overlap": 64,
-                "description": "Hybrid ST-GCN + BiLSTM (Evaluating GCN impact over standard MLPs)"
+                "overlap": 0,
+                "description": "overlap (0/128)"
+            },
+            {
+                "window_size": 256,
+                "overlap": 0,
+                "description": "overlap (0/256)"
+            },
+            {
+                "window_size": 512,
+                "overlap": 0,
+                "description": "overlap (0/512)"
             }
         ]
         
