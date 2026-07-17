@@ -13,7 +13,7 @@ QUEUE_FILE = "train_queue.json"
 #          'stgcn_lstm'        - Hybrid ST-GCN + BiLSTM architecture
 #          'transformer'       - Pure Multi-Head Attention architecture (No GCN)
 #          'stgcn_transformer' - Hybrid ST-GCN + Transformer architecture
-CHOSEN_TYPE = 'stgcn_bilstm'
+CHOSEN_TYPE = 'stgcn_lstm'
 
 # ==============================================================================
 # 🐍 MAMBA-BASED DEFAULT HYPERPARAMETERS (ST-GCN + Mamba)
