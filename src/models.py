@@ -90,6 +90,57 @@ class TransformerBaseline(nn.Module):
         return logits.permute(0, 2, 1), embeddings.permute(0, 2, 1)
 
 
+class STGCN_Transformer(nn.Module):
+    """
+    Hybrid Architecture: 
+    Extracts isolated spatial kinetics using a Graph Convolutional Network, 
+    then applies global temporal attention using a Transformer Encoder.
+    """
+    def __init__(self, in_channels, num_vertices, num_classes=3, stgcn_channels=64, d_model=256, n_layers=4, nhead=8, dim_feedforward=1024, dropout=0.2):
+        super().__init__()
+        
+        graph = SkeletonGraph(num_vertices=num_vertices)
+        A = graph.A
+        self.stgcn_blocks = nn.Sequential(
+            STGCNBlock(in_channels, stgcn_channels, A),
+            STGCNBlock(stgcn_channels, stgcn_channels, A)
+        )
+        
+        self.bridge_dim = num_vertices * stgcn_channels
+        self.feature_proj = nn.Sequential(
+            nn.Linear(self.bridge_dim, d_model),
+            nn.LayerNorm(d_model),
+            nn.GELU(),
+            nn.Dropout(dropout)
+        )
+        
+        self.pos_encoder = PositionalEncoding(d_model, dropout)
+        
+        encoder_layers = nn.TransformerEncoderLayer(
+            d_model=d_model, 
+            nhead=nhead, 
+            dim_feedforward=dim_feedforward, 
+            dropout=dropout, 
+            batch_first=True
+        )
+        self.transformer_encoder = nn.TransformerEncoder(encoder_layers, num_layers=n_layers)
+        
+        self.classifier = nn.Linear(d_model, num_classes)
+
+    def forward(self, x):
+        B, C, T, V = x.shape
+        x = self.stgcn_blocks(x) 
+        x = x.permute(0, 2, 3, 1).contiguous()
+        x = x.view(B, T, -1)
+        features = self.feature_proj(x + 1e-5) # Epsilon
+        
+        features = self.pos_encoder(features)
+        embeddings = self.transformer_encoder(features)
+        
+        logits = self.classifier(embeddings)
+        return logits.permute(0, 2, 1), embeddings.permute(0, 2, 1)
+
+
 class Decoupled_STGCN_Mamba(nn.Module):
     def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3):
         super().__init__()

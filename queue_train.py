@@ -7,12 +7,13 @@ QUEUE_FILE = "train_queue.json"
 # 🚦 MODEL TYPE SELECTOR
 # ==============================================================================
 # Change this variable to determine which defaults and experiments are queued:
-# Options: 'mamba'        - ST-GCN + Mamba architecture
-#          'pure_mamba'   - Pure Mamba baseline architecture (No GCN)
-#          'lstm'         - Baseline BiLSTM architecture (No GCN)
-#          'stgcn_lstm'   - Hybrid ST-GCN + BiLSTM architecture
-#          'transformer'  - Pure Multi-Head Attention architecture (No GCN)
-CHOSEN_TYPE = 'mamba'  # Change this to select the model type for queuing experiments
+# Options: 'mamba'             - ST-GCN + Mamba architecture
+#          'pure_mamba'        - Pure Mamba baseline architecture (No GCN)
+#          'lstm'              - Baseline BiLSTM architecture (No GCN)
+#          'stgcn_lstm'        - Hybrid ST-GCN + BiLSTM architecture
+#          'transformer'       - Pure Multi-Head Attention architecture (No GCN)
+#          'stgcn_transformer' - Hybrid ST-GCN + Transformer architecture
+CHOSEN_TYPE = 'stgcn_transformer'
 
 # ==============================================================================
 # 🐍 MAMBA-BASED DEFAULT HYPERPARAMETERS (ST-GCN + Mamba)
@@ -149,8 +150,38 @@ TRANSFORMER_DEFAULTS = {
     "decoder_threshold": 0.5,
     "d_model": 256,
     "n_layers": 4,
-    "nhead": 8,              # <-- TRANSFORMER SPECIFIC
-    "dim_feedforward": 1024, # <-- TRANSFORMER SPECIFIC (Usually 4x d_model)
+    "nhead": 8,              
+    "dim_feedforward": 1024, 
+    "focal_loss_gamma": 2.0,
+    "optimizer": "AdamW",
+    "scheduler": "CosineAnnealingLR"
+}
+
+# ==============================================================================
+# 🔗🤖 HYBRID STGCN + TRANSFORMER DEFAULTS
+# ==============================================================================
+STGCN_TRANSFORMER_DEFAULTS = {
+    "basename": "stgcn_transformer",
+    "batch_size": 16, # Beware of OOM errors on large window sizes!
+    "epochs": 50,
+    "early_stopping": True,
+    "patience": 10,
+    "learning_rate": 0.0001,
+    "num_vertices": 65,
+    "tolerance_window": 5,
+    "temporal_downsample_factor": 1,
+    "loss_function": "standard_ce",
+    "class_weights": [0.1, 0.3, 1.0],
+    "use_full_length": False,
+    "base_features": ["x-cord", "y-cord", "z-cord"],
+    "kinematic_features": ["velocity", "acceleration", "jerk", "velocity-mag", "angular-vel"],
+    "in_channels": 14,
+    "decoder_strategy": "threshold",
+    "decoder_threshold": 0.5,
+    "d_model": 256,
+    "n_layers": 4,
+    "nhead": 8,              
+    "dim_feedforward": 1024, 
     "focal_loss_gamma": 2.0,
     "optimizer": "AdamW",
     "scheduler": "CosineAnnealingLR"
@@ -176,34 +207,10 @@ if __name__ == "__main__":
         defaults = MAMBA_DEFAULTS
         experiments_to_run = [
             {
-                "window_size": 16,
-                "overlap": 0,
-                "description": "overlap (0/16), lea"
-            },
-            {
-                "window_size": 32,
-                "overlap": 0,
-                "description": "overlap (0/32)"
-            },
-            {
-                "window_size": 64,
-                "overlap": 0,
-                "description": "overlap (0/64)"
-            },
-            {
-                "window_size": 128,
-                "overlap": 0,
-                "description": "overlap (0/128)"
-            },
-            {
                 "window_size": 256,
-                "overlap": 0,
-                "description": "overlap (0/256)"
-            },
-            {
-                "window_size": 512,
-                "overlap": 0,
-                "description": "overlap (0/512)"
+                "overlap": 128,
+                "temporal_downsample_factor": 2, 
+                "description": "Mamba SOTA: 2x Temp Downsample (Network sees 128 frames spanning 10 seconds)"
             }
         ]
         
@@ -241,39 +248,24 @@ if __name__ == "__main__":
         defaults = TRANSFORMER_DEFAULTS
         experiments_to_run = [
             {
-                "window_size": 16,
-                "overlap": 0,
-                "description": "overlap (0/16)"
-            },
-            {
-                "window_size": 32,
-                "overlap": 0,
-                "description": "overlap (0/32)"
-            },
-            {
-                "window_size": 64,
-                "overlap": 0,
-                "description": "overlap (0/64)"
-            },
+                "window_size": 128,
+                "overlap": 64,
+                "description": "Pure Transformer Baseline (Evaluating Multi-Head Attention vs. Mamba/LSTM)"
+            }
+        ]
+        
+    elif CHOSEN_TYPE == 'stgcn_transformer':
+        defaults = STGCN_TRANSFORMER_DEFAULTS
+        experiments_to_run = [
             {
                 "window_size": 128,
-                "overlap": 0,
-                "description": "overlap (0/128)"
-            },
-            {
-                "window_size": 256,
-                "overlap": 0,
-                "description": "overlap (0/256)"
-            },
-            {
-                "window_size": 512,
-                "overlap": 0,
-                "description": "overlap (0/512)"
+                "overlap": 64,
+                "description": "Hybrid ST-GCN + Transformer Encoder (Full Spatial/Temporal awareness)"
             }
         ]
         
     else:
-        raise ValueError(f"Unknown CHOSEN_TYPE: '{CHOSEN_TYPE}'. Choose either 'mamba', 'pure_mamba', 'lstm', 'stgcn_lstm', or 'transformer'.")
+        raise ValueError(f"Unknown CHOSEN_TYPE: '{CHOSEN_TYPE}'. Choose from 'mamba', 'pure_mamba', 'lstm', 'stgcn_lstm', 'transformer', 'stgcn_transformer'.")
 
     # Load existing queue to maintain the "prefixes" tracker
     if os.path.exists(QUEUE_FILE):
