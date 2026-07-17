@@ -260,7 +260,7 @@ if __name__ == "__main__":
             {
                 "window_size": 16,
                 "overlap": 0,
-                "description": "overlap (0/16)"
+                "description": "overlap (0/16), Start of removing checkpoints"
             },
             {
                 "window_size": 32,
