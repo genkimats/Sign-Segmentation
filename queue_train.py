@@ -212,32 +212,32 @@ if __name__ == "__main__":
             {
                 "window_size": 16,
                 "overlap": 0,
-                "description": "overlap (0/16)"
+                "description": "overlap (0/16), lr=0.0003"
             },
             {
                 "window_size": 32,
                 "overlap": 0,
-                "description": "overlap (0/32)"
+                "description": "overlap (0/32), lr=0.0003"
             },
             {
                 "window_size": 64,
                 "overlap": 0,
-                "description": "overlap (0/64)"
+                "description": "overlap (0/64), lr=0.0003"
             },
             {
                 "window_size": 128,
                 "overlap": 0,
-                "description": "overlap (0/128)"
+                "description": "overlap (0/128), lr=0.0003"
             },
             {
                 "window_size": 256,
                 "overlap": 0,
-                "description": "overlap (0/256)"
+                "description": "overlap (0/256), lr=0.0003"
             },
             {
                 "window_size": 512,
                 "overlap": 0,
-                "description": "overlap (0/512)"
+                "description": "overlap (0/512), lr=0.0003"
             }
 
         ]
