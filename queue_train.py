@@ -26,7 +26,7 @@ MAMBA_DEFAULTS = {
     "epochs": 50,
     "early_stopping": True,
     "patience": 10,
-    "learning_rate": 0.0001,
+    "learning_rate": 0.0003,
     "num_vertices": 65,
     "tolerance_window": 5,
     "temporal_downsample_factor": 1, 
@@ -54,7 +54,7 @@ PURE_MAMBA_DEFAULTS = {
     "epochs": 50,
     "early_stopping": True,
     "patience": 10,
-    "learning_rate": 0.0001,
+    "learning_rate": 0.0003,
     "num_vertices": 65,
     "tolerance_window": 5,
     "temporal_downsample_factor": 1, 
@@ -210,29 +210,36 @@ if __name__ == "__main__":
         defaults = MAMBA_DEFAULTS
         experiments_to_run = [
             {
-                "window_size": 128,
+                "window_size": 16,
                 "overlap": 0,
-                "batch_size": 8,
-                "description": "batch_size 8, overlap (0/128)"
+                "description": "overlap (0/16)"
+            },
+            {
+                "window_size": 32,
+                "overlap": 0,
+                "description": "overlap (0/32)"
+            },
+            {
+                "window_size": 64,
+                "overlap": 0,
+                "description": "overlap (0/64)"
             },
             {
                 "window_size": 128,
                 "overlap": 0,
-                "batch_size": 4,
-                "description": "batch_size 4, overlap (0/128)"
+                "description": "overlap (0/128)"
             },
             {
-                "window_size": 128,
+                "window_size": 256,
                 "overlap": 0,
-                "batch_size": 2,
-                "description": "batch_size 2, overlap (0/128)"
+                "description": "overlap (0/256)"
             },
             {
-                "window_size": 128,
+                "window_size": 512,
                 "overlap": 0,
-                "batch_size": 1,
-                "description": "batch_size 1, overlap (0/128)"
+                "description": "overlap (0/512)"
             }
+
         ]
         
     elif CHOSEN_TYPE == 'pure_mamba':
