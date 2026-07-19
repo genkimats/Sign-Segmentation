@@ -13,7 +13,9 @@ QUEUE_FILE = "train_queue.json"
 #          'stgcn_lstm'        - Hybrid ST-GCN + BiLSTM architecture
 #          'transformer'       - Pure Multi-Head Attention architecture (No GCN)
 #          'stgcn_transformer' - Hybrid ST-GCN + Transformer architecture
-CHOSEN_TYPE = 'stgcn_lstm'
+CHOSEN_TYPE = 'mamba'
+
+#region
 
 # ==============================================================================
 # 🐍 MAMBA-BASED DEFAULT HYPERPARAMETERS (ST-GCN + Mamba)
@@ -201,40 +203,35 @@ def calculate_in_channels(base_features, kinematic_features):
         
     return total_channels
 
+#endregion
 
 if __name__ == "__main__":
     if CHOSEN_TYPE == 'mamba':
         defaults = MAMBA_DEFAULTS
         experiments_to_run = [
             {
-                "window_size": 16,
+                "window_size": 128,
                 "overlap": 0,
-                "description": "overlap (0/16), Start of removing checkpoints"
-            },
-            {
-                "window_size": 32,
-                "overlap": 0,
-                "description": "overlap (0/32)"
-            },
-            {
-                "window_size": 64,
-                "overlap": 0,
-                "description": "overlap (0/64)"
+                "batch_size": 8,
+                "description": "batch_size 8, overlap (0/128)"
             },
             {
                 "window_size": 128,
                 "overlap": 0,
-                "description": "overlap (0/128)"
+                "batch_size": 4,
+                "description": "batch_size 4, overlap (0/128)"
             },
             {
-                "window_size": 256,
+                "window_size": 128,
                 "overlap": 0,
-                "description": "overlap (0/256)"
+                "batch_size": 2,
+                "description": "batch_size 2, overlap (0/128)"
             },
             {
-                "window_size": 512,
+                "window_size": 128,
                 "overlap": 0,
-                "description": "overlap (0/512)"
+                "batch_size": 1,
+                "description": "batch_size 1, overlap (0/128)"
             }
         ]
         
