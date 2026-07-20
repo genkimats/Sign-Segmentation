@@ -26,7 +26,7 @@ MAMBA_DEFAULTS = {
     "epochs": 50,
     "early_stopping": True,
     "patience": 10,
-    "learning_rate": 0.0003,
+    "learning_rate": 0.0001,
     "num_vertices": 65,
     "tolerance_window": 5,
     "temporal_downsample_factor": 1, 
@@ -54,7 +54,7 @@ PURE_MAMBA_DEFAULTS = {
     "epochs": 50,
     "early_stopping": True,
     "patience": 10,
-    "learning_rate": 0.0003,
+    "learning_rate": 0.0001,
     "num_vertices": 65,
     "tolerance_window": 5,
     "temporal_downsample_factor": 1, 
@@ -212,32 +212,38 @@ if __name__ == "__main__":
             {
                 "window_size": 16,
                 "overlap": 0,
-                "description": "overlap (0/16), lr=0.0003"
+                "batch_size": 4,
+                "description": "batch overlap (0/16), batch size 4"
             },
             {
                 "window_size": 32,
                 "overlap": 0,
-                "description": "overlap (0/32), lr=0.0003"
+                "batch_size": 4,
+                "description": "batch overlap (0/32), batch size 4"
             },
             {
                 "window_size": 64,
                 "overlap": 0,
-                "description": "overlap (0/64), lr=0.0003"
+                "batch_size": 8,
+                "description": "batch overlap (0/64), batch size 8"
             },
             {
                 "window_size": 128,
                 "overlap": 0,
-                "description": "overlap (0/128), lr=0.0003"
+                "batch_size": 16,
+                "description": "batch overlap (0/128), batch size 16"
             },
             {
                 "window_size": 256,
                 "overlap": 0,
-                "description": "overlap (0/256), lr=0.0003"
+                "batch_size": 16,
+                "description": "batch overlap (0/256), batch size 16"
             },
             {
                 "window_size": 512,
                 "overlap": 0,
-                "description": "overlap (0/512), lr=0.0003"
+                "batch_size": 16,
+                "description": "batch overlap (0/512), batch size 16"
             }
 
         ]
