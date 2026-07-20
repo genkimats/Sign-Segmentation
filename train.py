@@ -14,7 +14,7 @@ import copy
 from src.dataset import SignSegmentationDataset
 from src.models import PureMambaBaseline, BiMambaBaseline, STGCN_Mamba, STGCN_MLP_Mamba, STGCN_BiMamba, Decoupled_STGCN_Mamba, BiLSTM_Baseline, STGCN_BiLSTM, TransformerBaseline, STGCN_Transformer
 from src.metrics import evaluate_batch
-from src.loss import CombinedBoundaryLoss, FocalLoss, StandardCrossEntropyLoss, WeightedCrossEntropyLoss
+from src.loss import CombinedBoundaryLoss, FocalLoss, StandardCrossEntropyLoss, WeightedCrossEntropyLoss, UnifiedCTCLoss
 from src.decoder import decode_predictions
 
 QUEUE_FILE = "train_queue.json"
@@ -26,7 +26,7 @@ MODEL_REGISTRY = {
     "pure_mamba": PureMambaBaseline,
     "bi_mamba": BiMambaBaseline,
     "stgcn_mamba": STGCN_Mamba,
-    "stgcn_mlp_mamba": STGCN_MLP_Mamba, # <-- ADDED
+    "stgcn_mlp_mamba": STGCN_MLP_Mamba,
     "stgcn_bimamba": STGCN_BiMamba,
     "decoupled_stgcn_mamba": Decoupled_STGCN_Mamba,
     "bilstm_baseline": BiLSTM_Baseline,
@@ -148,7 +148,6 @@ def train_model(config):
         model_kwargs["nhead"] = config.get("nhead", 8)
         model_kwargs["dim_feedforward"] = config.get("dim_feedforward", D_MODEL * 4)
         
-    # --- NEW: Inject MLP param if using the new class ---
     if MODEL_NAME == "stgcn_mlp_mamba":
         model_kwargs["mlp_expansion_factor"] = config.get("mlp_expansion_factor", 4)
 
@@ -156,10 +155,16 @@ def train_model(config):
 
     weights = torch.tensor(CLASS_WEIGHTS, dtype=torch.float).to(device)
     
+    # --- NEW: Unified CTC Loss Injection ---
     if LOSS_FUNCTION == "bcl":
         criterion = CombinedBoundaryLoss(
             focal_gamma=FOCAL_LOSS_GAMMA, 
             contrastive_weight=config.get("contrastive_weight", 0.15)
+        )
+    elif LOSS_FUNCTION == "unified_ctc":
+        criterion = UnifiedCTCLoss(
+            blank_idx=0, 
+            ctc_weight=config.get("ctc_weight", 0.5)
         )
     elif LOSS_FUNCTION == "standard_ce":
         criterion = StandardCrossEntropyLoss()
@@ -211,9 +216,14 @@ def train_model(config):
             features = torch.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
             optimizer.zero_grad()
             
+            # --- NEW: Routing data gracefully to the proper loss function ---
             if LOSS_FUNCTION == "bcl":
                 logits, embeddings = model(features)
                 loss, _, _ = criterion(logits, embeddings, labels)
+            elif LOSS_FUNCTION == "unified_ctc":
+                logits, _ = model(features)
+                hard_labels = torch.argmax(labels, dim=1)
+                loss, _, _ = criterion(logits, hard_labels)
             else:
                 logits, _ = model(features)
                 hard_labels = torch.argmax(labels, dim=1)
@@ -256,6 +266,10 @@ def train_model(config):
                 if LOSS_FUNCTION == "bcl":
                     logits, embeddings = model(features)
                     loss, _, _ = criterion(logits, embeddings, labels)
+                elif LOSS_FUNCTION == "unified_ctc":
+                    logits, _ = model(features)
+                    hard_labels = torch.argmax(labels, dim=1)
+                    loss, _, _ = criterion(logits, hard_labels)
                 else:
                     logits, _ = model(features)
                     hard_labels = torch.argmax(labels, dim=1)

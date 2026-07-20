@@ -31,7 +31,8 @@ MAMBA_DEFAULTS = {
     "num_vertices": 65,
     "tolerance_window": 5,
     "temporal_downsample_factor": 1, 
-    "loss_function": "standard_ce",
+    "loss_function": "unified_ctc",  # <-- UPDATED
+    "ctc_weight": 0.5,               # <-- NEW
     "class_weights": [0.1, 0.3, 1.0],
     "use_full_length": False,
     "base_features": ["x-cord", "y-cord", "z-cord"],
@@ -59,7 +60,8 @@ STGCN_MLP_MAMBA_DEFAULTS = {
     "num_vertices": 65,
     "tolerance_window": 5,
     "temporal_downsample_factor": 1, 
-    "loss_function": "standard_ce",
+    "loss_function": "unified_ctc",  # <-- UPDATED
+    "ctc_weight": 0.5,               # <-- NEW
     "class_weights": [0.1, 0.3, 1.0],
     "use_full_length": False,
     "base_features": ["x-cord", "y-cord", "z-cord"],
@@ -69,7 +71,7 @@ STGCN_MLP_MAMBA_DEFAULTS = {
     "decoder_threshold": 0.5,
     "d_model": 256,
     "n_layers": 4,
-    "mlp_expansion_factor": 4, # <-- NEW PARAMETER
+    "mlp_expansion_factor": 4, 
     "focal_loss_gamma": 2.0,
     "optimizer": "AdamW",
     "scheduler": "CosineAnnealingLR"
@@ -88,7 +90,8 @@ PURE_MAMBA_DEFAULTS = {
     "num_vertices": 65,
     "tolerance_window": 5,
     "temporal_downsample_factor": 1, 
-    "loss_function": "standard_ce",
+    "loss_function": "unified_ctc",  # <-- UPDATED
+    "ctc_weight": 0.5,               # <-- NEW
     "class_weights": [0.1, 0.3, 1.0],
     "use_full_length": False,
     "base_features": ["x-cord", "y-cord", "z-cord"],
@@ -116,7 +119,8 @@ LSTM_DEFAULTS = {
     "num_vertices": 65,
     "tolerance_window": 5,
     "temporal_downsample_factor": 1, 
-    "loss_function": "standard_ce",
+    "loss_function": "unified_ctc",  # <-- UPDATED
+    "ctc_weight": 0.5,               # <-- NEW
     "class_weights": [0.1, 0.3, 1.0],
     "use_full_length": False,
     "base_features": ["x-cord", "y-cord", "z-cord"],
@@ -144,7 +148,8 @@ STGCN_LSTM_DEFAULTS = {
     "num_vertices": 65,
     "tolerance_window": 5,
     "temporal_downsample_factor": 1,
-    "loss_function": "standard_ce",
+    "loss_function": "unified_ctc",  # <-- UPDATED
+    "ctc_weight": 0.5,               # <-- NEW
     "class_weights": [0.1, 0.3, 1.0],
     "use_full_length": False,
     "base_features": ["x-cord", "y-cord", "z-cord"],
@@ -164,7 +169,7 @@ STGCN_LSTM_DEFAULTS = {
 # ==============================================================================
 TRANSFORMER_DEFAULTS = {
     "basename": "transformer_baseline",
-    "batch_size": 16, # Beware of OOM errors on large window sizes!
+    "batch_size": 16, 
     "epochs": 50,
     "early_stopping": True,
     "patience": 10,
@@ -172,7 +177,8 @@ TRANSFORMER_DEFAULTS = {
     "num_vertices": 65,
     "tolerance_window": 5,
     "temporal_downsample_factor": 1,
-    "loss_function": "standard_ce",
+    "loss_function": "unified_ctc",  # <-- UPDATED
+    "ctc_weight": 0.5,               # <-- NEW
     "class_weights": [0.1, 0.3, 1.0],
     "use_full_length": False,
     "base_features": ["x-cord", "y-cord", "z-cord"],
@@ -194,7 +200,7 @@ TRANSFORMER_DEFAULTS = {
 # ==============================================================================
 STGCN_TRANSFORMER_DEFAULTS = {
     "basename": "stgcn_transformer",
-    "batch_size": 16, # Beware of OOM errors on large window sizes!
+    "batch_size": 16, 
     "epochs": 50,
     "early_stopping": True,
     "patience": 10,
@@ -202,7 +208,8 @@ STGCN_TRANSFORMER_DEFAULTS = {
     "num_vertices": 65,
     "tolerance_window": 5,
     "temporal_downsample_factor": 1,
-    "loss_function": "standard_ce",
+    "loss_function": "unified_ctc",  # <-- UPDATED
+    "ctc_weight": 0.5,               # <-- NEW
     "class_weights": [0.1, 0.3, 1.0],
     "use_full_length": False,
     "base_features": ["x-cord", "y-cord", "z-cord"],
@@ -249,42 +256,11 @@ if __name__ == "__main__":
         defaults = STGCN_MLP_MAMBA_DEFAULTS
         experiments_to_run = [
             {
-                "window_size": 16,
-                "overlap": 0,
-                "mlp_expansion_factor": 4,
-                "description": "overlap ratio (0/16), factor 4"
-            },
-            {
-                "window_size": 32,
-                "overlap": 0,
-                "mlp_expansion_factor": 4,
-                "description": "overlap ratio (0/32), factor 4"
-            },
-            {
-                "window_size": 64,
-                "overlap": 0,
-                "mlp_expansion_factor": 4,
-                "description": "overlap ratio (0/64), factor 4"
-            },
-            {
-                "window_size": 128,
-                "overlap": 0,
-                "mlp_expansion_factor": 4,
-                "description": "overlap ratio (0/128), factor 4"
-            },
-            {
                 "window_size": 256,
-                "overlap": 0,
+                "overlap": 128,
                 "mlp_expansion_factor": 4,
-                "description": "overlap ratio (0/256), factor 4"
-            },
-            {
-                "window_size": 512,
-                "overlap": 0,
-                "mlp_expansion_factor": 4,
-                "description": "overlap ratio (0/512), factor 4"
-            },
-
+                "description": "ST-GCN + MLP Bridge + Mamba (Unified CTC Loss Enabled)"
+            }
         ]
         
     elif CHOSEN_TYPE == 'pure_mamba':
