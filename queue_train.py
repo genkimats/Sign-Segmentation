@@ -31,7 +31,7 @@ MAMBA_DEFAULTS = {
     "num_vertices": 65,
     "tolerance_window": 5,
     "temporal_downsample_factor": 1, 
-    "loss_function": "unified_ctc",  # <-- UPDATED
+    "loss_function": "standard_ce",  # <-- UPDATED
     "ctc_weight": 0.5,               # <-- NEW
     "class_weights": [0.1, 0.3, 1.0],
     "use_full_length": False,
@@ -60,7 +60,7 @@ STGCN_MLP_MAMBA_DEFAULTS = {
     "num_vertices": 65,
     "tolerance_window": 5,
     "temporal_downsample_factor": 1, 
-    "loss_function": "unified_ctc",  # <-- UPDATED
+    "loss_function": "standard_ce",  # <-- UPDATED
     "ctc_weight": 0.5,               # <-- NEW
     "class_weights": [0.1, 0.3, 1.0],
     "use_full_length": False,
@@ -90,7 +90,7 @@ PURE_MAMBA_DEFAULTS = {
     "num_vertices": 65,
     "tolerance_window": 5,
     "temporal_downsample_factor": 1, 
-    "loss_function": "unified_ctc",  # <-- UPDATED
+    "loss_function": "standard_ce",  # <-- UPDATED
     "ctc_weight": 0.5,               # <-- NEW
     "class_weights": [0.1, 0.3, 1.0],
     "use_full_length": False,
@@ -119,7 +119,7 @@ LSTM_DEFAULTS = {
     "num_vertices": 65,
     "tolerance_window": 5,
     "temporal_downsample_factor": 1, 
-    "loss_function": "unified_ctc",  # <-- UPDATED
+    "loss_function": "standard_ce",  # <-- UPDATED
     "ctc_weight": 0.5,               # <-- NEW
     "class_weights": [0.1, 0.3, 1.0],
     "use_full_length": False,
@@ -148,7 +148,7 @@ STGCN_LSTM_DEFAULTS = {
     "num_vertices": 65,
     "tolerance_window": 5,
     "temporal_downsample_factor": 1,
-    "loss_function": "unified_ctc",  # <-- UPDATED
+    "loss_function": "standard_ce",  # <-- UPDATED
     "ctc_weight": 0.5,               # <-- NEW
     "class_weights": [0.1, 0.3, 1.0],
     "use_full_length": False,
@@ -177,7 +177,7 @@ TRANSFORMER_DEFAULTS = {
     "num_vertices": 65,
     "tolerance_window": 5,
     "temporal_downsample_factor": 1,
-    "loss_function": "unified_ctc",  # <-- UPDATED
+    "loss_function": "standard_ce",  # <-- UPDATED
     "ctc_weight": 0.5,               # <-- NEW
     "class_weights": [0.1, 0.3, 1.0],
     "use_full_length": False,
@@ -208,7 +208,7 @@ STGCN_TRANSFORMER_DEFAULTS = {
     "num_vertices": 65,
     "tolerance_window": 5,
     "temporal_downsample_factor": 1,
-    "loss_function": "unified_ctc",  # <-- UPDATED
+    "loss_function": "standard_ce",  # <-- UPDATED
     "ctc_weight": 0.5,               # <-- NEW
     "class_weights": [0.1, 0.3, 1.0],
     "use_full_length": False,
@@ -240,15 +240,48 @@ def calculate_in_channels(base_features, kinematic_features):
         
     return total_channels
 
+#endregion
+
 
 if __name__ == "__main__":
     if CHOSEN_TYPE == 'mamba':
         defaults = MAMBA_DEFAULTS
         experiments_to_run = [
             {
+                "window_size": 16,
+                "overlap": 0,
+                "loss_function": "unified_ctc",
+                "description": "overlap ratio (0/16), loss=unified_ctc"
+            },
+            {
+                "window_size": 32,
+                "overlap": 0,
+                "loss_function": "unified_ctc",
+                "description": "overlap ratio (0/32), loss=unified_ctc"
+            },
+            {
+                "window_size": 64,
+                "overlap": 0,
+                "loss_function": "unified_ctc",
+                "description": "overlap ratio (0/64), loss=unified_ctc"
+            },
+            {
+                "window_size": 128,
+                "overlap": 0,
+                "loss_function": "unified_ctc",
+                "description": "overlap ratio (0/128), loss=unified_ctc"
+            },
+            {
                 "window_size": 256,
-                "overlap": 128,
-                "description": "ST-GCN + Mamba: 256 Window"
+                "overlap": 0,
+                "loss_function": "unified_ctc",
+                "description": "overlap ratio (0/256), loss=unified_ctc"
+            },
+            {
+                "window_size": 512,
+                "overlap": 0,
+                "loss_function": "unified_ctc",
+                "description": "overlap ratio (0/512), loss=unified_ctc"
             }
         ]
         
