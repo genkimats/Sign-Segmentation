@@ -13,7 +13,8 @@ QUEUE_FILE = "train_queue.json"
 #          'stgcn_lstm'        - Hybrid ST-GCN + BiLSTM architecture
 #          'transformer'       - Pure Multi-Head Attention architecture (No GCN)
 #          'stgcn_transformer' - Hybrid ST-GCN + Transformer architecture
-CHOSEN_TYPE = 'mamba'
+#          'stgcn_mlp_mamba'   - ST-GCN + MLP Bridge + Mamba architecture
+CHOSEN_TYPE = 'stgcn_mlp_mamba'
 
 #region
 
@@ -46,6 +47,35 @@ MAMBA_DEFAULTS = {
 }
 
 # ==============================================================================
+# 🌉 ST-GCN + MLP + MAMBA DEFAULTS
+# ==============================================================================
+STGCN_MLP_MAMBA_DEFAULTS = {
+    "basename": "stgcn_mlp_mamba",  
+    "batch_size": 16,
+    "epochs": 50,
+    "early_stopping": True,
+    "patience": 10,
+    "learning_rate": 0.0001,
+    "num_vertices": 65,
+    "tolerance_window": 5,
+    "temporal_downsample_factor": 1, 
+    "loss_function": "standard_ce",
+    "class_weights": [0.1, 0.3, 1.0],
+    "use_full_length": False,
+    "base_features": ["x-cord", "y-cord", "z-cord"],
+    "kinematic_features": ["velocity", "acceleration", "jerk", "velocity-mag", "angular-vel"],
+    "in_channels": 14, 
+    "decoder_strategy": "threshold",
+    "decoder_threshold": 0.5,
+    "d_model": 256,
+    "n_layers": 4,
+    "mlp_expansion_factor": 4, # <-- NEW PARAMETER
+    "focal_loss_gamma": 2.0,
+    "optimizer": "AdamW",
+    "scheduler": "CosineAnnealingLR"
+}
+
+# ==============================================================================
 # 🐍 PURE MAMBA DEFAULT HYPERPARAMETERS (No GCN)
 # ==============================================================================
 PURE_MAMBA_DEFAULTS = {
@@ -54,7 +84,7 @@ PURE_MAMBA_DEFAULTS = {
     "epochs": 50,
     "early_stopping": True,
     "patience": 10,
-    "learning_rate": 0.0001,
+    "learning_rate": 0.0003,
     "num_vertices": 65,
     "tolerance_window": 5,
     "temporal_downsample_factor": 1, 
@@ -203,49 +233,27 @@ def calculate_in_channels(base_features, kinematic_features):
         
     return total_channels
 
-#endregion
 
 if __name__ == "__main__":
     if CHOSEN_TYPE == 'mamba':
         defaults = MAMBA_DEFAULTS
         experiments_to_run = [
             {
-                "window_size": 16,
-                "overlap": 0,
-                "batch_size": 4,
-                "description": "batch overlap (0/16), batch size 4"
-            },
-            {
-                "window_size": 32,
-                "overlap": 0,
-                "batch_size": 4,
-                "description": "batch overlap (0/32), batch size 4"
-            },
-            {
-                "window_size": 64,
-                "overlap": 0,
-                "batch_size": 8,
-                "description": "batch overlap (0/64), batch size 8"
-            },
+                "window_size": 256,
+                "overlap": 128,
+                "description": "ST-GCN + Mamba: 256 Window"
+            }
+        ]
+        
+    elif CHOSEN_TYPE == 'stgcn_mlp_mamba':
+        defaults = STGCN_MLP_MAMBA_DEFAULTS
+        experiments_to_run = [
             {
                 "window_size": 128,
-                "overlap": 0,
-                "batch_size": 16,
-                "description": "batch overlap (0/128), batch size 16"
-            },
-            {
-                "window_size": 256,
-                "overlap": 0,
-                "batch_size": 16,
-                "description": "batch overlap (0/256), batch size 16"
-            },
-            {
-                "window_size": 512,
-                "overlap": 0,
-                "batch_size": 16,
-                "description": "batch overlap (0/512), batch size 16"
+                "overlap": 64,
+                "mlp_expansion_factor": 4,
+                "description": "ST-GCN + MLP Bridge (4x) + Mamba: 128 Window"
             }
-
         ]
         
     elif CHOSEN_TYPE == 'pure_mamba':
@@ -272,34 +280,9 @@ if __name__ == "__main__":
         defaults = STGCN_LSTM_DEFAULTS
         experiments_to_run = [
             {
-                "window_size": 16,
-                "overlap": 0,
-                "description": "overlap (0/16), Start of removing checkpoints"
-            },
-            {
-                "window_size": 32,
-                "overlap": 0,
-                "description": "overlap (0/32)"
-            },
-            {
-                "window_size": 64,
-                "overlap": 0,
-                "description": "overlap (0/64)"
-            },
-            {
                 "window_size": 128,
-                "overlap": 0,
-                "description": "overlap (0/128)"
-            },
-            {
-                "window_size": 256,
-                "overlap": 0,
-                "description": "overlap (0/256)"
-            },
-            {
-                "window_size": 512,
-                "overlap": 0,
-                "description": "overlap (0/512)"
+                "overlap": 64,
+                "description": "Hybrid ST-GCN + BiLSTM (Evaluating GCN impact over standard MLPs)"
             }
         ]
         
@@ -317,42 +300,15 @@ if __name__ == "__main__":
         defaults = STGCN_TRANSFORMER_DEFAULTS
         experiments_to_run = [
             {
-                "window_size": 16,
-                "overlap": 0,
-                "description": "overlap (0/16), Start of removing checkpoints"
-            },
-            {
-                "window_size": 32,
-                "overlap": 0,
-                "description": "overlap (0/32)"
-            },
-            {
-                "window_size": 64,
-                "overlap": 0,
-                "description": "overlap (0/64)"
-            },
-            {
                 "window_size": 128,
-                "overlap": 0,
-                "description": "overlap (0/128)"
-            },
-            {
-                "window_size": 256,
-                "overlap": 0,
-                "description": "overlap (0/256)"
-            },
-            {
-                "window_size": 512,
-                "overlap": 0,
-                "description": "overlap (0/512)"
+                "overlap": 64,
+                "description": "Hybrid ST-GCN + Transformer Encoder (Full Spatial/Temporal awareness)"
             }
-
         ]
         
     else:
-        raise ValueError(f"Unknown CHOSEN_TYPE: '{CHOSEN_TYPE}'. Choose from 'mamba', 'pure_mamba', 'lstm', 'stgcn_lstm', 'transformer', 'stgcn_transformer'.")
+        raise ValueError(f"Unknown CHOSEN_TYPE: '{CHOSEN_TYPE}'.")
 
-    # Load existing queue to maintain the "prefixes" tracker
     if os.path.exists(QUEUE_FILE):
         with open(QUEUE_FILE, "r") as f:
             try:
@@ -364,7 +320,6 @@ if __name__ == "__main__":
     else:
         queue = [{"prefixes": []}]
 
-    # --- Manual Prefix Selection ---
     prefixes = queue[0]["prefixes"]
     print(f"Current tracked prefixes in {QUEUE_FILE}: {prefixes}")
     

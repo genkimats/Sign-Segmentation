@@ -6,6 +6,57 @@ from src.graph import SkeletonGraph
 from src.stgcn import STGCNBlock
 from src.stgcn import DecoupledSTGCNBlock
 
+
+class STGCN_MLP_Mamba(nn.Module):
+    """
+    ST-GCN + MLP Bridge + Mamba Architecture.
+    Expands the flattened spatial graph using a Multi-Layer Perceptron (MLP) 
+    before compressing it down to d_model for the Mamba sequence parser.
+    """
+    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3, mlp_expansion_factor=4, dropout=0.2):
+        super().__init__()
+        graph = SkeletonGraph(num_vertices=num_vertices)
+        A = graph.A
+        self.stgcn_blocks = nn.Sequential(
+            STGCNBlock(in_channels, stgcn_channels, A),
+            STGCNBlock(stgcn_channels, stgcn_channels, A)
+        )
+        
+        self.bridge_dim = num_vertices * stgcn_channels
+        hidden_dim = d_model * mlp_expansion_factor
+        
+        # --- NEW: MLP Bridge ---
+        self.feature_proj = nn.Sequential(
+            nn.Linear(self.bridge_dim, hidden_dim),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, d_model),
+            nn.LayerNorm(d_model),
+            nn.Dropout(dropout)
+        )
+        
+        self.mamba_layers = nn.ModuleList([
+            Mamba(d_model=d_model, d_state=16, d_conv=4, expand=2) for _ in range(n_layers)
+        ])
+        self.classifier = nn.Linear(d_model, num_classes)
+
+    def forward(self, x):
+        B, C, T, V = x.shape
+        x = self.stgcn_blocks(x) 
+        x = x.permute(0, 2, 3, 1).contiguous()
+        x = x.view(B, T, -1) 
+        
+        x = self.feature_proj(x + 1e-5) 
+        
+        for layer in self.mamba_layers:
+            x = layer(x)
+            
+        embeddings = x.permute(0, 2, 1) 
+        logits = self.classifier(x)
+        logits = logits.permute(0, 2, 1) 
+        return logits, embeddings
+    
+
 # ==============================================================================
 # TRANSFORMER UTILITIES
 # ==============================================================================

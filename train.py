@@ -12,7 +12,7 @@ import copy
 
 # Import our custom modules
 from src.dataset import SignSegmentationDataset
-from src.models import PureMambaBaseline, BiMambaBaseline, STGCN_Mamba, STGCN_BiMamba, Decoupled_STGCN_Mamba, BiLSTM_Baseline, STGCN_BiLSTM, TransformerBaseline, STGCN_Transformer
+from src.models import PureMambaBaseline, BiMambaBaseline, STGCN_Mamba, STGCN_MLP_Mamba, STGCN_BiMamba, Decoupled_STGCN_Mamba, BiLSTM_Baseline, STGCN_BiLSTM, TransformerBaseline, STGCN_Transformer
 from src.metrics import evaluate_batch
 from src.loss import CombinedBoundaryLoss, FocalLoss, StandardCrossEntropyLoss, WeightedCrossEntropyLoss
 from src.decoder import decode_predictions
@@ -26,6 +26,7 @@ MODEL_REGISTRY = {
     "pure_mamba": PureMambaBaseline,
     "bi_mamba": BiMambaBaseline,
     "stgcn_mamba": STGCN_Mamba,
+    "stgcn_mlp_mamba": STGCN_MLP_Mamba, # <-- ADDED
     "stgcn_bimamba": STGCN_BiMamba,
     "decoupled_stgcn_mamba": Decoupled_STGCN_Mamba,
     "bilstm_baseline": BiLSTM_Baseline,
@@ -35,7 +36,6 @@ MODEL_REGISTRY = {
 }
 
 def get_next_job():
-    """Reads the queue file, pops the first job (at index 1), updates the file, and returns the job."""
     if not os.path.exists(QUEUE_FILE):
         return None
         
@@ -45,25 +45,20 @@ def get_next_job():
         except json.JSONDecodeError:
             return None
             
-    # If the queue only contains the prefixes array (len <= 1), there are no jobs
     if not queue or len(queue) <= 1:
         return None
         
-    # Pop the first actual job (index 1) to leave the prefixes array at index 0 intact
     next_job = queue.pop(1)
     
-    # Save the remaining queue
     with open(QUEUE_FILE, "w") as f:
         json.dump(queue, f, indent=4)
         
     return next_job
 
 def train_model(config):
-    """Executes a single training run based on the provided configuration dictionary."""
     print(f"\n{'='*60}\n🚀 STARTING QUEUED JOB\n{'='*60}")
     print(json.dumps(config, indent=4))
     
-    # Unpack config
     BATCH_SIZE = config["batch_size"]
     EPOCHS = config["epochs"]
     EARLY_STOPPING = config.get("early_stopping", True)
@@ -73,7 +68,7 @@ def train_model(config):
     OVERLAP = config["overlap"]
     NUM_VERTICES = config["num_vertices"]
     TOLERANCE_WINDOW = config["tolerance_window"]
-    DOWNSAMPLE_FACTOR = config.get("temporal_downsample_factor", 1)  # Fetch downsample factor
+    DOWNSAMPLE_FACTOR = config.get("temporal_downsample_factor", 1) 
     LOSS_FUNCTION = config["loss_function"]
     CLASS_WEIGHTS = config["class_weights"]
     USE_FULL_LENGTH = config["use_full_length"]
@@ -93,18 +88,15 @@ def train_model(config):
     run_name = f"{MODEL_NAME}-{prefix}"
     print(f"📁 Assigned Run Name: {run_name}")
     
-    # Setup directories
     model_dir = "saved_models"
     os.makedirs(model_dir, exist_ok=True)
     
     exp_dir = os.path.join("experiments", run_name)
     os.makedirs(exp_dir, exist_ok=True)
     
-    # Save hyperparams
     with open(os.path.join(exp_dir, "hyperparameters.json"), 'w') as f:
         json.dump(config, f, indent=4)
         
-    # --- Strict Dataset Splitting ---
     train_dataset = SignSegmentationDataset(
         keypoints_dir="processed_data/keypoints",
         labels_dir="processed_data/BIO_tags",
@@ -137,7 +129,6 @@ def train_model(config):
     train_loader = DataLoader(train_dataset, batch_size=loader_batch_size, shuffle=True, num_workers=4, pin_memory=True)
     val_loader = DataLoader(val_dataset, batch_size=loader_batch_size, shuffle=False, num_workers=4, pin_memory=True)
     
-    # Model Init
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model_class = MODEL_REGISTRY.get(MODEL_NAME)
     
@@ -145,7 +136,6 @@ def train_model(config):
         print(f"❌ Error: Model '{MODEL_NAME}' not found in registry. Skipping.")
         return
         
-    # Safely unpack standard arguments + architecture-specific arguments
     model_kwargs = {
         "in_channels": IN_CHANNELS,
         "num_vertices": NUM_VERTICES,
@@ -154,14 +144,16 @@ def train_model(config):
         "n_layers": N_LAYERS
     }
     
-    # Inject Transformer-specific arguments if applicable
     if MODEL_NAME in ["transformer_baseline", "stgcn_transformer"]:
         model_kwargs["nhead"] = config.get("nhead", 8)
         model_kwargs["dim_feedforward"] = config.get("dim_feedforward", D_MODEL * 4)
+        
+    # --- NEW: Inject MLP param if using the new class ---
+    if MODEL_NAME == "stgcn_mlp_mamba":
+        model_kwargs["mlp_expansion_factor"] = config.get("mlp_expansion_factor", 4)
 
     model = model_class(**model_kwargs).to(device)
 
-    # Loss Selection
     weights = torch.tensor(CLASS_WEIGHTS, dtype=torch.float).to(device)
     
     if LOSS_FUNCTION == "bcl":
@@ -178,7 +170,6 @@ def train_model(config):
     else:
         raise ValueError(f"Unknown loss function '{LOSS_FUNCTION}'")
 
-    # Optimizer & Scheduler
     if OPTIMIZER_NAME == "AdamW":
         optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=0.01)
     else:
@@ -195,20 +186,17 @@ def train_model(config):
         writer = csv.writer(file)
         writer.writerow(['epoch', 'train_loss', 'val_loss', 'frame_f1', 'mean_iou', 'segment_f1', 'epoch_time'])
     
-    # Trackers for Checkpointing & Early Stopping
     best_combined_score = -1.0
     best_epoch = 0
     best_model_state = None
     epochs_without_improvement = 0
     actual_epochs_ran = 0
     
-    # Hardware monitoring setup
     start_train_time = time.time()
     gpu_utilization_samples = []
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats(device)
     
-    # 4. Training Loop
     for epoch in range(1, EPOCHS + 1):
         actual_epochs_ran = epoch
         epoch_start_time = time.time()
@@ -253,7 +241,6 @@ def train_model(config):
         if scheduler:
             scheduler.step()
             
-        # Validation Phase
         model.eval()
         val_loss = 0.0
         val_frame_f1, val_iou, val_seg_f1 = [], [], []
@@ -321,7 +308,6 @@ def train_model(config):
         epoch_end_time = time.time()
         epoch_duration = round(epoch_end_time - epoch_start_time, 2)
         
-        # --- Checkpoint Best Model & Early Stopping ---
         combined_score = epoch_f1 + epoch_iou + epoch_seg
         
         if combined_score > best_combined_score:
@@ -380,7 +366,6 @@ def train_model(config):
         
     print(f"📊 Hardware summary saved to {summary_save_path}")
         
-    # Save Model Weights
     model_save_path = os.path.join(model_dir, f"{run_name}.pth")
     if best_model_state:
         torch.save(best_model_state, model_save_path)
