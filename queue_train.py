@@ -249,11 +249,42 @@ if __name__ == "__main__":
         defaults = STGCN_MLP_MAMBA_DEFAULTS
         experiments_to_run = [
             {
-                "window_size": 128,
-                "overlap": 64,
+                "window_size": 16,
+                "overlap": 0,
                 "mlp_expansion_factor": 4,
-                "description": "ST-GCN + MLP Bridge (4x) + Mamba: 128 Window"
-            }
+                "description": "overlap ratio (0/16), factor 4"
+            },
+            {
+                "window_size": 32,
+                "overlap": 0,
+                "mlp_expansion_factor": 4,
+                "description": "overlap ratio (0/32), factor 4"
+            },
+            {
+                "window_size": 64,
+                "overlap": 0,
+                "mlp_expansion_factor": 4,
+                "description": "overlap ratio (0/64), factor 4"
+            },
+            {
+                "window_size": 128,
+                "overlap": 0,
+                "mlp_expansion_factor": 4,
+                "description": "overlap ratio (0/128), factor 4"
+            },
+            {
+                "window_size": 256,
+                "overlap": 0,
+                "mlp_expansion_factor": 4,
+                "description": "overlap ratio (0/256), factor 4"
+            },
+            {
+                "window_size": 512,
+                "overlap": 0,
+                "mlp_expansion_factor": 4,
+                "description": "overlap ratio (0/512), factor 4"
+            },
+
         ]
         
     elif CHOSEN_TYPE == 'pure_mamba':
