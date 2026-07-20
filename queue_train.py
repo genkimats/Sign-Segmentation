@@ -14,7 +14,7 @@ QUEUE_FILE = "train_queue.json"
 #          'transformer'       - Pure Multi-Head Attention architecture (No GCN)
 #          'stgcn_transformer' - Hybrid ST-GCN + Transformer architecture
 #          'stgcn_mlp_mamba'   - ST-GCN + MLP Bridge + Mamba architecture
-CHOSEN_TYPE = 'stgcn_mamba'
+CHOSEN_TYPE = 'mamba'
 
 #region
 
