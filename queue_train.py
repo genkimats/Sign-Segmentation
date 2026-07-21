@@ -250,38 +250,38 @@ if __name__ == "__main__":
             {
                 "window_size": 16,
                 "overlap": 0,
-                "loss_function": "unified_ctc",
-                "description": "overlap ratio (0/16), loss=unified_ctc"
+                "d_model": 512,
+                "description": "overlap ratio (0/16), d_model=512"
             },
             {
                 "window_size": 32,
                 "overlap": 0,
-                "loss_function": "unified_ctc",
-                "description": "overlap ratio (0/32), loss=unified_ctc"
+                "d_model": 512,
+                "description": "overlap ratio (0/32), d_model=512"
             },
             {
                 "window_size": 64,
                 "overlap": 0,
-                "loss_function": "unified_ctc",
-                "description": "overlap ratio (0/64), loss=unified_ctc"
+                "d_model": 512,
+                "description": "overlap ratio (0/64), d_model=512"
             },
             {
                 "window_size": 128,
                 "overlap": 0,
-                "loss_function": "unified_ctc",
-                "description": "overlap ratio (0/128), loss=unified_ctc"
+                "d_model": 512,
+                "description": "overlap ratio (0/128), d_model=512"
             },
             {
                 "window_size": 256,
                 "overlap": 0,
-                "loss_function": "unified_ctc",
-                "description": "overlap ratio (0/256), loss=unified_ctc"
+                "d_model": 512,
+                "description": "overlap ratio (0/256), d_model=512"
             },
             {
                 "window_size": 512,
                 "overlap": 0,
-                "loss_function": "unified_ctc",
-                "description": "overlap ratio (0/512), loss=unified_ctc"
+                "d_model": 512,
+                "description": "overlap ratio (0/512), d_model=512"
             }
         ]
         
