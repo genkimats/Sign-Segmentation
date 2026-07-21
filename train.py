@@ -155,7 +155,6 @@ def train_model(config):
 
     weights = torch.tensor(CLASS_WEIGHTS, dtype=torch.float).to(device)
     
-    # --- NEW: Unified CTC Loss Injection ---
     if LOSS_FUNCTION == "bcl":
         criterion = CombinedBoundaryLoss(
             focal_gamma=FOCAL_LOSS_GAMMA, 
@@ -216,7 +215,6 @@ def train_model(config):
             features = torch.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
             optimizer.zero_grad()
             
-            # --- NEW: Routing data gracefully to the proper loss function ---
             if LOSS_FUNCTION == "bcl":
                 logits, embeddings = model(features)
                 loss, _, _ = criterion(logits, embeddings, labels)
