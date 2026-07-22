@@ -248,46 +248,18 @@ if __name__ == "__main__":
         defaults = MAMBA_DEFAULTS
         experiments_to_run = [
             {
-                "window_size": 16,
+                "window_size": 1024,
                 "overlap": 0,
-                "d_model": 512,
                 "kinematic_features": [],
-                "description": "overlap ratio (0/16), d_model=512, no kinetic"
+                "loss_function": "unified_ctc",
+                "description": "overlap ratio (0/16), loss=unified_ctc, no kinetic"
             },
             {
-                "window_size": 32,
+                "window_size": 2048,
                 "overlap": 0,
-                "d_model": 512,
                 "kinematic_features": [],
-                "description": "overlap ratio (0/32), d_model=512, no kinetic"
-            },
-            {
-                "window_size": 64,
-                "overlap": 0,
-                "d_model": 512,
-                "kinematic_features": [],
-                "description": "overlap ratio (0/64), d_model=512, no kinetic"
-            },
-            {
-                "window_size": 128,
-                "overlap": 0,
-                "d_model": 512,
-                "kinematic_features": [],
-                "description": "overlap ratio (0/128), d_model=512, no kinetic"
-            },
-            {
-                "window_size": 256,
-                "overlap": 0,
-                "d_model": 512,
-                "kinematic_features": [],
-                "description": "overlap ratio (0/256), d_model=512, no kinetic"
-            },
-            {
-                "window_size": 512,
-                "overlap": 0,
-                "d_model": 512,
-                "kinematic_features": [],
-                "description": "overlap ratio (0/512), d_model=512, no kinetic"
+                "loss_function": "unified_ctc",
+                "description": "overlap ratio (0/32), loss=unified_ctc, no kinetic"
             }
         ]
         
