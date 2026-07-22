@@ -248,18 +248,52 @@ if __name__ == "__main__":
         defaults = MAMBA_DEFAULTS
         experiments_to_run = [
             {
-                "window_size": 1024,
+                "window_size": 16,
                 "overlap": 0,
                 "kinematic_features": [],
-                "loss_function": "unified_ctc",
-                "description": "overlap ratio (0/16), loss=unified_ctc, no kinetic"
+                "class_weights": [0.5, 0.7, 1.0],
+                "loss_function": "weighted_ce",
+                "description": "overlap ratio (0/16), loss=weighted_ce(0.5,0.7,1.0), no kinetic"
             },
             {
-                "window_size": 2048,
+                "window_size": 32,
                 "overlap": 0,
                 "kinematic_features": [],
-                "loss_function": "unified_ctc",
-                "description": "overlap ratio (0/32), loss=unified_ctc, no kinetic"
+                "loss_function": "weighted_ce",
+                "class_weights": [0.5, 0.7, 1.0],
+                "description": "overlap ratio (0/32), loss=weighted_ce(0.5,0.7,1.0), no kinetic"
+            },
+            {
+                "window_size": 64,
+                "overlap": 0,
+                "kinematic_features": [],
+                "loss_function": "weighted_ce",
+                "class_weights": [0.5, 0.7, 1.0],
+                "description": "overlap ratio (0/64), loss=weighted_ce(0.5,0.7,1.0), no kinetic"
+            },
+            {
+                "window_size": 128,
+                "overlap": 64,
+                "kinematic_features": ["velocity", "acceleration", "jerk", "velocity-mag", "angular-vel"],
+                "loss_function": "standard_ce",
+                "class_weights": [0.1, 0.3, 1.0],
+                "description": "overlap ratio (64/128), loss=standard_ce, all kinetic features"
+            },
+            {
+                "window_size": 256,
+                "overlap": 128,
+                "kinematic_features": ["velocity", "acceleration", "jerk", "velocity-mag", "angular-vel"],
+                "loss_function": "standard_ce",
+                "class_weights": [0.1, 0.3, 1.0],
+                "description": "overlap ratio (128/256), loss=standard_ce, all kinetic features"
+            },
+            {
+                "window_size": 512,
+                "overlap": 256,
+                "kinematic_features": ["velocity", "acceleration", "jerk", "velocity-mag", "angular-vel"],
+                "loss_function": "standard_ce",
+                "class_weights": [0.1, 0.3, 1.0],
+                "description": "overlap ratio (256/512), loss=standard_ce, all kinetic features"
             }
         ]
         
