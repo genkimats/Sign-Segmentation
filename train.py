@@ -62,13 +62,13 @@ def train_model(config):
     BATCH_SIZE = config["batch_size"]
     EPOCHS = config["epochs"]
     EARLY_STOPPING = config.get("early_stopping", True)
-    PATIENCE = config.get("patience", 10)
+    PATIENCE = config.get("patience")
     LEARNING_RATE = config["learning_rate"]
     WINDOW_SIZE = config["window_size"]
     OVERLAP = config["overlap"]
     NUM_VERTICES = config["num_vertices"]
     TOLERANCE_WINDOW = config["tolerance_window"]
-    DOWNSAMPLE_FACTOR = config.get("temporal_downsample_factor", 1) 
+    DOWNSAMPLE_FACTOR = config.get("temporal_downsample_factor") 
     LOSS_FUNCTION = config["loss_function"]
     CLASS_WEIGHTS = config["class_weights"]
     USE_FULL_LENGTH = config["use_full_length"]
@@ -79,7 +79,7 @@ def train_model(config):
     DECODER_THRESHOLD = config["decoder_threshold"]
     D_MODEL = config["d_model"]
     N_LAYERS = config["n_layers"]
-    FOCAL_LOSS_GAMMA = config.get("focal_loss_gamma", 2.0)
+    FOCAL_LOSS_GAMMA = config.get("focal_loss_gamma")
     OPTIMIZER_NAME = config["optimizer"]
     SCHEDULER_NAME = config["scheduler"]
     MODEL_NAME = config["basename"]
