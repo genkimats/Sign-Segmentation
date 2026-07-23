@@ -251,37 +251,49 @@ if __name__ == "__main__":
                 "window_size": 16,
                 "overlap": 0,
                 "kinematic_features": [],
-                "description": "overlap ratio (0/16), just no kinetic"
+                "loss_function": "weighted_ce",
+                "class_weights": [0.1, 0.3, 1.0],
+                "description": "overlap ratio (0/16), loss=weighted_ce(0.1,0.3,1.0), no kinetic"
             },
             {
                 "window_size": 32,
                 "overlap": 0,
                 "kinematic_features": [],
-                "description": "overlap ratio (0/32), just no kinetic"
+                "loss_function": "weighted_ce",
+                "class_weights": [0.1, 0.3, 1.0],
+                "description": "overlap ratio (0/32), loss=weighted_ce(0.1,0.3,1.0), no kinetic"
             },
             {
                 "window_size": 64,
                 "overlap": 0,
                 "kinematic_features": [],
-                "description": "overlap ratio (0/64), just no kinetic"
+                "loss_function": "weighted_ce",
+                "class_weights": [0.1, 0.3, 1.0],
+                "description": "overlap ratio (0/64), loss=weighted_ce(0.1,0.3,1.0), no kinetic"
             },
             {
                 "window_size": 128,
                 "overlap": 0,
                 "kinematic_features": [],
-                "description": "overlap ratio (0/128), just no kinetic"
+                "loss_function": "weighted_ce",
+                "class_weights": [0.1, 0.3, 1.0],
+                "description": "overlap ratio (0/128), loss=weighted_ce(0.1,0.3,1.0), no kinetic"
             },
             {
                 "window_size": 256,
                 "overlap": 0,
                 "kinematic_features": [],
-                "description": "overlap ratio (0/256), just no kinetic"
+                "loss_function": "weighted_ce",
+                "class_weights": [0.1, 0.3, 1.0],
+                "description": "overlap ratio (0/256), loss=weighted_ce(0.1,0.3,1.0), no kinetic"
             },
             {
                 "window_size": 512,
                 "overlap": 0,
                 "kinematic_features": [],
-                "description": "overlap ratio (0/512), just no kinetic"
+                "loss_function": "weighted_ce",
+                "class_weights": [0.1, 0.3, 1.0],
+                "description": "overlap ratio (0/512), loss=weighted_ce(0.1,0.3,1.0), no kinetic"
             }
         ]
         
