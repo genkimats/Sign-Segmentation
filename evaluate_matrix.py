@@ -150,7 +150,14 @@ def main():
             inputs = inputs.to(device)
             targets = targets.to(device)
 
-            logits = model(inputs)
+            outputs = model(inputs)
+            
+            # Handle models that output a tuple (logits, embeddings) for Boundary Contrastive Loss
+            if isinstance(outputs, tuple):
+                logits = outputs[0]
+            else:
+                logits = outputs
+
             preds = torch.argmax(logits, dim=1)
             
             if targets.dim() == 3:
