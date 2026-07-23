@@ -12,20 +12,22 @@ from tqdm import tqdm
 
 # Import your custom modules
 from src.dataset import SignSegmentationDataset
-from src.models import PureMambaBaseline, BiMambaBaseline, STGCN_Mamba, STGCN_BiMamba
+from src.models import PureMambaBaseline, BiMambaBaseline, STGCN_Mamba, STGCN_BiMamba, STGCN_MLP_Mamba, Decoupled_STGCN_Mamba
 
 # ==============================================================================
 # 🎛️ DEFAULT CONFIGURATION
 # ==============================================================================
 # Change this variable to set the default model when only a prefix is provided
-# Options: "pure_mamba", "bi_mamba", "stgcn_mamba", "stgcn_bimamba"
 CHOSEN_MODEL = "stgcn_mamba"  
 
+# Safely expand registry based on your train.py imports
 MODEL_REGISTRY = {
     "pure_mamba": PureMambaBaseline,
     "bi_mamba": BiMambaBaseline,
     "stgcn_mamba": STGCN_Mamba,
-    "stgcn_bimamba": STGCN_BiMamba
+    "stgcn_bimamba": STGCN_BiMamba,
+    "stgcn_mlp_mamba": STGCN_MLP_Mamba,
+    "decoupled_stgcn_mamba": Decoupled_STGCN_Mamba
 }
 
 # Mapping integers to labels for the graph
@@ -84,6 +86,11 @@ def main():
     D_MODEL = hp.get("d_model", 256)
     N_LAYERS = hp.get("n_layers", 4)
     TOLERANCE_WINDOW = hp.get("tolerance_window", 5)
+    
+    # Pulling dataset feature formatting from your new JSON
+    BASE_FEATURES = hp.get("base_features", ["x-cord", "y-cord", "z-cord"])
+    KINEMATIC_FEATURES = hp.get("kinematic_features", [])
+    USE_FULL_LENGTH = hp.get("use_full_length", False)
 
     print("="*60)
     print(f"📊 CONFUSION MATRIX EVALUATION: {chosen_model.upper()} (Run {prefix_formatted})")
@@ -102,19 +109,35 @@ def main():
     ).to(device)
     
     print(f"📥 Loading weights from {weights_path}...")
-    # Load weights safely (mapping to CPU if CUDA is unavailable during testing)
     model.load_state_dict(torch.load(weights_path, map_location=device))
     model.eval()
 
-    # 5. Initialize Validation Dataset
-    print("📂 Loading Validation Dataset...")
+    # 5. Smart Path Resolution for Dataset
+    # Checks if a dedicated val folder exists, otherwise falls back to processed_data
+    if os.path.exists("processed_data/val/keypoints"):
+        kp_dir = "processed_data/val/keypoints"
+        lbl_dir = "processed_data/val/BIO_tags"
+    else:
+        kp_dir = "processed_data/keypoints"
+        lbl_dir = "processed_data/BIO_tags"
+
+    print(f"📂 Loading Dataset from: {kp_dir}")
     val_dataset = SignSegmentationDataset(
-        keypoints_dir="data/val/keypoints", 
-        labels_dir="data/val/BIO_tags", 
+        keypoints_dir=kp_dir, 
+        labels_dir=lbl_dir, 
         window_size=WINDOW_SIZE, 
         overlap=OVERLAP, 
-        tolerance_window=TOLERANCE_WINDOW
+        tolerance_window=TOLERANCE_WINDOW,
+        use_full_length=USE_FULL_LENGTH,
+        base_features=BASE_FEATURES,
+        kinematic_features=KINEMATIC_FEATURES
     )
+    
+    # Explicit check to stop empty matrices
+    if len(val_dataset) == 0:
+        print(f"❌ Error: The dataset found 0 valid slices. Check your directories: {kp_dir} and {lbl_dir}")
+        return
+
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False)
 
     # 6. Run Inference
@@ -127,25 +150,17 @@ def main():
             inputs = inputs.to(device)
             targets = targets.to(device)
 
-            # Get logits: Shape (B, Classes, T)
             logits = model(inputs)
-            
-            # Get hard predictions: Argmax over class dimension (Dim 1) -> Shape (B, T)
             preds = torch.argmax(logits, dim=1)
             
-            # Soft targets are usually (B, T, Classes). We need hard targets (B, T)
-            # If targets is already (B, T), argmax will fail, so check shape first
             if targets.dim() == 3:
-                # Assuming shape is (B, Classes, T) based on standard loss expectations, 
-                # or (B, T, Classes). We use the last dimension if it's 3.
                 if targets.shape[1] == 3:
-                    truths = torch.argmax(targets, dim=1) # (B, Classes, T) -> (B, T)
+                    truths = torch.argmax(targets, dim=1) 
                 else:
-                    truths = torch.argmax(targets, dim=2) # (B, T, Classes) -> (B, T)
+                    truths = torch.argmax(targets, dim=2) 
             else:
                 truths = targets
 
-            # Flatten and move to CPU
             all_preds.extend(preds.view(-1).cpu().numpy())
             all_truths.extend(truths.view(-1).cpu().numpy())
 
@@ -153,14 +168,12 @@ def main():
     print("🧮 Calculating Matrix...")
     cm = confusion_matrix(all_truths, all_preds, labels=[0, 1, 2])
     
-    # Calculate percentages for annotations
     cm_percentages = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
-    cm_percentages = np.nan_to_num(cm_percentages) # Handle division by zero if a class is entirely missing
+    cm_percentages = np.nan_to_num(cm_percentages)
 
     # 8. Plot the Matrix
     plt.figure(figsize=(10, 8))
     
-    # Create custom annotations combining raw count and percentage
     annot_data = [[f"{count}\n({percent:.1%})" for count, percent in zip(row_count, row_percent)] 
                   for row_count, row_percent in zip(cm, cm_percentages)]
     
@@ -169,11 +182,10 @@ def main():
                 yticklabels=[LABEL_MAP[i] for i in [0, 1, 2]],
                 cbar_kws={'label': 'Number of Frames'})
     
-    plt.title(f'Confusion Matrix: {chosen_model} (Run {prefix_formatted})\nValidation Set', fontsize=16, fontweight='bold', pad=20)
+    plt.title(f'Confusion Matrix: {chosen_model} (Run {prefix_formatted})\nDataset: {kp_dir}', fontsize=16, fontweight='bold', pad=20)
     plt.ylabel('True Grammatical Label', fontsize=14, fontweight='bold')
     plt.xlabel('Model Prediction', fontsize=14, fontweight='bold')
     
-    # Save the plot inside the experiment directory so you have a record of it
     save_path = os.path.join(exp_dir, "confusion_matrix.png")
     plt.savefig(save_path, bbox_inches='tight', dpi=300)
     print(f"✅ Matrix saved to {save_path}")
