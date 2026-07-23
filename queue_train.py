@@ -248,18 +248,40 @@ if __name__ == "__main__":
         defaults = MAMBA_DEFAULTS
         experiments_to_run = [
             {
-                "window_size": 1024,
+                "window_size": 16,
                 "overlap": 0,
                 "kinematic_features": [],
-                "loss_function": "unified_ctc",
-                "description": "overlap ratio (0/16), loss=unified_ctc, no kinetic"
+                "description": "overlap ratio (0/16), just no kinetic"
             },
             {
-                "window_size": 2048,
+                "window_size": 32,
                 "overlap": 0,
                 "kinematic_features": [],
-                "loss_function": "unified_ctc",
-                "description": "overlap ratio (0/32), loss=unified_ctc, no kinetic"
+                "description": "overlap ratio (0/32), just no kinetic"
+            },
+            {
+                "window_size": 64,
+                "overlap": 0,
+                "kinematic_features": [],
+                "description": "overlap ratio (0/64), just no kinetic"
+            },
+            {
+                "window_size": 128,
+                "overlap": 0,
+                "kinematic_features": [],
+                "description": "overlap ratio (0/128), just no kinetic"
+            },
+            {
+                "window_size": 256,
+                "overlap": 0,
+                "kinematic_features": [],
+                "description": "overlap ratio (0/256), just no kinetic"
+            },
+            {
+                "window_size": 512,
+                "overlap": 0,
+                "kinematic_features": [],
+                "description": "overlap ratio (0/512), just no kinetic"
             }
         ]
         
