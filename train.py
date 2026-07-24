@@ -10,6 +10,11 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 import copy
 
+# --- NEW: Imports for Confusion Matrix ---
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.metrics import confusion_matrix
+
 # Import our custom modules
 from src.dataset import SignSegmentationDataset
 from src.models import PureMambaBaseline, BiMambaBaseline, STGCN_Mamba, STGCN_MLP_Mamba, STGCN_BiMamba, Decoupled_STGCN_Mamba, BiLSTM_Baseline, STGCN_BiLSTM, TransformerBaseline, STGCN_Transformer
@@ -62,13 +67,13 @@ def train_model(config):
     BATCH_SIZE = config["batch_size"]
     EPOCHS = config["epochs"]
     EARLY_STOPPING = config.get("early_stopping", True)
-    PATIENCE = config.get("patience")
+    PATIENCE = config.get("patience", 10)
     LEARNING_RATE = config["learning_rate"]
     WINDOW_SIZE = config["window_size"]
     OVERLAP = config["overlap"]
     NUM_VERTICES = config["num_vertices"]
     TOLERANCE_WINDOW = config["tolerance_window"]
-    DOWNSAMPLE_FACTOR = config.get("temporal_downsample_factor") 
+    DOWNSAMPLE_FACTOR = config.get("temporal_downsample_factor", 1) 
     LOSS_FUNCTION = config["loss_function"]
     CLASS_WEIGHTS = config["class_weights"]
     USE_FULL_LENGTH = config["use_full_length"]
@@ -79,7 +84,7 @@ def train_model(config):
     DECODER_THRESHOLD = config["decoder_threshold"]
     D_MODEL = config["d_model"]
     N_LAYERS = config["n_layers"]
-    FOCAL_LOSS_GAMMA = config.get("focal_loss_gamma")
+    FOCAL_LOSS_GAMMA = config.get("focal_loss_gamma", 2.0)
     OPTIMIZER_NAME = config["optimizer"]
     SCHEDULER_NAME = config["scheduler"]
     MODEL_NAME = config["basename"]
@@ -253,6 +258,10 @@ def train_model(config):
         val_loss = 0.0
         val_frame_f1, val_iou, val_seg_f1 = [], [], []
         
+        # --- NEW: Arrays to hold validation targets/predictions for confusion matrix ---
+        epoch_val_true = []
+        epoch_val_pred = []
+        
         with torch.no_grad():
             val_loop = tqdm(val_loader, desc=f"Epoch {epoch}/{EPOCHS} [Val]", leave=False)
             for features, labels in val_loop:
@@ -296,6 +305,10 @@ def train_model(config):
                     
                     pred_seq = pred_seq_tensor[0].cpu().numpy().astype(float)
                     
+                    # --- NEW: Accumulate true and predicted arrays ---
+                    epoch_val_true.extend(true_seq.tolist())
+                    epoch_val_pred.extend(pred_seq.tolist())
+                    
                     try:
                         metrics_out = evaluate_batch(np.array([pred_seq.tolist()]), np.array([true_seq.tolist()]))
                         if isinstance(metrics_out, dict):
@@ -328,6 +341,24 @@ def train_model(config):
             best_model_state = copy.deepcopy(model.state_dict())
             epochs_without_improvement = 0
             is_best = True
+            
+            # --- NEW: Generate and save confusion matrix on new best score ---
+            try:
+                cm = confusion_matrix(epoch_val_true, epoch_val_pred, labels=[0, 1, 2])
+                plt.figure(figsize=(8, 6))
+                sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
+                            xticklabels=['Outside (0)', 'Inside (1)', 'Begin (2)'], 
+                            yticklabels=['Outside (0)', 'Inside (1)', 'Begin (2)'])
+                plt.xlabel('Predicted')
+                plt.ylabel('Actual')
+                plt.title(f'Validation Confusion Matrix (Best Epoch {epoch})\n{run_name}')
+                
+                cm_save_path = os.path.join(exp_dir, "best_confusion_matrix.png")
+                plt.savefig(cm_save_path, bbox_inches='tight')
+                plt.close()
+            except Exception as e:
+                print(f"⚠️ Failed to generate confusion matrix: {e}")
+                
         else:
             epochs_without_improvement += 1
             is_best = False
