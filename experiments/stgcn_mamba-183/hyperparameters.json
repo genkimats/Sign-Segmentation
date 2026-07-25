@@ -1,0 +1,37 @@
+{
+    "basename": "stgcn_mamba",
+    "batch_size": 16,
+    "epochs": 50,
+    "early_stopping": true,
+    "patience": 10,
+    "learning_rate": 0.0001,
+    "num_vertices": 65,
+    "tolerance_window": 5,
+    "temporal_downsample_factor": 1,
+    "loss_function": "weighted_ce",
+    "ctc_weight": 0.5,
+    "class_weights": [
+        0.5,
+        0.9,
+        1.5
+    ],
+    "use_full_length": false,
+    "base_features": [
+        "x-cord",
+        "y-cord",
+        "z-cord"
+    ],
+    "kinematic_features": [],
+    "in_channels": 3,
+    "decoder_strategy": "threshold",
+    "decoder_threshold": 0.5,
+    "d_model": 256,
+    "n_layers": 4,
+    "focal_loss_gamma": 2.0,
+    "optimizer": "AdamW",
+    "scheduler": "CosineAnnealingLR",
+    "window_size": 512,
+    "overlap": 0,
+    "description": "overlap ratio (0/512), loss=weighted_ce(0.5,0.9,1.5), no kinetic",
+    "prefix": "183"
+}
