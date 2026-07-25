@@ -12,9 +12,8 @@ from hamer.models import load_hamer, DEFAULT_CHECKPOINT
 # ==============================================================================
 # CONFIGURATION
 # ==============================================================================
-INPUT_VIDEO_DIR = "data/raw_videos"
-OUTPUT_FEATURE_DIR = "processed_data/hamer_features"
-os.makedirs(OUTPUT_FEATURE_DIR, exist_ok=True)
+INPUT_VIDEO_DIR = os.path.expanduser("~/Genki_GR/Sign-Segmentation/data/raw_videos")
+OUTPUT_FEATURE_DIR = os.path.expanduser("~/Genki_GR/Sign-Segmentation/processed_data/hamer_features")os.makedirs(OUTPUT_FEATURE_DIR, exist_ok=True)
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -92,12 +91,7 @@ def process_hand(img, bbox, model, is_right_hand=True):
 # ==============================================================================
 def main():
     print(f"Loading HaMeR Model on {DEVICE}...")
-    
-    # 1. Define the absolute path to your HaMeR checkpoints
-    hamer_ckpt_dir = os.path.expanduser("~/Genki_GR/hamer/_DATA/hamer_ckpts/checkpoints/hamer.ckpt")
-    
-    # 2. Pass the absolute path instead of DEFAULT_CHECKPOINT
-    model, model_cfg = load_hamer(hamer_ckpt_dir)
+    model, model_cfg = load_hamer(DEFAULT_CHECKPOINT)
     model = model.to(DEVICE)
     model.eval()
     
