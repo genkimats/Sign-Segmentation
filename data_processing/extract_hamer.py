@@ -92,7 +92,12 @@ def process_hand(img, bbox, model, is_right_hand=True):
 # ==============================================================================
 def main():
     print(f"Loading HaMeR Model on {DEVICE}...")
-    model, model_cfg = load_hamer(DEFAULT_CHECKPOINT)
+    
+    # 1. Define the absolute path to your HaMeR checkpoints
+    hamer_ckpt_dir = os.path.expanduser("~/Genki_GR/hamer/_DATA/hamer_ckpts/checkpoints/hamer.ckpt")
+    
+    # 2. Pass the absolute path instead of DEFAULT_CHECKPOINT
+    model, model_cfg = load_hamer(hamer_ckpt_dir)
     model = model.to(DEVICE)
     model.eval()
     
