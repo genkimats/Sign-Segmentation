@@ -71,8 +71,11 @@ def process_hand(img, bbox, model, is_right_hand=True):
     crop_rgb = cv2.cvtColor(crop_resized, cv2.COLOR_BGR2RGB)
     input_tensor = transform(crop_rgb).unsqueeze(0).to(DEVICE)
     
+    # --- FIX: Wrap the tensor in a dictionary with the 'img' key ---
+    batch = {'img': input_tensor}
+    
     with torch.no_grad():
-        out = model(input_tensor)
+        out = model(batch)
         
     joints = out['pred_keypoints_3d'][0].cpu().numpy()  # (21, 3)
     vertices = out['pred_vertices'][0].cpu().numpy()    # (778, 3)
