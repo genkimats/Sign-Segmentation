@@ -12,7 +12,7 @@ from hamer.models import load_hamer, DEFAULT_CHECKPOINT
 # ==============================================================================
 # CONFIGURATION
 # ==============================================================================
-INPUT_VIDEO_DIR = os.path.expanduser("~/Genki_GR/Sign-Segmentation/data/raw_videos")
+INPUT_VIDEO_DIR = os.path.expanduser("~/Genki_GR/Sign-Segmentation/raw_data/videos")
 OUTPUT_FEATURE_DIR = os.path.expanduser("~/Genki_GR/Sign-Segmentation/processed_data/hamer_features")
 os.makedirs(OUTPUT_FEATURE_DIR, exist_ok=True)
 
