@@ -252,7 +252,7 @@ if __name__ == "__main__":
                 "overlap": 0,
                 "kinematic_features": [],
                 "loss_function": "weighted_ce",
-                "class_weights": [5.0, 7.0, 10.0],
+                "class_weights": [1.0, 1.0, 1.0],
                 "description": "overlap ratio (0/16), loss=weighted_ce(5.0,7.0,10.0), no kinetic"
             },
             {
