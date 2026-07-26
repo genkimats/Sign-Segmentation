@@ -34,6 +34,8 @@ MAMBA_DEFAULTS = {
     "loss_function": "standard_ce",  # <-- UPDATED
     "ctc_weight": 0.5,               # <-- NEW
     "class_weights": [0.1, 0.3, 1.0],
+    "tmse_weight": 0.15,             # <-- NEW: How strongly to penalize flickering
+    "tmse_threshold": 0.1,           # <-- NEW: Max cap to protect real boundaries
     "use_full_length": False,
     "base_features": ["x-cord", "y-cord", "z-cord"],
     "kinematic_features": ["velocity", "acceleration", "jerk", "velocity-mag", "angular-vel"],
@@ -63,6 +65,8 @@ STGCN_MLP_MAMBA_DEFAULTS = {
     "loss_function": "standard_ce",  # <-- UPDATED
     "ctc_weight": 0.5,               # <-- NEW
     "class_weights": [0.1, 0.3, 1.0],
+    "tmse_weight": 0.15,             # <-- NEW: How strongly to penalize flickering
+    "tmse_threshold": 0.1,           # <-- NEW: Max cap to protect real boundaries
     "use_full_length": False,
     "base_features": ["x-cord", "y-cord", "z-cord"],
     "kinematic_features": [],
@@ -93,6 +97,8 @@ PURE_MAMBA_DEFAULTS = {
     "loss_function": "standard_ce",  # <-- UPDATED
     "ctc_weight": 0.5,               # <-- NEW
     "class_weights": [0.1, 0.3, 1.0],
+    "tmse_weight": 0.15,             # <-- NEW: How strongly to penalize flickering
+    "tmse_threshold": 0.1,           # <-- NEW: Max cap to protect real boundaries
     "use_full_length": False,
     "base_features": ["x-cord", "y-cord", "z-cord"],
     "kinematic_features": [],
@@ -122,6 +128,8 @@ LSTM_DEFAULTS = {
     "loss_function": "standard_ce",  # <-- UPDATED
     "ctc_weight": 0.5,               # <-- NEW
     "class_weights": [0.1, 0.3, 1.0],
+    "tmse_weight": 0.15,             # <-- NEW: How strongly to penalize flickering
+    "tmse_threshold": 0.1,           # <-- NEW: Max cap to protect real boundaries
     "use_full_length": False,
     "base_features": ["x-cord", "y-cord", "z-cord"],
     "kinematic_features": [],
@@ -151,6 +159,8 @@ STGCN_LSTM_DEFAULTS = {
     "loss_function": "standard_ce",  # <-- UPDATED
     "ctc_weight": 0.5,               # <-- NEW
     "class_weights": [0.1, 0.3, 1.0],
+    "tmse_weight": 0.15,             # <-- NEW: How strongly to penalize flickering
+    "tmse_threshold": 0.1,           # <-- NEW: Max cap to protect real boundaries
     "use_full_length": False,
     "base_features": ["x-cord", "y-cord", "z-cord"],
     "kinematic_features": [],
@@ -180,6 +190,8 @@ TRANSFORMER_DEFAULTS = {
     "loss_function": "standard_ce",  # <-- UPDATED
     "ctc_weight": 0.5,               # <-- NEW
     "class_weights": [0.1, 0.3, 1.0],
+    "tmse_weight": 0.15,             # <-- NEW: How strongly to penalize flickering
+    "tmse_threshold": 0.1,           # <-- NEW: Max cap to protect real boundaries
     "use_full_length": False,
     "base_features": ["x-cord", "y-cord", "z-cord"],
     "kinematic_features": [],
@@ -211,6 +223,8 @@ STGCN_TRANSFORMER_DEFAULTS = {
     "loss_function": "standard_ce",  # <-- UPDATED
     "ctc_weight": 0.5,               # <-- NEW
     "class_weights": [0.1, 0.3, 1.0],
+    "tmse_weight": 0.15,             # <-- NEW: How strongly to penalize flickering
+    "tmse_threshold": 0.1,           # <-- NEW: Max cap to protect real boundaries
     "use_full_length": False,
     "base_features": ["x-cord", "y-cord", "z-cord"],
     "kinematic_features": [],

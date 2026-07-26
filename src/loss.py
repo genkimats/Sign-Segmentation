@@ -184,3 +184,49 @@ class UnifiedCTCLoss(nn.Module):
         total_loss = loss_ce + (self.ctc_weight * loss_ctc)
         
         return total_loss, loss_ce, loss_ctc
+
+# ==========================================
+# 6. Smoothing Truncated MSE Loss
+# ==========================================
+class SmoothingTruncatedMSELoss(nn.Module):
+    """
+    Penalizes temporal flickering. 
+    Caps the maximum penalty at `threshold` so actual, sharp boundaries 
+    aren't penalized for shifting quickly.
+    """
+    def __init__(self, threshold=0.1):
+        super().__init__()
+        self.threshold = threshold
+
+    def forward(self, logits):
+        # logits shape: (Batch, Classes, Time)
+        probs = F.softmax(logits, dim=1)
+        
+        # Calculate squared differences between consecutive frames
+        # diff shape: (Batch, Classes, Time - 1)
+        diff = probs[:, :, 1:] - probs[:, :, :-1]
+        mse = diff ** 2
+        
+        # Truncate the MSE to ignore massive shifts (real boundaries)
+        tmse = torch.clamp(mse, max=self.threshold)
+        
+        return tmse.mean()
+
+# ==========================================
+# 7. Combined Weighted CE + TMSE
+# ==========================================
+class WeightedCE_TMSE_Loss(nn.Module):
+    """Fuses Class-Weighted Cross Entropy with Truncated Temporal Smoothing."""
+    def __init__(self, weights, tmse_weight=0.15, threshold=0.1):
+        super().__init__()
+        self.wce = WeightedCrossEntropyLoss(weights=weights)
+        self.tmse = SmoothingTruncatedMSELoss(threshold=threshold)
+        self.tmse_weight = tmse_weight
+
+    def forward(self, logits, targets):
+        # logits: (B, C, T), targets: (B, T)
+        loss_wce = self.wce(logits, targets)
+        loss_tmse = self.tmse(logits)
+        
+        # Combine the losses
+        return loss_wce + (self.tmse_weight * loss_tmse)

@@ -19,7 +19,7 @@ from sklearn.metrics import confusion_matrix
 from src.dataset import SignSegmentationDataset
 from src.models import PureMambaBaseline, BiMambaBaseline, STGCN_Mamba, STGCN_MLP_Mamba, STGCN_BiMamba, Decoupled_STGCN_Mamba, BiLSTM_Baseline, STGCN_BiLSTM, TransformerBaseline, STGCN_Transformer
 from src.metrics import evaluate_batch
-from src.loss import CombinedBoundaryLoss, FocalLoss, StandardCrossEntropyLoss, WeightedCrossEntropyLoss, UnifiedCTCLoss
+from src.loss import CombinedBoundaryLoss, FocalLoss, StandardCrossEntropyLoss, WeightedCrossEntropyLoss, UnifiedCTCLoss, WeightedCE_TMSE_Loss
 from src.decoder import decode_predictions
 
 QUEUE_FILE = "train_queue.json"
@@ -176,6 +176,14 @@ def train_model(config):
         criterion = WeightedCrossEntropyLoss(weights=weights)
     elif LOSS_FUNCTION == "focal":
         criterion = FocalLoss(gamma=FOCAL_LOSS_GAMMA)
+        
+    # --- NEW: Weighted CE + TMSE ---
+    elif LOSS_FUNCTION == "wce_tmse":
+        criterion = WeightedCE_TMSE_Loss(
+            weights=weights,
+            tmse_weight=config.get("tmse_weight", 0.15),
+            threshold=config.get("tmse_threshold", 0.1)
+        )
     else:
         raise ValueError(f"Unknown loss function '{LOSS_FUNCTION}'")
 
