@@ -12,11 +12,16 @@ from hamer.models import load_hamer, DEFAULT_CHECKPOINT
 # ==============================================================================
 # CONFIGURATION
 # ==============================================================================
-INPUT_VIDEO_DIR = os.path.expanduser("~/Genki_GR/Sign-Segmentation/raw_data/videos")
+INPUT_VIDEO_DIR = os.path.expanduser("~/Genki_GR/Sign-Segmentation/data/raw_videos")
 OUTPUT_FEATURE_DIR = os.path.expanduser("~/Genki_GR/Sign-Segmentation/processed_data/hamer_features")
 os.makedirs(OUTPUT_FEATURE_DIR, exist_ok=True)
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+# 🚀 GPU BATCH SIZE
+# 32 is highly optimized for an 8GB/16GB RTX 4060 Ti. 
+# If it crashes with "CUDA Out of Memory", lower this to 16.
+BATCH_SIZE = 32 
 
 # Standard ImageNet Normalization required by HaMeR's ViT Backbone
 transform = transforms.Compose([
@@ -38,7 +43,6 @@ def get_square_bbox(landmarks, img_w, img_h, scale=1.5):
     cx, cy = (x_min + x_max) / 2, (y_min + y_max) / 2
     width, height = x_max - x_min, y_max - y_min
     
-    # Make it a square and apply scale context
     box_size = max(width, height) * scale
     
     x1 = int(cx - box_size / 2)
@@ -46,55 +50,33 @@ def get_square_bbox(landmarks, img_w, img_h, scale=1.5):
     x2 = int(cx + box_size / 2)
     y2 = int(cy + box_size / 2)
     
-    # Clamp to image boundaries
     x1, y1 = max(0, x1), max(0, y1)
     x2, y2 = min(img_w - 1, x2), min(img_h - 1, y2)
     
     return x1, y1, x2, y2
 
-def process_hand(img, bbox, model, is_right_hand=True):
-    """Crops, normalizes, and passes a single hand to HaMeR."""
+def prepare_hand_tensor(img, bbox, is_right_hand=True):
+    """Crops and normalizes the hand without passing it to the model yet."""
     x1, y1, x2, y2 = bbox
     crop = img[y1:y2, x1:x2]
     
     if crop.size == 0 or crop.shape[0] == 0 or crop.shape[1] == 0:
         return None
         
-    # 🚨 CRITICAL HaMeR LOGIC: Flip left hands so the model thinks it's a right hand
     if not is_right_hand:
         crop = cv2.flip(crop, 1)
         
-    # Resize to HaMeR's expected input size
     crop_resized = cv2.resize(crop, (256, 256))
-    
-    # Convert to RGB (OpenCV uses BGR) and apply transforms
     crop_rgb = cv2.cvtColor(crop_resized, cv2.COLOR_BGR2RGB)
-    input_tensor = transform(crop_rgb).unsqueeze(0).to(DEVICE)
     
-    # --- FIX: Wrap the tensor in a dictionary with the 'img' key ---
-    batch = {'img': input_tensor}
-    
-    with torch.no_grad():
-        out = model(batch)
-        
-    joints = out['pred_keypoints_3d'][0].cpu().numpy()  # (21, 3)
-    vertices = out['pred_vertices'][0].cpu().numpy()    # (778, 3)
-    
-    # 🚨 CRITICAL HaMeR LOGIC: Flip the resulting 3D X-coordinates back for the left hand
-    if not is_right_hand:
-        joints[:, 0] = -joints[:, 0]
-        vertices[:, 0] = -vertices[:, 0]
-        
-    return {
-        "joints": joints,
-        "vertices": vertices
-    }
+    # Returns shape: (1, 3, 256, 256)
+    return transform(crop_rgb).unsqueeze(0)
 
 # ==============================================================================
 # MAIN EXTRACTION LOOP
 # ==============================================================================
 def main():
-    print(f"Loading HaMeR Model on {DEVICE}...")
+    print(f"Loading HaMeR Model on {DEVICE} with Batch Size {BATCH_SIZE}...")
     model, model_cfg = load_hamer(DEFAULT_CHECKPOINT)
     model = model.to(DEVICE)
     model.eval()
@@ -109,60 +91,100 @@ def main():
     
     for video_name in tqdm(video_files, desc="Processing Videos with HaMeR"):
         video_path = os.path.join(INPUT_VIDEO_DIR, video_name)
-        cap = cv2.VideoCapture(video_path)
         
+        # Skip if already processed
+        save_name = video_name.rsplit('.', 1)[0] + "_hamer.pt"
+        if os.path.exists(os.path.join(OUTPUT_FEATURE_DIR, save_name)):
+            continue
+            
+        cap = cv2.VideoCapture(video_path)
         img_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         img_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         
-        video_features = {
-            "left_hand_joints": [],
-            "left_hand_vertices": [],
-            "right_hand_joints": [],
-            "right_hand_vertices": []
-        }
+        # Final output arrays for this video
+        video_lh_j, video_lh_v = [], []
+        video_rh_j, video_rh_v = [], []
         
+        # Batch Queues
+        hand_queue = []
+        meta_queue = []
+        
+        def flush_queue():
+            """Pushes the accumulated queue through the GPU."""
+            if not hand_queue:
+                return
+                
+            # Stack into shape: (Batch, 3, 256, 256)
+            batch_tensor = torch.cat(hand_queue, dim=0).to(DEVICE)
+            
+            with torch.no_grad():
+                out = model({'img': batch_tensor})
+                
+            joints = out['pred_keypoints_3d'].cpu().numpy()  # (Batch, 21, 3)
+            vertices = out['pred_vertices'].cpu().numpy()    # (Batch, 778, 3)
+            
+            # Unpack the batch and assign to the correct frame & hand
+            for i, (f_idx, is_right) in enumerate(meta_queue):
+                j, v = joints[i].copy(), vertices[i].copy()
+                
+                if not is_right:
+                    j[:, 0] = -j[:, 0]
+                    v[:, 0] = -v[:, 0]
+                    video_lh_j[f_idx] = j
+                    video_lh_v[f_idx] = v
+                else:
+                    video_rh_j[f_idx] = j
+                    video_rh_v[f_idx] = v
+                    
+            hand_queue.clear()
+            meta_queue.clear()
+
+        # Read frames sequentially
+        frame_idx = 0
         while cap.isOpened():
             ret, frame = cap.read()
             if not ret:
                 break
                 
-            # Initialize empty arrays for this frame (Handles missing hands)
-            lh_j, lh_v = np.zeros((21, 3)), np.zeros((778, 3))
-            rh_j, rh_v = np.zeros((21, 3)), np.zeros((778, 3))
+            # Initialize empty defaults for this frame
+            video_lh_j.append(np.zeros((21, 3), dtype=np.float32))
+            video_lh_v.append(np.zeros((778, 3), dtype=np.float32))
+            video_rh_j.append(np.zeros((21, 3), dtype=np.float32))
+            video_rh_v.append(np.zeros((778, 3), dtype=np.float32))
             
-            # Use MediaPipe just to get the Bounding Boxes
             results = mp_hands.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
             
             if results.multi_hand_landmarks:
                 for idx, hand_landmarks in enumerate(results.multi_hand_landmarks):
-                    # Determine if left or right hand
                     label = results.multi_handedness[idx].classification[0].label
                     is_right = (label == 'Right')
                     
-                    # Get Bbox and Process through HaMeR
                     bbox = get_square_bbox(hand_landmarks, img_w, img_h)
-                    hamer_out = process_hand(frame, bbox, model, is_right_hand=is_right)
+                    tensor = prepare_hand_tensor(frame, bbox, is_right_hand=is_right)
                     
-                    if hamer_out:
-                        if is_right:
-                            rh_j, rh_v = hamer_out["joints"], hamer_out["vertices"]
-                        else:
-                            lh_j, lh_v = hamer_out["joints"], hamer_out["vertices"]
-            
-            # Append frame data
-            video_features["left_hand_joints"].append(lh_j)
-            video_features["left_hand_vertices"].append(lh_v)
-            video_features["right_hand_joints"].append(rh_j)
-            video_features["right_hand_vertices"].append(rh_v)
+                    if tensor is not None:
+                        hand_queue.append(tensor)
+                        meta_queue.append((frame_idx, is_right))
+                        
+            # If queue is full, push to GPU
+            if len(hand_queue) >= BATCH_SIZE:
+                flush_queue()
+                
+            frame_idx += 1
             
         cap.release()
         
-        # Convert lists to NumPy arrays (Frames, Nodes, 3)
-        for k in video_features.keys():
-            video_features[k] = np.array(video_features[k], dtype=np.float32)
-            
-        # Save the feature block
-        save_name = video_name.rsplit('.', 1)[0] + "_hamer.pt"
+        # Flush any remaining hands in the queue at the end of the video
+        flush_queue()
+        
+        # Save the finished video
+        video_features = {
+            "left_hand_joints": np.array(video_lh_j, dtype=np.float32),
+            "left_hand_vertices": np.array(video_lh_v, dtype=np.float32),
+            "right_hand_joints": np.array(video_rh_j, dtype=np.float32),
+            "right_hand_vertices": np.array(video_rh_v, dtype=np.float32)
+        }
+        
         torch.save(video_features, os.path.join(OUTPUT_FEATURE_DIR, save_name))
 
 if __name__ == "__main__":
