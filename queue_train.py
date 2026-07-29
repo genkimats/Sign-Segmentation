@@ -265,58 +265,50 @@ if __name__ == "__main__":
                 "window_size": 16,
                 "overlap": 0,
                 "kinematic_features": [],
-                "loss_function": "weighted_ce",
+                "loss_function": "wce_tmse",
                 "class_weights": [0.6, 0.8, 1.0],
-                "description": "REDO: overlap ratio (0/16), loss=weighted_ce(0.6,0.8,1.0), no kinetic"
+                "description": "overlap ratio (0/16), loss=wce_tmse(0.6,0.8,1.0), no kinetic"
+            },
+            {
+                "window_size": 32,
+                "overlap": 0,
+                "kinematic_features": [],
+                "loss_function": "wce_tmse",
+                "class_weights": [0.6, 0.8, 1.0],
+                "description": "overlap ratio (0/32), loss=wce_tmse(0.6,0.8,1.0), no kinetic"
+            },
+            {
+                "window_size": 64,
+                "overlap": 0,
+                "kinematic_features": [],
+                "loss_function": "wce_tmse",
+                "class_weights": [0.6, 0.8, 1.0],
+                "description": "overlap ratio (0/64), loss=wce_tmse(0.6,0.8,1.0), no kinetic"
+            },
+            {
+                "window_size": 128,
+                "overlap": 0,
+                "kinematic_features": [],
+                "loss_function": "wce_tmse",
+                "class_weights": [0.6, 0.8, 1.0],
+                "description": "overlap ratio (0/128), loss=wce_tmse(0.6,0.8,1.0), no kinetic"
+            },
+            {
+                "window_size": 256,
+                "overlap": 0,
+                "kinematic_features": [],
+                "loss_function": "wce_tmse",
+                "class_weights": [0.6, 0.8, 1.0],
+                "description": "overlap ratio (0/256), loss=wce_tmse(0.6,0.8,1.0), no kinetic"
+            },
+            {
+                "window_size": 512,
+                "overlap": 0,
+                "kinematic_features": [],
+                "loss_function": "wce_tmse",
+                "class_weights": [0.6, 0.8, 1.0],
+                "description": "overlap ratio (0/512), loss=wce_tmse(0.6,0.8,1.0), no kinetic"
             }
-            # {
-            #     "window_size": 16,
-            #     "overlap": 0,
-            #     "kinematic_features": [],
-            #     "loss_function": "wce_tmse",
-            #     "class_weights": [0.6, 0.8, 1.0],
-            #     "description": "overlap ratio (0/16), loss=wce_tmse(0.6,0.8,1.0), no kinetic"
-            # },
-            # {
-            #     "window_size": 32,
-            #     "overlap": 0,
-            #     "kinematic_features": [],
-            #     "loss_function": "wce_tmse",
-            #     "class_weights": [0.6, 0.8, 1.0],
-            #     "description": "overlap ratio (0/32), loss=wce_tmse(0.6,0.8,1.0), no kinetic"
-            # },
-            # {
-            #     "window_size": 64,
-            #     "overlap": 0,
-            #     "kinematic_features": [],
-            #     "loss_function": "wce_tmse",
-            #     "class_weights": [0.6, 0.8, 1.0],
-            #     "description": "overlap ratio (0/64), loss=wce_tmse(0.6,0.8,1.0), no kinetic"
-            # },
-            # {
-            #     "window_size": 128,
-            #     "overlap": 0,
-            #     "kinematic_features": [],
-            #     "loss_function": "wce_tmse",
-            #     "class_weights": [0.6, 0.8, 1.0],
-            #     "description": "overlap ratio (0/128), loss=wce_tmse(0.6,0.8,1.0), no kinetic"
-            # },
-            # {
-            #     "window_size": 256,
-            #     "overlap": 0,
-            #     "kinematic_features": [],
-            #     "loss_function": "wce_tmse",
-            #     "class_weights": [0.6, 0.8, 1.0],
-            #     "description": "overlap ratio (0/256), loss=wce_tmse(0.6,0.8,1.0), no kinetic"
-            # },
-            # {
-            #     "window_size": 512,
-            #     "overlap": 0,
-            #     "kinematic_features": [],
-            #     "loss_function": "wce_tmse",
-            #     "class_weights": [0.6, 0.8, 1.0],
-            #     "description": "overlap ratio (0/512), loss=wce_tmse(0.6,0.8,1.0), no kinetic"
-            # }
         ]
         
     elif CHOSEN_TYPE == 'stgcn_mlp_mamba':
