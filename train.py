@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 import copy
 
-# --- NEW: Imports for Confusion Matrix ---
+# --- Imports for Confusion Matrix ---
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.metrics import confusion_matrix
@@ -66,6 +66,7 @@ def train_model(config):
     
     BATCH_SIZE = config["batch_size"]
     EPOCHS = config["epochs"]
+    MIN_EPOCHS = config.get("min_epochs", 15) # --- NEW: Minimum epoch limit ---
     EARLY_STOPPING = config.get("early_stopping", True)
     PATIENCE = config.get("patience", 10)
     LEARNING_RATE = config["learning_rate"]
@@ -156,127 +157,83 @@ def train_model(config):
     if MODEL_NAME == "stgcn_mlp_mamba":
         model_kwargs["mlp_expansion_factor"] = config.get("mlp_expansion_factor", 4)
 
-    model = model_class(**model_kwargs).to(device)
-
-    weights = torch.tensor(CLASS_WEIGHTS, dtype=torch.float).to(device)
-    
-    if LOSS_FUNCTION == "bcl":
-        criterion = CombinedBoundaryLoss(
-            focal_gamma=FOCAL_LOSS_GAMMA, 
-            contrastive_weight=config.get("contrastive_weight", 0.15)
-        )
-    elif LOSS_FUNCTION == "unified_ctc":
-        criterion = UnifiedCTCLoss(
-            blank_idx=0, 
-            ctc_weight=config.get("ctc_weight", 0.5)
-        )
-    elif LOSS_FUNCTION == "standard_ce":
-        criterion = StandardCrossEntropyLoss()
-    elif LOSS_FUNCTION == "weighted_ce":
-        criterion = WeightedCrossEntropyLoss(weights=weights)
-    elif LOSS_FUNCTION == "focal":
-        criterion = FocalLoss(gamma=FOCAL_LOSS_GAMMA)
-        
-    # --- NEW: Weighted CE + TMSE ---
-    elif LOSS_FUNCTION == "wce_tmse":
-        criterion = WeightedCE_TMSE_Loss(
-            weights=weights,
-            tmse_weight=config.get("tmse_weight", 0.15),
-            threshold=config.get("tmse_threshold", 0.1)
-        )
-    else:
-        raise ValueError(f"Unknown loss function '{LOSS_FUNCTION}'")
-
-    if OPTIMIZER_NAME == "AdamW":
-        optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=0.01)
-    else:
-        optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
-        
-    if SCHEDULER_NAME == "CosineAnnealingLR":
-        scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS)
-    else:
-        scheduler = None
-        
-    metrics_log_path = os.path.join(exp_dir, "training_metrics.csv")
-    
-    with open(metrics_log_path, mode='w', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow(['epoch', 'train_loss', 'val_loss', 'frame_f1', 'mean_iou', 'segment_f1', 'epoch_time'])
-    
-    best_combined_score = -1.0
-    best_epoch = 0
-    best_model_state = None
-    epochs_without_improvement = 0
-    actual_epochs_ran = 0
-    
+    # --- NEW: Training Redo Logic Setup ---
+    MAX_REDOS = 5
+    redo_count = 0
+    total_nan_this_run = 0
     start_train_time = time.time()
-    gpu_utilization_samples = []
-    if torch.cuda.is_available():
-        torch.cuda.reset_peak_memory_stats(device)
     
-    for epoch in range(1, EPOCHS + 1):
-        actual_epochs_ran = epoch
-        epoch_start_time = time.time()
-        model.train()
-        train_loss = 0.0
+    while redo_count <= MAX_REDOS:
+        if redo_count > 0:
+            print(f"\n🔄 RESTARTING TRAINING (Attempt {redo_count + 1}/{MAX_REDOS + 1}) DUE TO NAN EXPLOSION...")
+            
+        # 1. Initialize / Re-Initialize Model and Optimizer
+        model = model_class(**model_kwargs).to(device)
+        weights = torch.tensor(CLASS_WEIGHTS, dtype=torch.float).to(device)
         
-        loop = tqdm(train_loader, desc=f"Epoch {epoch}/{EPOCHS} [Train]", leave=False)
-        for features, labels in loop:
-            features = features.to(device)
-            labels = labels.to(device)
-            
-            features = torch.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
-            optimizer.zero_grad()
-            
-            if LOSS_FUNCTION == "bcl":
-                logits, embeddings = model(features)
-                loss, _, _ = criterion(logits, embeddings, labels)
-            elif LOSS_FUNCTION == "unified_ctc":
-                logits, _ = model(features)
-                hard_labels = torch.argmax(labels, dim=1)
-                loss, _, _ = criterion(logits, hard_labels)
-            else:
-                logits, _ = model(features)
-                hard_labels = torch.argmax(labels, dim=1)
-                loss = criterion(logits, hard_labels)
-            
-            if torch.isnan(loss) or torch.isinf(loss):
-                print("⚠️  Warning: NaN/Inf loss encountered! Skipping this batch to protect weights.")
-                continue
-            
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-            optimizer.step()
-            
-            train_loss += loss.item()
-            loop.set_postfix(loss=loss.item())
+        if LOSS_FUNCTION == "bcl":
+            criterion = CombinedBoundaryLoss(focal_gamma=FOCAL_LOSS_GAMMA, contrastive_weight=config.get("contrastive_weight", 0.15))
+        elif LOSS_FUNCTION == "unified_ctc":
+            criterion = UnifiedCTCLoss(blank_idx=0, ctc_weight=config.get("ctc_weight", 0.5))
+        elif LOSS_FUNCTION == "standard_ce":
+            criterion = StandardCrossEntropyLoss()
+        elif LOSS_FUNCTION == "weighted_ce":
+            criterion = WeightedCrossEntropyLoss(weights=weights)
+        elif LOSS_FUNCTION == "focal":
+            criterion = FocalLoss(gamma=FOCAL_LOSS_GAMMA)
+        elif LOSS_FUNCTION == "wce_tmse":
+            criterion = WeightedCE_TMSE_Loss(
+                weights=weights,
+                tmse_weight=config.get("tmse_weight", 0.15),
+                threshold=config.get("tmse_threshold", 0.1)
+            )
+        else:
+            raise ValueError(f"Unknown loss function '{LOSS_FUNCTION}'")
 
-            try:
-                if torch.cuda.is_available():
-                    gpu_utilization_samples.append(torch.cuda.utilization(device))
-            except Exception:
-                pass
+        if OPTIMIZER_NAME == "AdamW":
+            optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=0.01)
+        else:
+            optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
             
-        avg_train_loss = train_loss / len(train_loader)
-        
-        if scheduler:
-            scheduler.step()
+        if SCHEDULER_NAME == "CosineAnnealingLR":
+            scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS)
+        else:
+            scheduler = None
             
-        model.eval()
-        val_loss = 0.0
-        val_frame_f1, val_iou, val_seg_f1 = [], [], []
+        # 2. Reset Tracking Variables for this specific run
+        metrics_log_path = os.path.join(exp_dir, "training_metrics.csv")
+        with open(metrics_log_path, mode='w', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow(['epoch', 'train_loss', 'val_loss', 'frame_f1', 'mean_iou', 'segment_f1', 'epoch_time', 'epoch_nan_count'])
         
-        # --- NEW: Arrays to hold validation targets/predictions for confusion matrix ---
-        epoch_val_true = []
-        epoch_val_pred = []
-        
-        with torch.no_grad():
-            val_loop = tqdm(val_loader, desc=f"Epoch {epoch}/{EPOCHS} [Val]", leave=False)
-            for features, labels in val_loop:
+        best_combined_score = -1.0
+        best_epoch = 0
+        best_model_state = None
+        epochs_without_improvement = 0
+        actual_epochs_ran = 0
+        total_nan_this_run = 0
+        gpu_utilization_samples = []
+        if torch.cuda.is_available():
+            torch.cuda.reset_peak_memory_stats(device)
+            
+        needs_restart = False
+
+        # 3. Epoch Loop
+        for epoch in range(1, EPOCHS + 1):
+            actual_epochs_ran = epoch
+            epoch_start_time = time.time()
+            model.train()
+            train_loss = 0.0
+            epoch_nan_count = 0 # Track NaNs per epoch
+            valid_batches = 0
+            
+            loop = tqdm(train_loader, desc=f"Epoch {epoch}/{EPOCHS} [Train]", leave=False)
+            for features, labels in loop:
                 features = features.to(device)
                 labels = labels.to(device)
                 
                 features = torch.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+                optimizer.zero_grad()
                 
                 if LOSS_FUNCTION == "bcl":
                     logits, embeddings = model(features)
@@ -289,104 +246,175 @@ def train_model(config):
                     logits, _ = model(features)
                     hard_labels = torch.argmax(labels, dim=1)
                     loss = criterion(logits, hard_labels)
-                    
-                val_loss += loss.item() if not (torch.isnan(loss) or torch.isinf(loss)) else 0.0
                 
+                # --- NEW: NaN/Inf Tracking Logic ---
+                if torch.isnan(loss) or torch.isinf(loss):
+                    epoch_nan_count += 1
+                    total_nan_this_run += 1
+                    loop.set_postfix(loss="NaN", nans=epoch_nan_count)
+                    
+                    if epoch_nan_count > 50 and redo_count < MAX_REDOS:
+                        print(f"\n⚠️ CRITICAL: Epoch {epoch} encountered >50 NaN losses ({epoch_nan_count}). Aborting run.")
+                        needs_restart = True
+                        break # Break inner batch loop
+                    continue # Skip backprop if NaN
+                
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                optimizer.step()
+                
+                train_loss += loss.item()
+                valid_batches += 1
+                loop.set_postfix(loss=loss.item(), nans=epoch_nan_count)
+
                 try:
                     if torch.cuda.is_available():
                         gpu_utilization_samples.append(torch.cuda.utilization(device))
                 except Exception:
                     pass
+            
+            # Break epoch loop if restart triggered
+            if needs_restart:
+                break 
                 
-                for i in range(features.size(0)):
-                    valid_len = labels.size(-1) 
-                    if valid_len == 0: continue
+            avg_train_loss = train_loss / valid_batches if valid_batches > 0 else float('inf')
+            
+            if scheduler:
+                scheduler.step()
+                
+            # Validation Loop
+            model.eval()
+            val_loss = 0.0
+            val_frame_f1, val_iou, val_seg_f1 = [], [], []
+            epoch_val_true = []
+            epoch_val_pred = []
+            
+            with torch.no_grad():
+                val_loop = tqdm(val_loader, desc=f"Epoch {epoch}/{EPOCHS} [Val]", leave=False)
+                for features, labels in val_loop:
+                    features = features.to(device)
+                    labels = labels.to(device)
+                    features = torch.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
                     
-                    true_seq = torch.argmax(labels[i, :, :valid_len], dim=0).cpu().numpy().astype(float)
-                    pred_logits_tensor = logits[i:i+1, :, :valid_len]
-                    
-                    pred_seq_tensor = decode_predictions(
-                        pred_logits_tensor, 
-                        strategy=DECODER_STRATEGY, 
-                        threshold=DECODER_THRESHOLD
-                    )
-                    
-                    pred_seq = pred_seq_tensor[0].cpu().numpy().astype(float)
-                    
-                    # --- NEW: Accumulate true and predicted arrays ---
-                    epoch_val_true.extend(true_seq.tolist())
-                    epoch_val_pred.extend(pred_seq.tolist())
+                    if LOSS_FUNCTION == "bcl":
+                        logits, embeddings = model(features)
+                        loss, _, _ = criterion(logits, embeddings, labels)
+                    elif LOSS_FUNCTION == "unified_ctc":
+                        logits, _ = model(features)
+                        hard_labels = torch.argmax(labels, dim=1)
+                        loss, _, _ = criterion(logits, hard_labels)
+                    else:
+                        logits, _ = model(features)
+                        hard_labels = torch.argmax(labels, dim=1)
+                        loss = criterion(logits, hard_labels)
+                        
+                    val_loss += loss.item() if not (torch.isnan(loss) or torch.isinf(loss)) else 0.0
                     
                     try:
-                        metrics_out = evaluate_batch(np.array([pred_seq.tolist()]), np.array([true_seq.tolist()]))
-                        if isinstance(metrics_out, dict):
-                            vals = list(metrics_out.values())
-                            val_frame_f1.append(float(vals[0]))
-                            val_iou.append(float(vals[1]))
-                            val_seg_f1.append(float(vals[2]))
-                        else:
-                            f_f1, iou, s_f1 = metrics_out
-                            val_frame_f1.append(float(f_f1))
-                            val_iou.append(float(iou))
-                            val_seg_f1.append(float(s_f1))
-                    except Exception as e:
+                        if torch.cuda.is_available():
+                            gpu_utilization_samples.append(torch.cuda.utilization(device))
+                    except Exception:
                         pass
                     
-        avg_val_loss = val_loss / len(val_loader)
-        
-        epoch_f1 = float(np.mean(val_frame_f1)) if val_frame_f1 else 0.0
-        epoch_iou = float(np.mean(val_iou)) if val_iou else 0.0
-        epoch_seg = float(np.mean(val_seg_f1)) if val_seg_f1 else 0.0
-        
-        epoch_end_time = time.time()
-        epoch_duration = round(epoch_end_time - epoch_start_time, 2)
-        
-        combined_score = epoch_f1 + epoch_iou + epoch_seg
-        
-        if combined_score > best_combined_score:
-            best_combined_score = combined_score
-            best_epoch = epoch
-            best_model_state = copy.deepcopy(model.state_dict())
-            epochs_without_improvement = 0
-            is_best = True
+                    for i in range(features.size(0)):
+                        valid_len = labels.size(-1) 
+                        if valid_len == 0: continue
+                        
+                        true_seq = torch.argmax(labels[i, :, :valid_len], dim=0).cpu().numpy().astype(float)
+                        pred_logits_tensor = logits[i:i+1, :, :valid_len]
+                        
+                        pred_seq_tensor = decode_predictions(
+                            pred_logits_tensor, 
+                            strategy=DECODER_STRATEGY, 
+                            threshold=DECODER_THRESHOLD
+                        )
+                        
+                        pred_seq = pred_seq_tensor[0].cpu().numpy().astype(float)
+                        epoch_val_true.extend(true_seq.tolist())
+                        epoch_val_pred.extend(pred_seq.tolist())
+                        
+                        try:
+                            metrics_out = evaluate_batch(np.array([pred_seq.tolist()]), np.array([true_seq.tolist()]))
+                            if isinstance(metrics_out, dict):
+                                vals = list(metrics_out.values())
+                                val_frame_f1.append(float(vals[0]))
+                                val_iou.append(float(vals[1]))
+                                val_seg_f1.append(float(vals[2]))
+                            else:
+                                f_f1, iou, s_f1 = metrics_out
+                                val_frame_f1.append(float(f_f1))
+                                val_iou.append(float(iou))
+                                val_seg_f1.append(float(s_f1))
+                        except Exception as e:
+                            pass
+                        
+            avg_val_loss = val_loss / len(val_loader)
             
-            # --- NEW: Generate and save confusion matrix on new best score ---
-            try:
-                cm = confusion_matrix(epoch_val_true, epoch_val_pred, labels=[0, 1, 2])
-                plt.figure(figsize=(8, 6))
-                sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
-                            xticklabels=['Outside (0)', 'Inside (1)', 'Begin (2)'], 
-                            yticklabels=['Outside (0)', 'Inside (1)', 'Begin (2)'])
-                plt.xlabel('Predicted')
-                plt.ylabel('Actual')
-                plt.title(f'Validation Confusion Matrix (Best Epoch {epoch})\n{run_name}')
-                
-                cm_save_path = os.path.join(exp_dir, "best_confusion_matrix.png")
-                plt.savefig(cm_save_path, bbox_inches='tight')
-                plt.close()
-            except Exception as e:
-                print(f"⚠️ Failed to generate confusion matrix: {e}")
-                
-        else:
-            epochs_without_improvement += 1
-            is_best = False
+            epoch_f1 = float(np.mean(val_frame_f1)) if val_frame_f1 else 0.0
+            epoch_iou = float(np.mean(val_iou)) if val_iou else 0.0
+            epoch_seg = float(np.mean(val_seg_f1)) if val_seg_f1 else 0.0
             
-        print(f"Epoch [{epoch:02d}/{EPOCHS}] "
-              f"Train Loss: {avg_train_loss:.4f} | "
-              f"Val Loss: {avg_val_loss:.4f} | "
-              f"Frame F1: {epoch_f1:.4f} | "
-              f"Mean IoU: {epoch_iou:.4f} | "
-              f"Seg F1: {epoch_seg:.4f} | "
-              f"Time: {epoch_duration}s" + (" 🌟 (New Best!)" if is_best else f" (No improvement x{epochs_without_improvement})"))
-              
-        with open(metrics_log_path, mode='a', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerow([epoch, avg_train_loss, avg_val_loss, epoch_f1, epoch_iou, epoch_seg, epoch_duration])
+            epoch_end_time = time.time()
+            epoch_duration = round(epoch_end_time - epoch_start_time, 2)
+            
+            combined_score = epoch_f1 + epoch_iou + epoch_seg
+            
+            if combined_score > best_combined_score:
+                best_combined_score = combined_score
+                best_epoch = epoch
+                best_model_state = copy.deepcopy(model.state_dict())
+                epochs_without_improvement = 0
+                is_best = True
+                
+                try:
+                    cm = confusion_matrix(epoch_val_true, epoch_val_pred, labels=[0, 1, 2])
+                    plt.figure(figsize=(8, 6))
+                    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
+                                xticklabels=['Outside (0)', 'Inside (1)', 'Begin (2)'], 
+                                yticklabels=['Outside (0)', 'Inside (1)', 'Begin (2)'])
+                    plt.xlabel('Predicted')
+                    plt.ylabel('Actual')
+                    plt.title(f'Validation Confusion Matrix (Best Epoch {epoch})\n{run_name}')
+                    
+                    cm_save_path = os.path.join(exp_dir, "best_confusion_matrix.png")
+                    plt.savefig(cm_save_path, bbox_inches='tight')
+                    plt.close()
+                except Exception as e:
+                    print(f"⚠️ Failed to generate confusion matrix: {e}")
+                    
+            else:
+                epochs_without_improvement += 1
+                is_best = False
+                
+            nan_string = f" | NaNs: {epoch_nan_count}" if epoch_nan_count > 0 else ""
+            
+            print(f"Epoch [{epoch:02d}/{EPOCHS}] "
+                  f"Train Loss: {avg_train_loss:.4f} | "
+                  f"Val Loss: {avg_val_loss:.4f} | "
+                  f"Frame F1: {epoch_f1:.4f} | "
+                  f"Mean IoU: {epoch_iou:.4f} | "
+                  f"Seg F1: {epoch_seg:.4f} | "
+                  f"Time: {epoch_duration}s{nan_string}" + (" 🌟 (New Best!)" if is_best else f" (No improvement x{epochs_without_improvement})"))
+                  
+            with open(metrics_log_path, mode='a', newline='') as file:
+                writer = csv.writer(file)
+                writer.writerow([epoch, avg_train_loss, avg_val_loss, epoch_f1, epoch_iou, epoch_seg, epoch_duration, epoch_nan_count])
 
-        if EARLY_STOPPING and epochs_without_improvement >= PATIENCE:
-            print(f"\n🛑 Early stopping triggered! No improvement in combined score for {PATIENCE} epochs.")
+            # --- NEW: Minimum Epochs Limit added to Early Stopping ---
+            if EARLY_STOPPING and epochs_without_improvement >= PATIENCE and epoch >= MIN_EPOCHS:
+                print(f"\n🛑 Early stopping triggered! No improvement in combined score for {PATIENCE} epochs (Minimum {MIN_EPOCHS} epochs met).")
+                break
+                
+        # If we successfully finished without a critical restart, break the retry loop
+        if not needs_restart:
             break
+        
+        redo_count += 1
+        
+    if needs_restart and redo_count > MAX_REDOS:
+        print(f"\n❌ FAILED TO STABILIZE TRAINING. Maximum redos ({MAX_REDOS}) reached. Saving partial/broken run.")
 
+    # 4. Save Final Summary
     total_time = time.time() - start_train_time
     total_minutes, total_seconds = divmod(int(total_time), 60)
     
@@ -408,7 +436,9 @@ def train_model(config):
         "early_stopping_triggered": epochs_without_improvement >= PATIENCE,
         "average_time_per_epoch": f"{int(avg_minutes)}m {int(avg_seconds)}s",
         "max_gpu_memory_used_gb": round(max_mem_gb, 4),
-        "average_gpu_utilization_percent": round(avg_gpu_util, 2)
+        "average_gpu_utilization_percent": round(avg_gpu_util, 2),
+        "total_nan_loss_count_latest_run": total_nan_this_run, # --- NEW ---
+        "total_training_restarts": min(redo_count, MAX_REDOS)  # --- NEW ---
     }
 
     summary_save_path = os.path.join(exp_dir, "hardware_summary.json")
