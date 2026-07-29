@@ -26,6 +26,11 @@ PREFIX = "59"
 WEIGHTS_PATH = f"saved_models/{CHOSEN_MODEL}-{PREFIX}.pth"
 HYPERPARAMETER_PATH = f"experiments/{CHOSEN_MODEL}-{PREFIX}/hyperparameters.json"
 
+# --- NEW CONFIGURATION ---
+# Options: "train", "val", "test", or "all" (to ignore the split file)
+TARGET_SPLIT = "val" 
+SPLIT_FILE_PATH = "dataset_splits.json"
+
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 MODEL_REGISTRY = {
@@ -40,148 +45,166 @@ MODEL_REGISTRY = {
 # ==============================================================================
 # 🔍 BACKGROUND SEARCHER
 # ==============================================================================
-def background_scanner(dataset, search_queue, stop_event):
+def background_scanner(dataset, search_queue, stop_event, hp):
     """
-    Runs in a background thread. Continuously scans the dataset.
-    When it finds a sequence matching the criteria, it pushes the index to the queue.
+    Runs on a separate thread. Scans the dataset sequentially.
+    When it finds an index that meets the criteria, it pushes it to the queue.
     """
-    for i in range(len(dataset.slice_index)):
+    WINDOW_SIZE = hp.get("window_size", 512)
+    
+    # We want at least 3 distinct glosses (3 Begin tags followed by Insides)
+    target_glosses = 3
+    # We want padding on both sides to ensure the boundaries aren't cut off
+    padding_frames = 7
+    
+    for i in range(len(dataset)):
         if stop_event.is_set():
             break
             
+        # We only need to load the label array to check conditions
         slice_info = dataset.slice_index[i]
         label_path = os.path.join(dataset.labels_dir, f"{slice_info['base_name']}.npy")
         
-        # Fast load
-        labels = np.load(label_path, mmap_mode='r')[slice_info['start']:slice_info['end']]
-        
-        if labels.ndim > 1:
-            hard_labels = np.argmax(labels, axis=1)
-        else:
-            hard_labels = labels
+        try:
+            # We use mmap to check labels instantly without loading the whole file into RAM
+            label_array = np.load(label_path, mmap_mode='r')[slice_info['start']:slice_info['end']]
             
-        # Criteria
-        if np.sum(hard_labels == 2) < 3: continue
-        if not np.all(hard_labels[:7] == 0) or not np.all(hard_labels[-7:] == 0): continue
-            
-        # Match found! Send to UI.
-        search_queue.put(i)
+            # If the window isn't full size, skip
+            if len(label_array) != WINDOW_SIZE:
+                continue
+                
+            # Convert soft labels to hard labels if necessary
+            if label_array.ndim > 1:
+                hard_labels = np.argmax(label_array, axis=1)
+            else:
+                hard_labels = label_array
+                
+            # Rule 1: Check padding at the start and end (Class 0 = Outside)
+            if not (np.all(hard_labels[:padding_frames] == 0) and np.all(hard_labels[-padding_frames:] == 0)):
+                continue
+                
+            # Rule 2: Count glosses. A new gloss happens when we see a '2' (Begin)
+            num_begins = np.sum(hard_labels == 2)
+            if num_begins >= target_glosses:
+                # We found a perfect sequence! Push the index to the main thread.
+                search_queue.put(i)
+                
+        except Exception as e:
+            continue
 
 # ==============================================================================
-# 🚀 INTERACTIVE VIEWER CLASS
+# 🖼️ INTERACTIVE VIEWER
 # ==============================================================================
 class InteractiveViewer:
-    def __init__(self, dataset, model, hp):
-        self.dataset = dataset
+    def __init__(self, model, dataset, search_queue, hp):
         self.model = model
+        self.dataset = dataset
+        self.search_queue = search_queue
         self.hp = hp
-        
-        # State Tracking
         self.history = []
-        self.current_pos = -1
+        self.active_index = -1
         
-        # Concurrency
-        self.search_queue = queue.Queue()
-        self.stop_event = threading.Event()
-        self.search_thread = threading.Thread(
-            target=background_scanner, 
-            args=(self.dataset, self.search_queue, self.stop_event),
-            daemon=True
-        )
+        # Setup Plot
+        self.fig, self.ax = plt.subplots(figsize=(15, 6))
+        self.fig.canvas.mpl_connect('key_press_event', self.on_press)
+        self.fig.canvas.manager.set_window_title(f"Interactive Viewer - {CHOSEN_MODEL.upper()} [{TARGET_SPLIT.upper()}]")
         
-        # Plotting Setup
-        self.fig, self.ax = plt.subplots(figsize=(16, 6))
-        self.fig.canvas.mpl_connect('key_press_event', self.on_key_press)
-        
-        # Start search and trigger first plot
-        print("🔍 Starting background scanner...")
-        self.search_thread.start()
-        self.load_next_sequence()
+        # Load the very first plot
+        self.next_plot()
 
-    def run_inference_and_plot(self, idx):
-        """Runs the model on the requested index and updates the graph."""
-        slice_info = self.dataset.slice_index[idx]
-        file_desc = f"{slice_info['base_name']} | Frames: {slice_info['start']} to {slice_info['end']}"
+    def run_inference(self, data_idx):
+        inputs, targets = self.dataset[data_idx]
         
-        features, targets = self.dataset[idx]
-        features_tensor = features.unsqueeze(0).to(DEVICE)
+        # Add batch dimension and move to device
+        inputs = inputs.unsqueeze(0).to(DEVICE)
+        targets = targets.unsqueeze(0).to(DEVICE)
         
         with torch.no_grad():
-            outputs = self.model(features_tensor)
-            logits = outputs[0] if isinstance(outputs, tuple) else outputs
+            outputs = self.model(inputs)
+            # Handle decoupled models that return (logits, features)
+            if isinstance(outputs, tuple):
+                logits = outputs[0]
+            else:
+                logits = outputs
                 
-            predictions = decode_predictions(
-                logits, 
-                # strategy=self.hp.get("decoder_strategy", "argmax"),
-                strategy="argmax", 
-                threshold=self.hp.get("decoder_threshold", 0.6)
-            )
-            
-        gt_np = np.argmax(targets.numpy(), axis=0)
-        pred_np = predictions[0].cpu().numpy()
-        time_axis = np.arange(len(gt_np))
+        # Decode probabilities into hard predictions
+        preds = decode_predictions(
+            logits, 
+            strategy=self.hp.get("decoder_strategy", "argmax"), 
+            threshold=self.hp.get("decoder_threshold", 0.5)
+        )
         
-        # Clear previous plot
+        # Extract ground truth
+        if targets.dim() == 3:
+            if targets.shape[1] == 3:
+                truths = torch.argmax(targets, dim=1) 
+            else:
+                truths = torch.argmax(targets, dim=2) 
+        else:
+            truths = targets
+            
+        return truths[0].cpu().numpy(), preds[0].cpu().numpy()
+
+    def draw_graph(self, data_idx):
+        truths, preds = self.run_inference(data_idx)
+        
         self.ax.clear()
         
-        # Re-draw
-        self.ax.step(time_axis, gt_np + 0.05, label="Ground Truth", linewidth=2.5, color="#2ca02c", where='mid')
-        self.ax.step(time_axis, pred_np - 0.05, label="Predicted", linewidth=2.5, color="#d62728", linestyle="--", where='mid')
+        # BIO Mapping: 0=Outside, 1=Inside, 2=Begin
+        x_axis = np.arange(len(truths))
         
-        errors = gt_np != pred_np
-        self.ax.fill_between(time_axis, -0.5, 2.5, where=errors, color='gray', alpha=0.15, label='Mismatched Frames')
+        # Plot Ground Truth (Thick transparent line in background)
+        self.ax.step(x_axis, truths, label="Ground Truth", color="blue", alpha=0.3, linewidth=8, where='post')
         
-        # Formatting
+        # Plot Prediction (Thin sharp line in foreground)
+        self.ax.step(x_axis, preds, label="Prediction", color="red", linewidth=2, where='post')
+        
         self.ax.set_yticks([0, 1, 2])
-        self.ax.set_yticklabels(['Outside (O)', 'Inside (I)', 'Begin (B)'], fontsize=12)
-        self.ax.set_xlabel(f"Frames (Window Size: {self.hp.get('window_size', 512)})", fontsize=12, fontweight='bold')
-        self.ax.set_ylabel("BIO State", fontsize=12, fontweight='bold')
+        self.ax.set_yticklabels(["Outside (0)", "Inside (1)", "Begin (2)"])
+        self.ax.set_xlabel("Frames")
         
-        self.ax.set_ylim(-0.5, 2.5)
-        self.ax.legend(loc="upper right", fontsize=11, framealpha=0.9)
-        self.ax.grid(axis='y', linestyle='--', alpha=0.6)
-        
-        # Set Window Title and Graph Title
-        self.fig.canvas.manager.set_window_title(file_desc)
-        self.ax.set_title(f"Model: {CHOSEN_MODEL} | Sequence: {file_desc}\n[Right Arrow: Next]  [Left Arrow: Previous]", fontsize=14)
+        slice_info = self.dataset.slice_index[data_idx]
+        title = (f"File: {slice_info['base_name']} | Split: {TARGET_SPLIT.upper()} | "
+                 f"Frames: {slice_info['start']}-{slice_info['end']}\n"
+                 f"Dataset Index: {data_idx} (Press Right Arrow for Next)")
+        self.ax.set_title(title, fontsize=12, fontweight='bold')
+        self.ax.legend(loc="upper right")
+        self.ax.grid(True, linestyle='--', alpha=0.5)
         
         self.fig.canvas.draw()
 
-    def load_next_sequence(self):
-        """Moves forward in history, or waits for background scanner if at the end."""
-        if self.current_pos < len(self.history) - 1:
-            self.current_pos += 1
-            self.run_inference_and_plot(self.history[self.current_pos])
-        else:
-            print("⏳ Waiting for background scanner to find the next match...")
-            try:
-                # Block until the queue yields a new index
-                new_idx = self.search_queue.get(timeout=10.0) 
-                self.history.append(new_idx)
-                self.current_pos += 1
-                self.run_inference_and_plot(new_idx)
-            except queue.Empty:
-                print("⚠️ Scanner timed out. No more matching sequences found.")
+    def next_plot(self):
+        print("Waiting for background thread to find a sequence...")
+        try:
+            # Wait up to 10 seconds for the scanner to find the next valid sequence
+            next_idx = self.search_queue.get(timeout=10.0)
+            self.history.append(next_idx)
+            self.active_index = len(self.history) - 1
+            self.draw_graph(next_idx)
+            print(f"Rendered index {next_idx}")
+        except queue.Empty:
+            print("Scanner timeout. No valid sequences found recently.")
 
-    def load_prev_sequence(self):
-        """Moves backward in history."""
-        if self.current_pos > 0:
-            self.current_pos -= 1
-            self.run_inference_and_plot(self.history[self.current_pos])
+    def prev_plot(self):
+        if self.active_index > 0:
+            self.active_index -= 1
+            prev_idx = self.history[self.active_index]
+            self.draw_graph(prev_idx)
+            print(f"Re-rendered previous index {prev_idx}")
         else:
-            print("🛑 Already at the first sequence.")
+            print("Already at the oldest viewed plot.")
 
-    def on_key_press(self, event):
-        """Matplotlib event listener."""
+    def on_press(self, event):
         if event.key == 'right':
-            self.load_next_sequence()
+            # If we are looking at an old history item, just move forward in history
+            if self.active_index < len(self.history) - 1:
+                self.active_index += 1
+                self.draw_graph(self.history[self.active_index])
+            else:
+                # If we are at the edge, pull a new one from the queue
+                self.next_plot()
         elif event.key == 'left':
-            self.load_prev_sequence()
-
-    def show(self):
-        plt.tight_layout()
-        plt.show()
-        self.stop_event.set() # Kill background thread when window is closed
+            self.prev_plot()
 
 # ==============================================================================
 # MAIN
@@ -195,32 +218,71 @@ def main():
         
     print(f"Loaded Hyperparameters for {CHOSEN_MODEL}-{PREFIX}")
     
+    # ---------------------------------------------------------
+    # NEW: Filter by Split JSON before passing to dataset loader
+    # ---------------------------------------------------------
+    allowed_files = None
+    if TARGET_SPLIT in ["train", "val", "test"]:
+        if not os.path.exists(SPLIT_FILE_PATH):
+            raise FileNotFoundError(f"Missing {SPLIT_FILE_PATH}! Required to filter by '{TARGET_SPLIT}'.")
+        
+        with open(SPLIT_FILE_PATH, 'r') as f:
+            splits = json.load(f)
+            
+        if TARGET_SPLIT not in splits:
+            raise KeyError(f"Key '{TARGET_SPLIT}' not found in {SPLIT_FILE_PATH}")
+            
+        # Strip .npy extension to match how dataset.py checks base_names
+        allowed_files = set([f.replace('.npy', '') for f in splits[TARGET_SPLIT]])
+        print(f"Targeting '{TARGET_SPLIT}' split: Found {len(allowed_files)} allowed sequences.")
+    
+    # Load the custom dataset
     dataset = SignSegmentationDataset(
         keypoints_dir="processed_data/keypoints",
         labels_dir="processed_data/BIO_tags",
-        window_size=hp.get("window_size", 512),
-        overlap=hp.get("overlap", 200),
-        tolerance_window=hp.get("tolerance_window", 5),
+        window_size=hp.get("window_size"),
+        overlap=hp.get("overlap"),
+        tolerance_window=hp.get("tolerance_window"),
         use_full_length=False, 
-        base_features=hp.get("base_features", ["x-cord", "y-cord"]),
-        kinematic_features=hp.get("kinematic_features", [])
+        base_features=hp.get("base_features"),
+        kinematic_features=hp.get("kinematic_features")
     )
     
+    # Apply the split filter explicitly
+    if allowed_files is not None:
+        original_len = len(dataset.slice_index)
+        dataset.slice_index = [s for s in dataset.slice_index if s['base_name'] in allowed_files]
+        print(f"Dataset filtered from {original_len} total slices down to {len(dataset.slice_index)} '{TARGET_SPLIT}' slices.")
+    
+    if len(dataset.slice_index) == 0:
+        raise ValueError(f"No slices remained after filtering for '{TARGET_SPLIT}'. Cannot run viewer.")
+
+    # Load Model
     model_class = MODEL_REGISTRY[CHOSEN_MODEL]
     model = model_class(
-        num_vertices=hp.get("num_vertices", 65),
-        in_channels=hp.get("in_channels", 3),
-        d_model=hp.get("d_model", 256),
-        n_layers=hp.get("n_layers", 4)
+        num_vertices=hp.get("num_vertices"),
+        in_channels=hp.get("in_channels"),
+        d_model=hp.get("d_model"),
+        n_layers=hp.get("n_layers")
     ).to(DEVICE)
     
     print(f"Loading weights from {WEIGHTS_PATH}...")
     model.load_state_dict(torch.load(WEIGHTS_PATH, map_location=DEVICE))
     model.eval()
     
-    # Launch the interactive GUI
-    viewer = InteractiveViewer(dataset, model, hp)
-    viewer.show()
+    search_queue = queue.Queue(maxsize=20)
+    stop_event = threading.Event()
+    
+    scanner_thread = threading.Thread(
+        target=background_scanner, 
+        args=(dataset, search_queue, stop_event, hp),
+        daemon=True
+    )
+    scanner_thread.start()
+    
+    viewer = InteractiveViewer(model, dataset, search_queue, hp)
+    plt.show() 
+    stop_event.set()
 
 if __name__ == "__main__":
     main()
