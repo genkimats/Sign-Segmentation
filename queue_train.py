@@ -266,16 +266,8 @@ if __name__ == "__main__":
                 "overlap": 0,
                 "kinematic_features": [],
                 "loss_function": "weighted_ce",
-                "class_weights": [0.3, 0.7, 1.0],
-                "description": "overlap ratio (0/16), loss=weighted_ce(0.3,0.7,1.0), no kinetic"
-            },
-            {
-                "window_size": 16,
-                "overlap": 0,
-                "kinematic_features": [],
-                "loss_function": "weighted_ce",
-                "class_weights": [0.4, 0.6, 1.0],
-                "description": "overlap ratio (0/16), loss=weighted_ce(0.4,0.6,1.0), no kinetic"
+                "class_weights": [0.6, 0.8, 1.0],
+                "description": "REDO: overlap ratio (0/16), loss=weighted_ce(0.6,0.8,1.0), no kinetic"
             }
             # {
             #     "window_size": 16,
