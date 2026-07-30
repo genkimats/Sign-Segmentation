@@ -268,6 +268,46 @@ if __name__ == "__main__":
                 "loss_function": "wce_tmse",
                 "class_weights": [0.6, 0.8, 1.0],
                 "description": "overlap ratio (0/16), spatial_angles, loss=wce_tmse(0.6,0.8,1.0)"
+            },
+            {
+                "window_size": 32,
+                "overlap": 0,
+                "kinematic_features": ["spatial_angles"],
+                "loss_function": "wce_tmse",
+                "class_weights": [0.6, 0.8, 1.0],
+                "description": "overlap ratio (0/32), spatial_angles, loss=wce_tmse(0.6,0.8,1.0)"
+            },
+            {
+                "window_size": 64,
+                "overlap": 0,
+                "kinematic_features": ["spatial_angles"],
+                "loss_function": "wce_tmse",
+                "class_weights": [0.6, 0.8, 1.0],
+                "description": "overlap ratio (0/64), spatial_angles, loss=wce_tmse(0.6,0.8,1.0)"
+            },
+            {
+                "window_size": 128,
+                "overlap": 0,
+                "kinematic_features": ["spatial_angles"],
+                "loss_function": "wce_tmse",
+                "class_weights": [0.6, 0.8, 1.0],
+                "description": "overlap ratio (0/128), spatial_angles, loss=wce_tmse(0.6,0.8,1.0)"
+            },
+            {
+                "window_size": 256,
+                "overlap": 0,
+                "kinematic_features": ["spatial_angles"],
+                "loss_function": "wce_tmse",
+                "class_weights": [0.6, 0.8, 1.0],
+                "description": "overlap ratio (0/256), spatial_angles, loss=wce_tmse(0.6,0.8,1.0)"
+            },
+            {
+                "window_size": 512,
+                "overlap": 0,
+                "kinematic_features": ["spatial_angles"],
+                "loss_function": "wce_tmse",
+                "class_weights": [0.6, 0.8, 1.0],
+                "description": "overlap ratio (0/512), spatial_angles, loss=wce_tmse(0.6,0.8,1.0)"
             }
         ]
         
