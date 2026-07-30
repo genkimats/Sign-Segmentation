@@ -267,7 +267,7 @@ if __name__ == "__main__":
                 "kinematic_features": ["spatial_angles"],
                 "loss_function": "wce_tmse",
                 "class_weights": [0.6, 0.8, 1.0],
-                "description": "overlap ratio (0/16), loss=wce_tmse(0.6,0.8,1.0), spatial_angles"
+                "description": "overlap ratio (0/16), spatial_angles, loss=wce_tmse(0.6,0.8,1.0)"
             }
         ]
         
