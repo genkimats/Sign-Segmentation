@@ -46,6 +46,60 @@ def apply_label_smoothing(labels_array, window_size=5):
                         
     return soft_labels
 
+def get_spatial_angles(features):
+    """
+    Converts (x,y,z) coordinates into 3D Spherical Angles (Pitch and Yaw)
+    relative to the body center (node 0).
+    
+    Expected input shape: (Frames, Vertices, Channels)
+    Returns shape: (Frames, Vertices, 2)
+    """
+    # Use Node 0 as the origin point (0,0,0)
+    anchor = features[:, 0:1, :3] 
+    
+    # Calculate the vector from the anchor to every other joint
+    rel_vec = features[:, :, :3] - anchor
+    
+    x = rel_vec[:, :, 0]
+    y = rel_vec[:, :, 1]
+    z = rel_vec[:, :, 2]
+    
+    # Convert to Spherical Angles
+    r = torch.sqrt(x**2 + y**2 + z**2) + 1e-6
+    theta = torch.acos(z / r)  # Elevation / Pitch (0 to pi)
+    phi = torch.atan2(y, x)    # Azimuth / Yaw (-pi to pi)
+    
+    # Normalize between roughly -1.0 and 1.0 for the neural network
+    theta = theta / np.pi
+    phi = phi / np.pi
+    
+    # Stack along the channel dimension
+    return torch.stack([theta, phi], dim=-1)
+
+
+def get_temporal_angles(features):
+    """
+    Calculates the 3D angle of the trajectory of movement between frame t and t-1.
+    Unlike velocity (which includes speed and causes noise), this ONLY looks at the direction.
+    
+    Expected input shape: (Frames, Vertices, Channels)
+    Returns shape: (Frames, Vertices, 2)
+    """
+    # Calculate difference between frames
+    motion_vec = torch.zeros_like(features[:, :, :3])
+    motion_vec[1:] = features[1:, :, :3] - features[:-1, :, :3]
+    
+    x = motion_vec[:, :, 0]
+    y = motion_vec[:, :, 1]
+    z = motion_vec[:, :, 2]
+    
+    r = torch.sqrt(x**2 + y**2 + z**2) + 1e-6
+    theta = torch.acos(z / r) / np.pi
+    phi = torch.atan2(y, x) / np.pi
+    
+    # Stack along the channel dimension
+    return torch.stack([theta, phi], dim=-1)
+
 class SignSegmentationDataset(Dataset):
     def __init__(self, keypoints_dir, labels_dir, split_file="dataset_splits.json", split="train", window_size=1000, overlap=200, tolerance_window=5, use_full_length=False, base_features=None, kinematic_features=None, temporal_downsample_factor=1):
         self.keypoints_dir = keypoints_dir
@@ -57,6 +111,14 @@ class SignSegmentationDataset(Dataset):
         self.tolerance_window = tolerance_window
         self.use_full_length = use_full_length
         self.temporal_downsample_factor = temporal_downsample_factor
+
+        # Make sure this is in your __init__
+        self.feature_map = {
+            "x-cord": 0,
+            "y-cord": 1,
+            "z-cord": 2
+            # Add any confidence or other channels here if they exist in your .npy files
+        }
         
         # Track parameters or fall back to defaults
         self.base_features = base_features if base_features is not None else ["x-cord", "y-cord", "confidence"]
@@ -125,62 +187,109 @@ class SignSegmentationDataset(Dataset):
         return len(self.slice_index)
 
     def __getitem__(self, idx):
-        slice_info = self.slice_index[idx]
-        kp_path = os.path.join(self.keypoints_dir, f"{slice_info['base_name']}.npy")
-        label_path = os.path.join(self.labels_dir, f"{slice_info['base_name']}.npy")
-        
         if self.use_full_length:
-            kp_array = np.load(kp_path)        
-            label_array = np.load(label_path)  
-            max_allowed_frames = 4000
-            if kp_array.shape[0] > max_allowed_frames:
-                kp_array = kp_array[:max_allowed_frames]
-                label_array = label_array[:max_allowed_frames]
+            window_info = self.samples[idx]
         else:
-            kp_array = np.load(kp_path, mmap_mode='c')[slice_info['start']:slice_info['end']]
-            label_array = np.load(label_path, mmap_mode='c')[slice_info['start']:slice_info['end']]
+            window_info = self.windows[idx]
+            
+        vid = window_info['video_id']
+        start_idx = window_info['start_idx']
+        end_idx = window_info['end_idx']
         
-        # Scrub NaNs safely
-        kp_array = np.nan_to_num(kp_array, nan=0.0, posinf=0.0, neginf=0.0)
+        feature_path = os.path.join(self.keypoints_dir, f"{vid}.npy")
+        label_path = os.path.join(self.labels_dir, f"{vid}.npy")
         
-        # Median Filter
-        clean_kp_array = medfilt(kp_array, kernel_size=(5, 1, 1))
+        # 1. Load full raw data
+        full_raw_array = np.load(feature_path)
+        label_array = np.load(label_path)
+        full_raw_tensor = torch.tensor(full_raw_array, dtype=torch.float32)
         
-        # Tensor conversion (C, T, V)
-        full_raw_tensor = torch.tensor(clean_kp_array, dtype=torch.float32).permute(2, 0, 1) 
+        # Apply median filter for noise smoothing
+        full_raw_np = full_raw_tensor.numpy()
+        full_raw_np = medfilt(full_raw_np, kernel_size=(5, 1, 1))
+        full_raw_tensor = torch.tensor(full_raw_np, dtype=torch.float32)
         
-        # Physics
-        v_full, a_full, j_full, v_mag, omega = self._compute_full_kinematics(full_raw_tensor)
+        # 2. Calculate full-sequence kinematics (Velocity, Accel, Jerk)
+        v_full = torch.zeros_like(full_raw_tensor)
+        v_full[1:] = full_raw_tensor[1:] - full_raw_tensor[:-1]
         
+        a_full = torch.zeros_like(v_full)
+        a_full[1:] = v_full[1:] - v_full[:-1]
+        
+        j_full = torch.zeros_like(a_full)
+        j_full[1:] = a_full[1:] - a_full[:-1]
+        
+        v_mag = torch.sqrt(torch.sum(v_full**2, dim=-1, keepdim=True))
+        cross_prod = v_full[:, :, 0] * a_full[:, :, 1] - v_full[:, :, 1] * a_full[:, :, 0]
+        v_mag_sq = v_mag.squeeze(-1)**2 + 1e-6
+        omega = (cross_prod / v_mag_sq).unsqueeze(-1)
+        
+        # 3. Stack requested features
         final_channels = []
         
-        if self.base_features:
-            base_indices = [self.feature_map[f] for f in self.base_features if f in self.feature_map]
-            final_channels.append(full_raw_tensor[base_indices, :, :])
+        # --- FIX: Dynamically add any requested base features ---
+        base_indices = [self.feature_map[f] for f in self.base_features if f in self.feature_map]
+        if base_indices:
+            final_channels.append(full_raw_tensor[:, :, base_indices])
             
-        deriv_indices = [self.feature_map[f] for f in self.base_features if f in self.feature_map] if self.base_features else [0, 1]
+        # Determine the indices for derivative calculation (Default to x,y,z if none provided)
+        deriv_indices = base_indices if base_indices else [0, 1, 2]
         
         if "velocity" in self.kinematic_features:
-            final_channels.append(v_full[deriv_indices, :, :])
+            final_channels.append(v_full[:, :, deriv_indices])
         if "acceleration" in self.kinematic_features:
-            final_channels.append(a_full[deriv_indices, :, :])
+            final_channels.append(a_full[:, :, deriv_indices])
         if "jerk" in self.kinematic_features:
-            final_channels.append(j_full[deriv_indices, :, :])
+            final_channels.append(j_full[:, :, deriv_indices])
         if "velocity-mag" in self.kinematic_features:
             final_channels.append(v_mag)
         if "angular-vel" in self.kinematic_features:
             final_channels.append(omega)
             
-        # Cat channels
-        final_input_tensor = torch.cat(final_channels, dim=0)
+        # --- Skeletal Angles ---
+        if "spatial_angles" in self.kinematic_features:
+            s_angles = get_spatial_angles(full_raw_tensor)
+            final_channels.append(s_angles)
+            
+        if "temporal_angles" in self.kinematic_features:
+            t_angles = get_temporal_angles(full_raw_tensor)
+            final_channels.append(t_angles)
+            
+        # 4. Construct the final tensor: Shape (Frames, Vertices, Total_Channels)
+        full_feature_tensor = torch.cat(final_channels, dim=-1)
         
-        soft_labels = apply_label_smoothing(label_array, self.tolerance_window)
+        # 5. Extract the required window slice
+        window_features = full_feature_tensor[start_idx:end_idx]
+        window_labels = label_array[start_idx:end_idx]
+        
+        # 6. Apply Label Smoothing
+        soft_labels = apply_label_smoothing(window_labels, self.tolerance_window)
+        
+        # Permute to match PyTorch / ST-GCN expectations
+        # Features: (Channels, Time, Vertices)
+        final_input_tensor = window_features.permute(2, 0, 1)
+        # Labels: (Classes, Time)
         labels_tensor = torch.tensor(soft_labels, dtype=torch.float32).permute(1, 0)
         
-        # --- NOVELTY: Temporal Downsampling ---
-        # Slices the tensors to take every Nth frame, halving the sequence length but preserving accuracy!
+        # 7. Apply Temporal Downsampling (If requested)
         if self.temporal_downsample_factor > 1:
             final_input_tensor = final_input_tensor[:, ::self.temporal_downsample_factor, :]
             labels_tensor = labels_tensor[:, ::self.temporal_downsample_factor]
             
+        # 8. Padding (Only needed if NOT using full length and window is short)
+        if not self.use_full_length:
+            C, T, V = final_input_tensor.shape
+            target_T = self.window_size // self.temporal_downsample_factor
+            
+            if T < target_T:
+                pad_T = target_T - T
+                # Pad Features
+                feat_pad = torch.zeros(C, pad_T, V, dtype=torch.float32)
+                final_input_tensor = torch.cat([final_input_tensor, feat_pad], dim=1)
+                
+                # Pad Labels (Pad with Class 0: 'Outside')
+                label_pad = torch.zeros(3, pad_T, dtype=torch.float32)
+                label_pad[0, :] = 1.0 
+                labels_tensor = torch.cat([labels_tensor, label_pad], dim=1)
+                
         return final_input_tensor, labels_tensor
