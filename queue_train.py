@@ -38,7 +38,7 @@ MAMBA_DEFAULTS = {
     "tmse_threshold": 0.1,           # <-- NEW: Max cap to protect real boundaries
     "use_full_length": False,
     "base_features": ["x-cord", "y-cord", "z-cord"],
-    "kinematic_features": ["velocity", "acceleration", "jerk", "velocity-mag", "angular-vel"],
+    "kinematic_features": [],
     "in_channels": 14, 
     "decoder_strategy": "threshold",
     "decoder_threshold": 0.5,
@@ -264,50 +264,10 @@ if __name__ == "__main__":
             {
                 "window_size": 16,
                 "overlap": 0,
-                "kinematic_features": [],
+                "kinematic_features": ["spatial_angles"],
                 "loss_function": "wce_tmse",
                 "class_weights": [0.6, 0.8, 1.0],
-                "description": "overlap ratio (0/16), loss=wce_tmse(0.6,0.8,1.0), no kinetic"
-            },
-            {
-                "window_size": 32,
-                "overlap": 0,
-                "kinematic_features": [],
-                "loss_function": "wce_tmse",
-                "class_weights": [0.6, 0.8, 1.0],
-                "description": "overlap ratio (0/32), loss=wce_tmse(0.6,0.8,1.0), no kinetic"
-            },
-            {
-                "window_size": 64,
-                "overlap": 0,
-                "kinematic_features": [],
-                "loss_function": "wce_tmse",
-                "class_weights": [0.6, 0.8, 1.0],
-                "description": "overlap ratio (0/64), loss=wce_tmse(0.6,0.8,1.0), no kinetic"
-            },
-            {
-                "window_size": 128,
-                "overlap": 0,
-                "kinematic_features": [],
-                "loss_function": "wce_tmse",
-                "class_weights": [0.6, 0.8, 1.0],
-                "description": "overlap ratio (0/128), loss=wce_tmse(0.6,0.8,1.0), no kinetic"
-            },
-            {
-                "window_size": 256,
-                "overlap": 0,
-                "kinematic_features": [],
-                "loss_function": "wce_tmse",
-                "class_weights": [0.6, 0.8, 1.0],
-                "description": "overlap ratio (0/256), loss=wce_tmse(0.6,0.8,1.0), no kinetic"
-            },
-            {
-                "window_size": 512,
-                "overlap": 0,
-                "kinematic_features": [],
-                "loss_function": "wce_tmse",
-                "class_weights": [0.6, 0.8, 1.0],
-                "description": "overlap ratio (0/512), loss=wce_tmse(0.6,0.8,1.0), no kinetic"
+                "description": "overlap ratio (0/16), loss=wce_tmse(0.6,0.8,1.0), spatial_angles"
             }
         ]
         
