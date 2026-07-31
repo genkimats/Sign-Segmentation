@@ -1,0 +1,13 @@
+{
+    "machine_hostname": "vine-B660",
+    "gpu_name": "NVIDIA GeForce RTX 5060 Ti",
+    "total_training_time": "219m 5s",
+    "total_training_seconds": 13145.48,
+    "total_epochs_ran": 40,
+    "early_stopping_triggered": true,
+    "average_time_per_epoch": "5m 28s",
+    "max_gpu_memory_used_gb": 0.2887,
+    "average_gpu_utilization_percent": 63.55,
+    "total_nan_loss_count_latest_run": 10,
+    "total_training_restarts": 0
+}
