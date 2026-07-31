@@ -125,8 +125,47 @@ class SignSegmentationDataset(Dataset):
         self.kinematic_features = kinematic_features if kinematic_features is not None else []
         self.slice_index = []
         
-        # Raw index map to read from the raw source array (0:X, 1:Y, 2:Z/Conf)
-        self.feature_map = {"x-cord": 0, "y-cord": 1, "z-cord": 2, "confidence": 2}
+        self.samples = []  # Stores full video info
+        self.windows = []  # Stores sliced window info (CRITICAL FOR TRAINING)
+
+        for vid in sorted(self.video_ids):
+            label_path = os.path.join(self.labels_dir, f"{vid}.npy")
+            if not os.path.exists(label_path):
+                continue
+                
+            labels = np.load(label_path)
+            num_frames = len(labels)
+            
+            # Store the full video for validation/full_length mode
+            self.samples.append({
+                'video_id': vid,
+                'start_idx': 0,
+                'end_idx': num_frames
+            })
+            
+            # Generate the sliding windows for training
+            if num_frames > self.window_size:
+                step = self.window_size - self.overlap
+                for start in range(0, num_frames - self.window_size + 1, step):
+                    self.windows.append({
+                        'video_id': vid,
+                        'start_idx': start,
+                        'end_idx': start + self.window_size
+                    })
+                # Add the final window if it doesn't align perfectly
+                if start + self.window_size < num_frames:
+                    self.windows.append({
+                        'video_id': vid,
+                        'start_idx': num_frames - self.window_size,
+                        'end_idx': num_frames
+                    })
+            else:
+                # If the video is shorter than the window, just use the whole video
+                self.windows.append({
+                    'video_id': vid,
+                    'start_idx': 0,
+                    'end_idx': num_frames
+                })
         
         self._build_index()
 
