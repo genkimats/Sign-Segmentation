@@ -107,24 +107,38 @@ class SignSegmentationDataset(Dataset):
         self.split_file = split_file
         self.split = split
         self.window_size = window_size
+        self.overlap = overlap # <-- Added this to fix a potential crash!
         self.step_size = window_size - overlap
         self.tolerance_window = tolerance_window
         self.use_full_length = use_full_length
         self.temporal_downsample_factor = temporal_downsample_factor
 
-        # Make sure this is in your __init__
         self.feature_map = {
             "x-cord": 0,
             "y-cord": 1,
             "z-cord": 2
-            # Add any confidence or other channels here if they exist in your .npy files
         }
         
         # Track parameters or fall back to defaults
-        self.base_features = base_features if base_features is not None else ["x-cord", "y-cord", "confidence"]
+        self.base_features = base_features if base_features is not None else ["x-cord", "y-cord", "z-cord"]
         self.kinematic_features = kinematic_features if kinematic_features is not None else []
         self.slice_index = []
         
+        # ==============================================================================
+        # LOAD VIDEO IDS FROM SPLIT FILE
+        # ==============================================================================
+        with open(split_file, 'r') as f:
+            splits = json.load(f)
+            
+        if split not in splits:
+            raise ValueError(f"Split '{split}' not found in {split_file}")
+            
+        # Extract IDs and clean any lingering file extensions
+        self.video_ids = [vid.replace('.npy', '').replace('.pt', '') for vid in splits[split]]
+        
+        # ==============================================================================
+        # GENERATE SLIDING WINDOWS
+        # ==============================================================================
         self.samples = []  # Stores full video info
         self.windows = []  # Stores sliced window info (CRITICAL FOR TRAINING)
 
@@ -167,7 +181,9 @@ class SignSegmentationDataset(Dataset):
                     'end_idx': num_frames
                 })
         
-        self._build_index()
+        # Assuming you have a _build_index() function defined elsewhere in your class
+        if hasattr(self, '_build_index'):
+            self._build_index()
 
     def _build_index(self):
         # Load the split blueprint
