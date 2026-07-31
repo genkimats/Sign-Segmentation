@@ -241,17 +241,29 @@ STGCN_TRANSFORMER_DEFAULTS = {
 }
 
 def calculate_in_channels(base_features, kinematic_features):
-    """Dynamically calculates the exact number of input channels based on requested features."""
-    base_count = len(base_features)
-    deriv_count = base_count if base_count > 0 else 2
-    total_channels = base_count
+    """
+    Dynamically calculates the total number of input channels for the ST-GCN
+    based on the exact features requested in the payload.
+    """
+    total_channels = 0
     
-    if "velocity" in kinematic_features: total_channels += deriv_count
-    if "acceleration" in kinematic_features: total_channels += deriv_count
-    if "jerk" in kinematic_features: total_channels += deriv_count
-    if "velocity-mag" in kinematic_features: total_channels += 1
-    if "angular-vel" in kinematic_features: total_channels += 1
-        
+    # 1. Base Features (1 channel per string in the list)
+    total_channels += len(base_features)
+    
+    # In dataset.py, derivatives default to [x, y, z] (3 channels) if no base features exist.
+    # Otherwise, they match the number of active coordinate features.
+    valid_base_cords = [f for f in base_features if f in ["x-cord", "y-cord", "z-cord"]]
+    deriv_channels = len(valid_base_cords) if valid_base_cords else 3
+    
+    # 2. Kinematic Features
+    for feat in kinematic_features:
+        if feat in ["velocity", "acceleration", "jerk"]:
+            total_channels += deriv_channels
+        elif feat in ["velocity-mag", "angular-vel"]:
+            total_channels += 1
+        elif feat in ["spatial_angles", "temporal_angles"]:
+            total_channels += 2 # Adds Theta (Pitch) and Phi (Yaw)
+            
     return total_channels
 
 #endregion
