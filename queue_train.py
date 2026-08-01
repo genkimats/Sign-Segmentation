@@ -280,7 +280,7 @@ if __name__ == "__main__":
                 "loss_function": "wce_tmse",
                 "class_weights": [0.6, 0.8, 1.0],
                 "tmse_weight": 0.05,
-                "description": "overlap ratio (0/16), spatial_angles, loss=wce_tmse(0.6,0.8,1.0)"
+                "description": "overlap ratio (0/16), tmse=0.05, loss=wce_tmse(0.6,0.8,1.0), spatial_angles"
             },
             {
                 "window_size": 16,
@@ -289,7 +289,7 @@ if __name__ == "__main__":
                 "loss_function": "wce_tmse",
                 "class_weights": [0.6, 0.8, 1.0],
                 "tmse_weight": 0.1,
-                "description": "overlap ratio (0/16), spatial_angles, loss=wce_tmse(0.6,0.8,1.0)"
+                "description": "overlap ratio (0/16), tmse=0.1, loss=wce_tmse(0.6,0.8,1.0), spatial_angles"
             },
             {
                 "window_size": 16,
@@ -298,7 +298,7 @@ if __name__ == "__main__":
                 "loss_function": "wce_tmse",
                 "class_weights": [0.6, 0.8, 1.0],
                 "tmse_weight": 0.2,
-                "description": "overlap ratio (0/16), spatial_angles, loss=wce_tmse(0.6,0.8,1.0)"
+                "description": "overlap ratio (0/16), tmse=0.2, loss=wce_tmse(0.6,0.8,1.0), spatial_angles"
             },
             {
                 "window_size": 16,
@@ -307,7 +307,7 @@ if __name__ == "__main__":
                 "loss_function": "wce_tmse",
                 "class_weights": [0.6, 0.8, 1.0],
                 "tmse_weight": 0.3,
-                "description": "overlap ratio (0/16), spatial_angles, loss=wce_tmse(0.6,0.8,1.0)"
+                "description": "overlap ratio (0/16), tmse=0.3, loss=wce_tmse(0.6,0.8,1.0), spatial_angles"
             },
             {
                 "window_size": 16,
@@ -316,7 +316,7 @@ if __name__ == "__main__":
                 "loss_function": "wce_tmse",
                 "class_weights": [0.6, 0.8, 1.0],
                 "tmse_weight": 0.4,
-                "description": "overlap ratio (0/16), spatial_angles, loss=wce_tmse(0.6,0.8,1.0)"
+                "description": "overlap ratio (0/16), tmse=0.4, loss=wce_tmse(0.6,0.8,1.0), spatial_angles"
             },
         ]
         
