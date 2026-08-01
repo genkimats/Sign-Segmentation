@@ -279,8 +279,8 @@ if __name__ == "__main__":
                 "kinematic_features": ["spatial_angles"],
                 "loss_function": "wce_tmse",
                 "class_weights": [0.6, 0.8, 1.0],
-                "tmse_weight": 0.05,
-                "description": "overlap ratio (0/16), tmse=0.05, loss=wce_tmse(0.6,0.8,1.0), spatial_angles"
+                "d_model": 128,
+                "description": "overlap ratio (0/16), dim=128, spatial_angles, loss=wce_tmse(0.6,0.8,1.0)"
             },
             {
                 "window_size": 16,
@@ -288,26 +288,26 @@ if __name__ == "__main__":
                 "kinematic_features": ["spatial_angles"],
                 "loss_function": "wce_tmse",
                 "class_weights": [0.6, 0.8, 1.0],
-                "tmse_weight": 0.1,
-                "description": "overlap ratio (0/16), tmse=0.1, loss=wce_tmse(0.6,0.8,1.0), spatial_angles"
+                "d_model": 512,
+                "description": "overlap ratio (0/16), dim=512, spatial_angles, loss=wce_tmse(0.6,0.8,1.0)"
             },
             {
                 "window_size": 16,
                 "overlap": 0,
-                "kinematic_features": ["spatial_angles"],
+                "kinematic_features": [],
                 "loss_function": "wce_tmse",
                 "class_weights": [0.6, 0.8, 1.0],
-                "tmse_weight": 0.2,
-                "description": "overlap ratio (0/16), tmse=0.2, loss=wce_tmse(0.6,0.8,1.0), spatial_angles"
+                "d_model": 128,
+                "description": "overlap ratio (0/16), dim=128, no kinetic, loss=wce_tmse(0.6,0.8,1.0)"
             },
             {
                 "window_size": 16,
                 "overlap": 0,
-                "kinematic_features": ["spatial_angles"],
+                "kinematic_features": [],
                 "loss_function": "wce_tmse",
                 "class_weights": [0.6, 0.8, 1.0],
-                "tmse_weight": 0.3,
-                "description": "overlap ratio (0/16), tmse=0.3, loss=wce_tmse(0.6,0.8,1.0), spatial_angles"
+                "d_model": 512,
+                "description": "overlap ratio (0/16), dim=512, no kinetic, loss=wce_tmse(0.6,0.8,1.0)"
             },
             {
                 "window_size": 16,
