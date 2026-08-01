@@ -279,48 +279,45 @@ if __name__ == "__main__":
                 "kinematic_features": ["spatial_angles"],
                 "loss_function": "wce_tmse",
                 "class_weights": [0.6, 0.8, 1.0],
+                "tmse_weight": 0.05,
                 "description": "overlap ratio (0/16), spatial_angles, loss=wce_tmse(0.6,0.8,1.0)"
             },
             {
-                "window_size": 32,
+                "window_size": 16,
                 "overlap": 0,
                 "kinematic_features": ["spatial_angles"],
                 "loss_function": "wce_tmse",
                 "class_weights": [0.6, 0.8, 1.0],
-                "description": "overlap ratio (0/32), spatial_angles, loss=wce_tmse(0.6,0.8,1.0)"
+                "tmse_weight": 0.1,
+                "description": "overlap ratio (0/16), spatial_angles, loss=wce_tmse(0.6,0.8,1.0)"
             },
             {
-                "window_size": 64,
+                "window_size": 16,
                 "overlap": 0,
                 "kinematic_features": ["spatial_angles"],
                 "loss_function": "wce_tmse",
                 "class_weights": [0.6, 0.8, 1.0],
-                "description": "overlap ratio (0/64), spatial_angles, loss=wce_tmse(0.6,0.8,1.0)"
+                "tmse_weight": 0.2,
+                "description": "overlap ratio (0/16), spatial_angles, loss=wce_tmse(0.6,0.8,1.0)"
             },
             {
-                "window_size": 128,
+                "window_size": 16,
                 "overlap": 0,
                 "kinematic_features": ["spatial_angles"],
                 "loss_function": "wce_tmse",
                 "class_weights": [0.6, 0.8, 1.0],
-                "description": "overlap ratio (0/128), spatial_angles, loss=wce_tmse(0.6,0.8,1.0)"
+                "tmse_weight": 0.3,
+                "description": "overlap ratio (0/16), spatial_angles, loss=wce_tmse(0.6,0.8,1.0)"
             },
             {
-                "window_size": 256,
+                "window_size": 16,
                 "overlap": 0,
                 "kinematic_features": ["spatial_angles"],
                 "loss_function": "wce_tmse",
                 "class_weights": [0.6, 0.8, 1.0],
-                "description": "overlap ratio (0/256), spatial_angles, loss=wce_tmse(0.6,0.8,1.0)"
+                "tmse_weight": 0.4,
+                "description": "overlap ratio (0/16), spatial_angles, loss=wce_tmse(0.6,0.8,1.0)"
             },
-            {
-                "window_size": 512,
-                "overlap": 0,
-                "kinematic_features": ["spatial_angles"],
-                "loss_function": "wce_tmse",
-                "class_weights": [0.6, 0.8, 1.0],
-                "description": "overlap ratio (0/512), spatial_angles, loss=wce_tmse(0.6,0.8,1.0)"
-            }
         ]
         
     elif CHOSEN_TYPE == 'stgcn_mlp_mamba':
