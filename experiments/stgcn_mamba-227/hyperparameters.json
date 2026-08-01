@@ -1,0 +1,41 @@
+{
+    "basename": "stgcn_mamba",
+    "batch_size": 16,
+    "epochs": 50,
+    "early_stopping": true,
+    "patience": 10,
+    "learning_rate": 0.0001,
+    "num_vertices": 65,
+    "tolerance_window": 5,
+    "temporal_downsample_factor": 1,
+    "loss_function": "wce_tmse",
+    "ctc_weight": 0.5,
+    "class_weights": [
+        0.6,
+        0.8,
+        1.0
+    ],
+    "tmse_weight": 0.15,
+    "tmse_threshold": 0.1,
+    "use_full_length": false,
+    "base_features": [
+        "x-cord",
+        "y-cord",
+        "z-cord"
+    ],
+    "kinematic_features": [
+        "spatial_angles"
+    ],
+    "in_channels": 5,
+    "decoder_strategy": "threshold",
+    "decoder_threshold": 0.5,
+    "d_model": 256,
+    "n_layers": 4,
+    "focal_loss_gamma": 2.0,
+    "optimizer": "AdamW",
+    "scheduler": "CosineAnnealingLR",
+    "window_size": 32,
+    "overlap": 0,
+    "description": "overlap ratio (0/32), spatial_angles, loss=wce_tmse(0.6,0.8,1.0)",
+    "prefix": "227"
+}
