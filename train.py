@@ -19,7 +19,8 @@ from sklearn.metrics import confusion_matrix
 from src.dataset import SignSegmentationDataset
 from src.models import PureMambaBaseline, BiMambaBaseline, STGCN_Mamba, STGCN_MLP_Mamba, STGCN_BiMamba, Decoupled_STGCN_Mamba, BiLSTM_Baseline, STGCN_BiLSTM, TransformerBaseline, STGCN_Transformer
 from src.metrics import evaluate_batch
-from src.loss import CombinedBoundaryLoss, FocalLoss, StandardCrossEntropyLoss, WeightedCrossEntropyLoss, UnifiedCTCLoss, WeightedCE_TMSE_Loss
+# --- UPDATED: Added WeightedNLLLoss to imports ---
+from src.loss import CombinedBoundaryLoss, FocalLoss, StandardCrossEntropyLoss, WeightedCrossEntropyLoss, UnifiedCTCLoss, WeightedCE_TMSE_Loss, WeightedNLLLoss
 from src.decoder import decode_predictions
 
 QUEUE_FILE = "train_queue.json"
@@ -169,6 +170,7 @@ def train_model(config):
         model = model_class(**model_kwargs).to(device)
         weights = torch.tensor(CLASS_WEIGHTS, dtype=torch.float).to(device)
         
+        # --- UPDATED: Added weighted_nll link ---
         if LOSS_FUNCTION == "bcl":
             criterion = CombinedBoundaryLoss(focal_gamma=FOCAL_LOSS_GAMMA, contrastive_weight=config.get("contrastive_weight", 0.15))
         elif LOSS_FUNCTION == "unified_ctc":
@@ -185,6 +187,8 @@ def train_model(config):
                 tmse_weight=config.get("tmse_weight", 0.15),
                 threshold=config.get("tmse_threshold", 0.1)
             )
+        elif LOSS_FUNCTION == "weighted_nll":
+            criterion = WeightedNLLLoss(weights=weights)
         else:
             raise ValueError(f"Unknown loss function '{LOSS_FUNCTION}'")
 
@@ -360,18 +364,15 @@ def train_model(config):
                 is_best = True
                 
                 try:
-                    # --- NEW: Row Normalized Confusion Matrix ---
                     cm = confusion_matrix(epoch_val_true, epoch_val_pred, labels=[0, 1, 2])
                     cm_normalized = confusion_matrix(epoch_val_true, epoch_val_pred, labels=[0, 1, 2], normalize='true')
                     
-                    # Create custom string annotations blending count and percentage
                     annot_labels = np.empty_like(cm, dtype=object)
                     for i in range(cm.shape[0]):
                         for j in range(cm.shape[1]):
                             annot_labels[i, j] = f"{cm[i, j]}\n({cm_normalized[i, j]:.1%})"
                             
                     plt.figure(figsize=(8, 6))
-                    # Pass the normalized matrix for accurate color scaling (0 to 1)
                     sns.heatmap(cm_normalized, annot=annot_labels, fmt='', cmap='Blues', 
                                 xticklabels=['Outside (0)', 'Inside (1)', 'Begin (2)'], 
                                 yticklabels=['Outside (0)', 'Inside (1)', 'Begin (2)'],
