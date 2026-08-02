@@ -33,7 +33,7 @@ MAMBA_DEFAULTS = {
     "temporal_downsample_factor": 1, 
     "loss_function": "standard_ce",  # <-- UPDATED
     "ctc_weight": 0.5,               # <-- NEW
-    "class_weights": [0.1, 0.3, 1.0],
+    "class_weights": [0.6, 0.8, 1.0],
     "tmse_weight": 0.15,             # <-- NEW: How strongly to penalize flickering
     "tmse_threshold": 0.1,           # <-- NEW: Max cap to protect real boundaries
     "use_full_length": False,
@@ -64,7 +64,7 @@ STGCN_MLP_MAMBA_DEFAULTS = {
     "temporal_downsample_factor": 1, 
     "loss_function": "standard_ce",  # <-- UPDATED
     "ctc_weight": 0.5,               # <-- NEW
-    "class_weights": [0.1, 0.3, 1.0],
+    "class_weights": [0.6, 0.8, 1.0],
     "tmse_weight": 0.15,             # <-- NEW: How strongly to penalize flickering
     "tmse_threshold": 0.1,           # <-- NEW: Max cap to protect real boundaries
     "use_full_length": False,
@@ -96,7 +96,7 @@ PURE_MAMBA_DEFAULTS = {
     "temporal_downsample_factor": 1, 
     "loss_function": "standard_ce",  # <-- UPDATED
     "ctc_weight": 0.5,               # <-- NEW
-    "class_weights": [0.1, 0.3, 1.0],
+    "class_weights": [0.6, 0.8, 1.0],
     "tmse_weight": 0.15,             # <-- NEW: How strongly to penalize flickering
     "tmse_threshold": 0.1,           # <-- NEW: Max cap to protect real boundaries
     "use_full_length": False,
@@ -127,7 +127,7 @@ LSTM_DEFAULTS = {
     "temporal_downsample_factor": 1, 
     "loss_function": "standard_ce",  # <-- UPDATED
     "ctc_weight": 0.5,               # <-- NEW
-    "class_weights": [0.1, 0.3, 1.0],
+    "class_weights": [0.6, 0.8, 1.0],
     "tmse_weight": 0.15,             # <-- NEW: How strongly to penalize flickering
     "tmse_threshold": 0.1,           # <-- NEW: Max cap to protect real boundaries
     "use_full_length": False,
@@ -158,7 +158,7 @@ STGCN_LSTM_DEFAULTS = {
     "temporal_downsample_factor": 1,
     "loss_function": "standard_ce",  # <-- UPDATED
     "ctc_weight": 0.5,               # <-- NEW
-    "class_weights": [0.1, 0.3, 1.0],
+    "class_weights": [0.6, 0.8, 1.0],
     "tmse_weight": 0.15,             # <-- NEW: How strongly to penalize flickering
     "tmse_threshold": 0.1,           # <-- NEW: Max cap to protect real boundaries
     "use_full_length": False,
@@ -189,7 +189,7 @@ TRANSFORMER_DEFAULTS = {
     "temporal_downsample_factor": 1,
     "loss_function": "standard_ce",  # <-- UPDATED
     "ctc_weight": 0.5,               # <-- NEW
-    "class_weights": [0.1, 0.3, 1.0],
+    "class_weights": [0.6, 0.8, 1.0],
     "tmse_weight": 0.15,             # <-- NEW: How strongly to penalize flickering
     "tmse_threshold": 0.1,           # <-- NEW: Max cap to protect real boundaries
     "use_full_length": False,
@@ -222,7 +222,7 @@ STGCN_TRANSFORMER_DEFAULTS = {
     "temporal_downsample_factor": 1,
     "loss_function": "standard_ce",  # <-- UPDATED
     "ctc_weight": 0.5,               # <-- NEW
-    "class_weights": [0.1, 0.3, 1.0],
+    "class_weights": [0.6, 0.8, 1.0],
     "tmse_weight": 0.15,             # <-- NEW: How strongly to penalize flickering
     "tmse_threshold": 0.1,           # <-- NEW: Max cap to protect real boundaries
     "use_full_length": False,
@@ -277,47 +277,37 @@ if __name__ == "__main__":
                 "window_size": 16,
                 "overlap": 0,
                 "kinematic_features": ["spatial_angles"],
-                "loss_function": "wce_tmse",
-                "class_weights": [0.6, 0.8, 1.0],
-                "d_model": 128,
-                "description": "overlap ratio (0/16), dim=128, spatial_angles, loss=wce_tmse(0.6,0.8,1.0)"
+                "loss_function": "weighted_nll",
+                "description": "overlap ratio (0/16), loss=weighted_nll, spatial_angles"
             },
             {
-                "window_size": 16,
+                "window_size": 32,
                 "overlap": 0,
                 "kinematic_features": ["spatial_angles"],
-                "loss_function": "wce_tmse",
-                "class_weights": [0.6, 0.8, 1.0],
-                "d_model": 512,
-                "description": "overlap ratio (0/16), dim=512, spatial_angles, loss=wce_tmse(0.6,0.8,1.0)"
+                "loss_function": "weighted_nll",
+                "description": "overlap ratio (0/32), loss=weighted_nll, spatial_angles"
             },
             {
-                "window_size": 16,
-                "overlap": 0,
-                "kinematic_features": [],
-                "loss_function": "wce_tmse",
-                "class_weights": [0.6, 0.8, 1.0],
-                "d_model": 128,
-                "description": "overlap ratio (0/16), dim=128, no kinetic, loss=wce_tmse(0.6,0.8,1.0)"
-            },
-            {
-                "window_size": 16,
-                "overlap": 0,
-                "kinematic_features": [],
-                "loss_function": "wce_tmse",
-                "class_weights": [0.6, 0.8, 1.0],
-                "d_model": 512,
-                "description": "overlap ratio (0/16), dim=512, no kinetic, loss=wce_tmse(0.6,0.8,1.0)"
-            },
-            {
-                "window_size": 16,
+                "window_size": 64,
                 "overlap": 0,
                 "kinematic_features": ["spatial_angles"],
-                "loss_function": "wce_tmse",
-                "class_weights": [0.6, 0.8, 1.0],
-                "tmse_weight": 0.4,
-                "description": "overlap ratio (0/16), tmse=0.4, loss=wce_tmse(0.6,0.8,1.0), spatial_angles"
+                "loss_function": "weighted_nll",
+                "description": "overlap ratio (0/64), loss=weighted_nll, spatial_angles"
             },
+            {
+                "window_size": 128,
+                "overlap": 0,
+                "kinematic_features": ["spatial_angles"],
+                "loss_function": "weighted_nll",
+                "description": "overlap ratio (0/128), loss=weighted_nll, spatial_angles"
+            },
+            {
+                "window_size": 256,
+                "overlap": 0,
+                "kinematic_features": ["spatial_angles"],
+                "loss_function": "weighted_nll",
+                "description": "overlap ratio (0/256), loss=weighted_nll, spatial_angles"
+            }
         ]
         
     elif CHOSEN_TYPE == 'stgcn_mlp_mamba':
