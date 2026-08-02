@@ -66,7 +66,7 @@ def train_model(config):
     
     BATCH_SIZE = config["batch_size"]
     EPOCHS = config["epochs"]
-    MIN_EPOCHS = config.get("min_epochs", 15) # --- NEW: Minimum epoch limit ---
+    MIN_EPOCHS = config.get("min_epochs", 15) 
     EARLY_STOPPING = config.get("early_stopping", True)
     PATIENCE = config.get("patience", 10)
     LEARNING_RATE = config["learning_rate"]
@@ -157,7 +157,6 @@ def train_model(config):
     if MODEL_NAME == "stgcn_mlp_mamba":
         model_kwargs["mlp_expansion_factor"] = config.get("mlp_expansion_factor", 4)
 
-    # --- NEW: Training Redo Logic Setup ---
     MAX_REDOS = 5
     redo_count = 0
     total_nan_this_run = 0
@@ -167,7 +166,6 @@ def train_model(config):
         if redo_count > 0:
             print(f"\n🔄 RESTARTING TRAINING (Attempt {redo_count + 1}/{MAX_REDOS + 1}) DUE TO NAN EXPLOSION...")
             
-        # 1. Initialize / Re-Initialize Model and Optimizer
         model = model_class(**model_kwargs).to(device)
         weights = torch.tensor(CLASS_WEIGHTS, dtype=torch.float).to(device)
         
@@ -200,7 +198,6 @@ def train_model(config):
         else:
             scheduler = None
             
-        # 2. Reset Tracking Variables for this specific run
         metrics_log_path = os.path.join(exp_dir, "training_metrics.csv")
         with open(metrics_log_path, mode='w', newline='') as file:
             writer = csv.writer(file)
@@ -218,13 +215,12 @@ def train_model(config):
             
         needs_restart = False
 
-        # 3. Epoch Loop
         for epoch in range(1, EPOCHS + 1):
             actual_epochs_ran = epoch
             epoch_start_time = time.time()
             model.train()
             train_loss = 0.0
-            epoch_nan_count = 0 # Track NaNs per epoch
+            epoch_nan_count = 0
             valid_batches = 0
             
             loop = tqdm(train_loader, desc=f"Epoch {epoch}/{EPOCHS} [Train]", leave=False)
@@ -247,7 +243,6 @@ def train_model(config):
                     hard_labels = torch.argmax(labels, dim=1)
                     loss = criterion(logits, hard_labels)
                 
-                # --- NEW: NaN/Inf Tracking Logic ---
                 if torch.isnan(loss) or torch.isinf(loss):
                     epoch_nan_count += 1
                     total_nan_this_run += 1
@@ -256,8 +251,8 @@ def train_model(config):
                     if epoch_nan_count > 50 and redo_count < MAX_REDOS:
                         print(f"\n⚠️ CRITICAL: Epoch {epoch} encountered >50 NaN losses ({epoch_nan_count}). Aborting run.")
                         needs_restart = True
-                        break # Break inner batch loop
-                    continue # Skip backprop if NaN
+                        break
+                    continue
                 
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
@@ -273,7 +268,6 @@ def train_model(config):
                 except Exception:
                     pass
             
-            # Break epoch loop if restart triggered
             if needs_restart:
                 break 
                 
@@ -282,7 +276,6 @@ def train_model(config):
             if scheduler:
                 scheduler.step()
                 
-            # Validation Loop
             model.eval()
             val_loss = 0.0
             val_frame_f1, val_iou, val_seg_f1 = [], [], []
@@ -367,13 +360,24 @@ def train_model(config):
                 is_best = True
                 
                 try:
+                    # --- NEW: Row Normalized Confusion Matrix ---
                     cm = confusion_matrix(epoch_val_true, epoch_val_pred, labels=[0, 1, 2])
+                    cm_normalized = confusion_matrix(epoch_val_true, epoch_val_pred, labels=[0, 1, 2], normalize='true')
+                    
+                    # Create custom string annotations blending count and percentage
+                    annot_labels = np.empty_like(cm, dtype=object)
+                    for i in range(cm.shape[0]):
+                        for j in range(cm.shape[1]):
+                            annot_labels[i, j] = f"{cm[i, j]}\n({cm_normalized[i, j]:.1%})"
+                            
                     plt.figure(figsize=(8, 6))
-                    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
+                    # Pass the normalized matrix for accurate color scaling (0 to 1)
+                    sns.heatmap(cm_normalized, annot=annot_labels, fmt='', cmap='Blues', 
                                 xticklabels=['Outside (0)', 'Inside (1)', 'Begin (2)'], 
-                                yticklabels=['Outside (0)', 'Inside (1)', 'Begin (2)'])
+                                yticklabels=['Outside (0)', 'Inside (1)', 'Begin (2)'],
+                                vmin=0.0, vmax=1.0)
                     plt.xlabel('Predicted')
-                    plt.ylabel('Actual')
+                    plt.ylabel('Actual (Row %)')
                     plt.title(f'Validation Confusion Matrix (Best Epoch {epoch})\n{run_name}')
                     
                     cm_save_path = os.path.join(exp_dir, "best_confusion_matrix.png")
@@ -400,12 +404,10 @@ def train_model(config):
                 writer = csv.writer(file)
                 writer.writerow([epoch, avg_train_loss, avg_val_loss, epoch_f1, epoch_iou, epoch_seg, epoch_duration, epoch_nan_count])
 
-            # --- NEW: Minimum Epochs Limit added to Early Stopping ---
             if EARLY_STOPPING and epochs_without_improvement >= PATIENCE and epoch >= MIN_EPOCHS:
                 print(f"\n🛑 Early stopping triggered! No improvement in combined score for {PATIENCE} epochs (Minimum {MIN_EPOCHS} epochs met).")
                 break
                 
-        # If we successfully finished without a critical restart, break the retry loop
         if not needs_restart:
             break
         
@@ -414,7 +416,6 @@ def train_model(config):
     if needs_restart and redo_count > MAX_REDOS:
         print(f"\n❌ FAILED TO STABILIZE TRAINING. Maximum redos ({MAX_REDOS}) reached. Saving partial/broken run.")
 
-    # 4. Save Final Summary
     total_time = time.time() - start_train_time
     total_minutes, total_seconds = divmod(int(total_time), 60)
     
@@ -437,8 +438,8 @@ def train_model(config):
         "average_time_per_epoch": f"{int(avg_minutes)}m {int(avg_seconds)}s",
         "max_gpu_memory_used_gb": round(max_mem_gb, 4),
         "average_gpu_utilization_percent": round(avg_gpu_util, 2),
-        "total_nan_loss_count_latest_run": total_nan_this_run, # --- NEW ---
-        "total_training_restarts": min(redo_count, MAX_REDOS)  # --- NEW ---
+        "total_nan_loss_count_latest_run": total_nan_this_run, 
+        "total_training_restarts": min(redo_count, MAX_REDOS)  
     }
 
     summary_save_path = os.path.join(exp_dir, "hardware_summary.json")
