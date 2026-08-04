@@ -67,7 +67,7 @@ def train_model(config):
     
     BATCH_SIZE = config["batch_size"]
     EPOCHS = config["epochs"]
-    MIN_EPOCHS = config.get("min_epochs", 15) 
+    MIN_EPOCHS = config.get("min_epochs", 25) 
     EARLY_STOPPING = config.get("early_stopping", True)
     PATIENCE = config.get("patience", 10)
     LEARNING_RATE = config["learning_rate"]
