@@ -278,9 +278,8 @@ if __name__ == "__main__":
                 "overlap": 0,
                 "batch_size": 1,
                 "kinematic_features": ["spatial_angles"],
-                "loss_function": "wce_tmse",
-                "tmse_weight": 0.5,
-                "description": "overlap ratio (0/16), tmse=0.5, loss=wce_tmse, spatial_angles"
+                "loss_function": "weighted_ce",
+                "description": "overlap ratio (0/256), batch=1, loss=weighted_ce, spatial_angles"
             }
         ]
         
