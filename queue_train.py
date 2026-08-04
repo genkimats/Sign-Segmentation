@@ -274,42 +274,13 @@ if __name__ == "__main__":
         defaults = MAMBA_DEFAULTS
         experiments_to_run = [
             {
-                "window_size": 16,
+                "window_size": 256,
                 "overlap": 0,
+                "batch_size": 1,
                 "kinematic_features": ["spatial_angles"],
                 "loss_function": "wce_tmse",
                 "tmse_weight": 0.5,
-                "description": "overlap ratio (0/16), tmse=0.5,loss=wce_tmse, spatial_angles"
-            },
-            {
-                "window_size": 16,
-                "overlap": 0,
-                "batch_size": 8,
-                "kinematic_features": ["spatial_angles"],
-                "loss_function": "weighted_ce",
-                "description": "overlap ratio (0/16), batch=8, loss=weighted_ce, spatial_angles"
-            },
-            {
-                "window_size": 16,
-                "overlap": 0,
-                "batch_size": 32,
-                "kinematic_features": ["spatial_angles"],
-                "loss_function": "weighted_ce",
-                "description": "overlap ratio (0/16), batch=32, loss=weighted_ce, spatial_angles"
-            },
-            {
-                "window_size": 16,
-                "overlap": 0,
-                "kinematic_features": ["spatial_angles"],
-                "loss_function": "unified_ctc",
-                "description": "overlap ratio (0/128), loss=unified_ctc, spatial_angles"
-            },
-            {
-                "window_size": 128,
-                "overlap": 0,
-                "kinematic_features": ["spatial_angles"],
-                "loss_function": "unified_ctc",
-                "description": "overlap ratio (0/128), loss=unified_ctc, spatial_angles"
+                "description": "overlap ratio (0/16), tmse=0.5, loss=wce_tmse, spatial_angles"
             }
         ]
         
