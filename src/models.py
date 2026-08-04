@@ -431,3 +431,83 @@ class BiMambaBaseline(nn.Module):
         logits = self.classifier(embeddings)
         
         return logits.permute(0, 2, 1), embeddings.permute(0, 2, 1)
+
+class Latent_STGCN_Mamba(nn.Module):
+    """
+    Discriminative adaptation of 'Sign-Mamba' Latent Space Extractor.
+    Compresses the spatial graph into a dense continuous latent space, 
+    uses a dedicated Mamba block to extract temporal latent dynamics, 
+    then up-projects to the main sequence modeler.
+    """
+    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2):
+        super().__init__()
+        # 1. Spatial Graph Encoder
+        graph = SkeletonGraph(num_vertices=num_vertices)
+        A = graph.A
+        self.stgcn_blocks = nn.Sequential(
+            STGCNBlock(in_channels, stgcn_channels, A),
+            STGCNBlock(stgcn_channels, stgcn_channels, A)
+        )
+        
+        flat_dim = num_vertices * stgcn_channels
+        
+        # 2. Continuous Latent Space Bottleneck (Encoder)
+        self.latent_encoder = nn.Sequential(
+            nn.Linear(flat_dim, latent_dim),
+            nn.LayerNorm(latent_dim),
+            nn.GELU(),
+            nn.Dropout(dropout)
+        )
+        
+        # 3. Latent Mamba Extractor (Smooths the latent space dynamically)
+        self.latent_mamba = Mamba(d_model=latent_dim, d_state=16, d_conv=4, expand=2)
+        
+        # 4. Up-Projection to Main Sequence Dimension
+        self.latent_to_main = nn.Sequential(
+            nn.Linear(latent_dim, d_model),
+            nn.LayerNorm(d_model),
+            nn.GELU()
+        )
+        
+        # 5. Main Temporal Sequence Modeler (BiMamba Backend)
+        self.fwd_mamba = nn.ModuleList([
+            Mamba(d_model=d_model, d_state=16, d_conv=4, expand=2) for _ in range(n_layers)
+        ])
+        self.bwd_mamba = nn.ModuleList([
+            Mamba(d_model=d_model, d_state=16, d_conv=4, expand=2) for _ in range(n_layers)
+        ])
+        
+        self.fusion = nn.Linear(d_model * 2, d_model)
+        self.classifier = nn.Linear(d_model, num_classes)
+
+    def forward(self, x):
+        B, C, T, V = x.shape
+        
+        # Spatial Graph Processing
+        x = self.stgcn_blocks(x)                   # (B, 64, T, 65)
+        x = x.permute(0, 2, 1, 3).reshape(B, T, -1) # Flatten to (B, T, 4160)
+        
+        # Transform into Latent Space
+        z = self.latent_encoder(x)                 # (B, T, 128)
+        
+        # Extract Temporal Latent Dynamics (with residual connection)
+        z_smooth = self.latent_mamba(z) + z        # (B, T, 128)
+        
+        # Project to Deep Sequence Modeler
+        features = self.latent_to_main(z_smooth)   # (B, T, 256)
+        
+        fwd_emb = features
+        bwd_emb = torch.flip(features, dims=[1])
+        
+        for f_layer, b_layer in zip(self.fwd_mamba, self.bwd_mamba):
+            fwd_emb = f_layer(fwd_emb)
+            bwd_emb = b_layer(bwd_emb)
+            
+        bwd_emb = torch.flip(bwd_emb, dims=[1])
+        merged = torch.cat([fwd_emb, bwd_emb], dim=-1)
+        fused = self.fusion(merged)
+        
+        logits = self.classifier(fused)
+        
+        # Return Logits -> (B, Classes, T) and final embeddings -> (B, T, d_model)
+        return logits.permute(0, 2, 1), fused

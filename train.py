@@ -17,7 +17,7 @@ from sklearn.metrics import confusion_matrix
 
 # Import our custom modules
 from src.dataset import SignSegmentationDataset
-from src.models import PureMambaBaseline, BiMambaBaseline, STGCN_Mamba, STGCN_MLP_Mamba, STGCN_BiMamba, Decoupled_STGCN_Mamba, BiLSTM_Baseline, STGCN_BiLSTM, TransformerBaseline, STGCN_Transformer
+from src.models import PureMambaBaseline, BiMambaBaseline, STGCN_Mamba, STGCN_MLP_Mamba, STGCN_BiMamba, Decoupled_STGCN_Mamba, BiLSTM_Baseline, STGCN_BiLSTM, TransformerBaseline, STGCN_Transformer, Latent_STGCN_Mamba
 from src.metrics import evaluate_batch
 # --- UPDATED: Added WeightedNLLLoss to imports ---
 from src.loss import CombinedBoundaryLoss, FocalLoss, StandardCrossEntropyLoss, WeightedCrossEntropyLoss, UnifiedCTCLoss, WeightedCE_TMSE_Loss, WeightedNLLLoss
@@ -38,7 +38,8 @@ MODEL_REGISTRY = {
     "bilstm_baseline": BiLSTM_Baseline,
     "stgcn_bilstm": STGCN_BiLSTM,
     "transformer_baseline": TransformerBaseline,
-    "stgcn_transformer": STGCN_Transformer
+    "stgcn_transformer": STGCN_Transformer,
+    "latent_stgcn_mamba": Latent_STGCN_Mamba
 }
 
 def get_next_job():
@@ -157,6 +158,9 @@ def train_model(config):
         
     if MODEL_NAME == "stgcn_mlp_mamba":
         model_kwargs["mlp_expansion_factor"] = config.get("mlp_expansion_factor", 4)
+
+    if MODEL_NAME == "latent_stgcn_mamba":
+        model_kwargs["latent_dim"] = config.get("latent_dim", 128)
 
     MAX_REDOS = 5
     redo_count = 0

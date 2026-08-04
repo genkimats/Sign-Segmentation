@@ -274,6 +274,7 @@ if __name__ == "__main__":
         defaults = MAMBA_DEFAULTS
         experiments_to_run = [
             {
+                "basename": "latent_stgcn_mamba",
                 "window_size": 256,
                 "overlap": 0,
                 "batch_size": 1,
