@@ -18,7 +18,7 @@ from src.models import (
 # 🎛️ CONFIGURATION
 # ==============================================================================
 CHOSEN_MODEL = "stgcn_mamba"
-PREFIX = "202"
+PREFIX = "59"
 WEIGHTS_PATH = f"saved_models/{CHOSEN_MODEL}-{PREFIX}.pth"
 HYPERPARAMETER_PATH = f"experiments/{CHOSEN_MODEL}-{PREFIX}/hyperparameters.json"
 
@@ -107,9 +107,20 @@ class InteractiveViewer:
         self.ax.set_yticklabels(["Outside (0)", "Inside (1)", "Begin (2)"])
         self.ax.set_xlabel("Frames")
         
-        slice_info = self.dataset.slice_index[self.current_idx]
-        title = (f"File: {slice_info['base_name']} | Split: {TARGET_SPLIT.upper()} | "
-                 f"Frames: {slice_info['start']}-{slice_info['end']}\n"
+        # --- NEW: Fix dataset attribute names based on your updated dataset.py ---
+        if hasattr(self.dataset, 'use_full_length') and self.dataset.use_full_length:
+            slice_info = self.dataset.samples[self.current_idx]
+            file_id = slice_info.get('video_id', 'Unknown')
+            start_f = 0
+            end_f = "Full"
+        else:
+            slice_info = self.dataset.windows[self.current_idx]
+            file_id = slice_info.get('video_id', 'Unknown')
+            start_f = slice_info.get('start_idx', 0)
+            end_f = slice_info.get('end_idx', 0)
+        
+        title = (f"File: {file_id} | Split: {TARGET_SPLIT.upper()} | "
+                 f"Frames: {start_f}-{end_f}\n"
                  f"Dataset Index: {self.current_idx + 1} / {len(self.dataset)} (Use Left/Right Arrows to navigate)")
                  
         self.ax.set_title(title, fontsize=12, fontweight='bold')
