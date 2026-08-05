@@ -275,13 +275,39 @@ if __name__ == "__main__":
         experiments_to_run = [
             {
                 "basename": "latent_stgcn_mamba",
-                "window_size": 256,
+                "window_size": 16,
                 "overlap": 0,
-                "batch_size": 1,
                 "kinematic_features": ["spatial_angles"],
                 "loss_function": "weighted_ce",
-                "description": "overlap ratio (0/256), batch=1, loss=weighted_ce, spatial_angles"
-            }
+                "description": "overlap ratio (0/16), loss=weighted_ce, spatial_angles"
+            },
+            {
+                "basename": "latent_stgcn_mamba",
+                "window_size": 32,
+                "overlap": 0,
+                "kinematic_features": ["spatial_angles"],
+                "loss_function": "weighted_ce",
+                "description": "overlap ratio (0/32), loss=weighted_ce, spatial_angles"
+            },
+            {
+                "basename": "latent_stgcn_mamba",
+                "window_size": 64,
+                "overlap": 0,
+                "kinematic_features": ["spatial_angles"],
+                "loss_function": "weighted_ce",
+                "description": "overlap ratio (0/64), loss=weighted_ce, spatial_angles"
+            },
+            {
+                "basename": "latent_stgcn_mamba",
+                "window_size": 128,
+                "overlap": 0,
+                "kinematic_features": ["spatial_angles"],
+                "loss_function": "weighted_ce",
+                "description": "overlap ratio (0/128), loss=weighted_ce, spatial_angles"
+            },
+            
+            
+
         ]
         
     elif CHOSEN_TYPE == 'stgcn_mlp_mamba':
