@@ -305,6 +305,33 @@ if __name__ == "__main__":
                 "loss_function": "weighted_ce",
                 "description": "overlap ratio (0/128), loss=weighted_ce, spatial_angles"
             },
+            {
+                "basename": "stgcn_mamba",
+                "window_size": 16,
+                "overlap": 0,
+                "kinematic_features": ["spatial_angles"],
+                "loss_function": "weighted_ce",
+                "decoder_strategy": "argmax",
+                "description": "overlap ratio (0/256), decoder=argmax, loss=weighted_ce, spatial_angles"
+            },
+            {
+                "basename": "stgcn_mamba",
+                "window_size": 16,
+                "overlap": 0,
+                "kinematic_features": ["spatial_angles"],
+                "loss_function": "weighted_ce",
+                "decoder_strategy": "threshold",
+                "description": "overlap ratio (0/256), decoder=threshold, loss=weighted_ce, spatial_angles"
+            },
+            {
+                "basename": "stgcn_mamba",
+                "window_size": 16,
+                "overlap": 0,
+                "kinematic_features": ["spatial_angles"],
+                "loss_function": "weighted_ce",
+                "decoder_strategy": "argmax",
+                "description": "overlap ratio (0/256), decoder=linguistic, loss=weighted_ce, spatial_angles"
+            },
             
             
 
