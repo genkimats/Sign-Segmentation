@@ -273,38 +273,38 @@ if __name__ == "__main__":
     if CHOSEN_TYPE == 'mamba':
         defaults = MAMBA_DEFAULTS
         experiments_to_run = [
-            {
-                "basename": "latent_stgcn_mamba",
-                "window_size": 16,
-                "overlap": 0,
-                "kinematic_features": ["spatial_angles"],
-                "loss_function": "weighted_ce",
-                "description": "overlap ratio (0/16), loss=weighted_ce, spatial_angles"
-            },
-            {
-                "basename": "latent_stgcn_mamba",
-                "window_size": 32,
-                "overlap": 0,
-                "kinematic_features": ["spatial_angles"],
-                "loss_function": "weighted_ce",
-                "description": "overlap ratio (0/32), loss=weighted_ce, spatial_angles"
-            },
-            {
-                "basename": "latent_stgcn_mamba",
-                "window_size": 64,
-                "overlap": 0,
-                "kinematic_features": ["spatial_angles"],
-                "loss_function": "weighted_ce",
-                "description": "overlap ratio (0/64), loss=weighted_ce, spatial_angles"
-            },
-            {
-                "basename": "latent_stgcn_mamba",
-                "window_size": 128,
-                "overlap": 0,
-                "kinematic_features": ["spatial_angles"],
-                "loss_function": "weighted_ce",
-                "description": "overlap ratio (0/128), loss=weighted_ce, spatial_angles"
-            },
+            # {
+            #     "basename": "latent_stgcn_mamba",
+            #     "window_size": 16,
+            #     "overlap": 0,
+            #     "kinematic_features": ["spatial_angles"],
+            #     "loss_function": "weighted_ce",
+            #     "description": "overlap ratio (0/16), loss=weighted_ce, spatial_angles"
+            # },
+            # {
+            #     "basename": "latent_stgcn_mamba",
+            #     "window_size": 32,
+            #     "overlap": 0,
+            #     "kinematic_features": ["spatial_angles"],
+            #     "loss_function": "weighted_ce",
+            #     "description": "overlap ratio (0/32), loss=weighted_ce, spatial_angles"
+            # },
+            # {
+            #     "basename": "latent_stgcn_mamba",
+            #     "window_size": 64,
+            #     "overlap": 0,
+            #     "kinematic_features": ["spatial_angles"],
+            #     "loss_function": "weighted_ce",
+            #     "description": "overlap ratio (0/64), loss=weighted_ce, spatial_angles"
+            # },
+            # {
+            #     "basename": "latent_stgcn_mamba",
+            #     "window_size": 128,
+            #     "overlap": 0,
+            #     "kinematic_features": ["spatial_angles"],
+            #     "loss_function": "weighted_ce",
+            #     "description": "overlap ratio (0/128), loss=weighted_ce, spatial_angles"
+            # },
             {
                 "basename": "stgcn_mamba",
                 "window_size": 16,
