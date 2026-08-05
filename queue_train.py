@@ -40,7 +40,7 @@ MAMBA_DEFAULTS = {
     "base_features": ["x-cord", "y-cord", "z-cord"],
     "kinematic_features": [],
     "in_channels": 14, 
-    "decoder_strategy": "threshold",
+    "decoder_strategy": "argmax",
     "decoder_threshold": 0.5,
     "d_model": 256,
     "n_layers": 4,
