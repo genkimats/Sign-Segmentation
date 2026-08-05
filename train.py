@@ -19,9 +19,8 @@ from sklearn.metrics import confusion_matrix
 from src.dataset import SignSegmentationDataset
 from src.models import PureMambaBaseline, BiMambaBaseline, STGCN_Mamba, STGCN_MLP_Mamba, STGCN_BiMamba, Decoupled_STGCN_Mamba, BiLSTM_Baseline, STGCN_BiLSTM, TransformerBaseline, STGCN_Transformer, Latent_STGCN_Mamba
 from src.metrics import evaluate_batch
-# --- UPDATED: Added WeightedNLLLoss to imports ---
 from src.loss import CombinedBoundaryLoss, FocalLoss, StandardCrossEntropyLoss, WeightedCrossEntropyLoss, UnifiedCTCLoss, WeightedCE_TMSE_Loss, WeightedNLLLoss
-from src.decoder import decode_predictions
+# (Removed decoder import since we no longer use it in training/validation)
 
 QUEUE_FILE = "train_queue.json"
 
@@ -39,7 +38,7 @@ MODEL_REGISTRY = {
     "stgcn_bilstm": STGCN_BiLSTM,
     "transformer_baseline": TransformerBaseline,
     "stgcn_transformer": STGCN_Transformer,
-    "latent_stgcn_mamba": Latent_STGCN_Mamba
+    "latent_stgcn_mamba": Latent_STGCN_Mamba 
 }
 
 def get_next_job():
@@ -68,7 +67,7 @@ def train_model(config):
     
     BATCH_SIZE = config["batch_size"]
     EPOCHS = config["epochs"]
-    MIN_EPOCHS = config.get("min_epochs", 25) 
+    MIN_EPOCHS = config.get("min_epochs", 15) 
     EARLY_STOPPING = config.get("early_stopping", True)
     PATIENCE = config.get("patience", 10)
     LEARNING_RATE = config["learning_rate"]
@@ -83,8 +82,6 @@ def train_model(config):
     BASE_FEATURES = config["base_features"]
     KINEMATIC_FEATURES = config["kinematic_features"]
     IN_CHANNELS = config["in_channels"]
-    DECODER_STRATEGY = config["decoder_strategy"]
-    DECODER_THRESHOLD = config["decoder_threshold"]
     D_MODEL = config["d_model"]
     N_LAYERS = config["n_layers"]
     FOCAL_LOSS_GAMMA = config.get("focal_loss_gamma", 2.0)
@@ -158,7 +155,7 @@ def train_model(config):
         
     if MODEL_NAME == "stgcn_mlp_mamba":
         model_kwargs["mlp_expansion_factor"] = config.get("mlp_expansion_factor", 4)
-
+        
     if MODEL_NAME == "latent_stgcn_mamba":
         model_kwargs["latent_dim"] = config.get("latent_dim", 128)
 
@@ -174,7 +171,6 @@ def train_model(config):
         model = model_class(**model_kwargs).to(device)
         weights = torch.tensor(CLASS_WEIGHTS, dtype=torch.float).to(device)
         
-        # --- UPDATED: Added weighted_nll link ---
         if LOSS_FUNCTION == "bcl":
             criterion = CombinedBoundaryLoss(focal_gamma=FOCAL_LOSS_GAMMA, contrastive_weight=config.get("contrastive_weight", 0.15))
         elif LOSS_FUNCTION == "unified_ctc":
@@ -247,7 +243,9 @@ def train_model(config):
                     hard_labels = torch.argmax(labels, dim=1)
                     loss, _, _ = criterion(logits, hard_labels)
                 else:
-                    logits, _ = model(features)
+                    # Depending on the model, it might return (logits, embeddings) or just logits
+                    output = model(features)
+                    logits = output[0] if isinstance(output, tuple) else output
                     hard_labels = torch.argmax(labels, dim=1)
                     loss = criterion(logits, hard_labels)
                 
@@ -305,7 +303,8 @@ def train_model(config):
                         hard_labels = torch.argmax(labels, dim=1)
                         loss, _, _ = criterion(logits, hard_labels)
                     else:
-                        logits, _ = model(features)
+                        output = model(features)
+                        logits = output[0] if isinstance(output, tuple) else output
                         hard_labels = torch.argmax(labels, dim=1)
                         loss = criterion(logits, hard_labels)
                         
@@ -324,11 +323,8 @@ def train_model(config):
                         true_seq = torch.argmax(labels[i, :, :valid_len], dim=0).cpu().numpy().astype(float)
                         pred_logits_tensor = logits[i:i+1, :, :valid_len]
                         
-                        pred_seq_tensor = decode_predictions(
-                            pred_logits_tensor, 
-                            strategy=DECODER_STRATEGY, 
-                            threshold=DECODER_THRESHOLD
-                        )
+                        # --- REMOVED DECODER - USING PURE RAW ARGMAX FOR VALIDATION EVAL ---
+                        pred_seq_tensor = torch.argmax(pred_logits_tensor, dim=1)
                         
                         pred_seq = pred_seq_tensor[0].cpu().numpy().astype(float)
                         epoch_val_true.extend(true_seq.tolist())
