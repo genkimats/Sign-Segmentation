@@ -18,13 +18,16 @@ from src.models import (
 # 🎛️ CONFIGURATION
 # ==============================================================================
 CHOSEN_MODEL = "stgcn_mamba"
-PREFIX = "59"
+PREFIX = "202"
 WEIGHTS_PATH = f"saved_models/{CHOSEN_MODEL}-{PREFIX}.pth"
 HYPERPARAMETER_PATH = f"experiments/{CHOSEN_MODEL}-{PREFIX}/hyperparameters.json"
 
 # --- NEW CONFIGURATION ---
 # Options: "train", "val", "test", or "all"
 TARGET_SPLIT = "val" 
+
+USE_DEFAULT_WINDOW_SIZE = False
+CUSTOM_WINDOW_SIZE = 2048
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -39,10 +42,17 @@ MODEL_REGISTRY = {
 # 🖼️ SEQUENTIAL VIEWER
 # ==============================================================================
 class InteractiveViewer:
-    def __init__(self, model, dataset, hp):
+    def __init__(self, model, dataset, hp, target_window_size):
         self.model = model
         self.dataset = dataset
         self.hp = hp
+        self.target_window_size = target_window_size
+        self.trained_window_size = hp.get("window_size", 512)
+        self.temporal_downsample = hp.get("temporal_downsample_factor", 1)
+        
+        # Calculate the chunk size expected by the model during inference.
+        # This allows us to handle both downsampled models and regular models.
+        self.chunk_size = self.trained_window_size // self.temporal_downsample
         
         # Start exactly at the beginning of the split list
         self.current_idx = 0 
@@ -58,27 +68,41 @@ class InteractiveViewer:
     def run_inference(self):
         inputs, targets = self.dataset[self.current_idx]
         
-        # Add batch dimension and move to device
-        inputs = inputs.unsqueeze(0).to(DEVICE)
-        targets = targets.unsqueeze(0).to(DEVICE)
+        # To simulate the long window, we will slice the inputs into chunks
+        # the size that the model was trained on, run inference on each chunk,
+        # and then concatenate the predictions back together.
+        
+        seq_len = inputs.shape[1] # Time dimension
+        
+        all_logits = []
         
         with torch.no_grad():
-            outputs = self.model(inputs)
-            
-            # Handle models using Boundary Contrastive Loss which return (logits, embeddings)
-            if isinstance(outputs, tuple):
-                logits = outputs[0]
-            else:
-                logits = outputs
+            # Process in chunks
+            for i in range(0, seq_len, self.chunk_size):
+                end_i = min(i + self.chunk_size, seq_len)
+                chunk_inputs = inputs[:, i:end_i, :].unsqueeze(0).to(DEVICE)
                 
-        # Decode probabilities into hard predictions
+                outputs = self.model(chunk_inputs)
+                
+                # Handle models using Boundary Contrastive Loss which return (logits, embeddings)
+                if isinstance(outputs, tuple):
+                    chunk_logits = outputs[0]
+                else:
+                    chunk_logits = outputs
+                    
+                all_logits.append(chunk_logits)
+                
+        # Concatenate all logits along the time dimension (dim=2)
+        concatenated_logits = torch.cat(all_logits, dim=2)
+
+        # Decode probabilities into hard predictions using the combined logits
         preds = decode_predictions(
-            logits, 
+            concatenated_logits, 
             strategy=self.hp.get("decoder_strategy", "argmax"), 
             threshold=self.hp.get("decoder_threshold", 0.5)
         )
         
-        # Extract ground truth
+        # Extract ground truth. The targets from the dataset are already the full target_window_size
         if targets.dim() == 3:
             if targets.shape[1] == 3:
                 truths = torch.argmax(targets, dim=1) 
@@ -87,7 +111,7 @@ class InteractiveViewer:
         else:
             truths = targets
             
-        return truths[0].cpu().numpy(), preds[0].cpu().numpy()
+        return truths.cpu().numpy(), preds[0].cpu().numpy()
 
     def draw_graph(self):
         truths, preds = self.run_inference()
@@ -107,7 +131,7 @@ class InteractiveViewer:
         self.ax.set_yticklabels(["Outside (0)", "Inside (1)", "Begin (2)"])
         self.ax.set_xlabel("Frames")
         
-        # --- NEW: Fix dataset attribute names based on your updated dataset.py ---
+        # Adjust Title Information
         if hasattr(self.dataset, 'use_full_length') and self.dataset.use_full_length:
             slice_info = self.dataset.samples[self.current_idx]
             file_id = slice_info.get('video_id', 'Unknown')
@@ -118,9 +142,14 @@ class InteractiveViewer:
             file_id = slice_info.get('video_id', 'Unknown')
             start_f = slice_info.get('start_idx', 0)
             end_f = slice_info.get('end_idx', 0)
+            
+        # Also note what chunk size the model is currently using
+        model_chunk_str = f"Trained Window Size: {self.trained_window_size}"
+        if self.temporal_downsample > 1:
+             model_chunk_str += f" (Downsampled to {self.chunk_size})"
         
         title = (f"File: {file_id} | Split: {TARGET_SPLIT.upper()} | "
-                 f"Frames: {start_f}-{end_f}\n"
+                 f"Displayed Frames: {start_f}-{end_f} | {model_chunk_str}\n"
                  f"Dataset Index: {self.current_idx + 1} / {len(self.dataset)} (Use Left/Right Arrows to navigate)")
                  
         self.ax.set_title(title, fontsize=12, fontweight='bold')
@@ -156,17 +185,25 @@ def main():
     print(f"Loaded Hyperparameters for {CHOSEN_MODEL}-{PREFIX}")
     print(f"Targeting '{TARGET_SPLIT}' split via Dataset parameter.")
     
+    # Determine which window size to pass to the dataset
+    if USE_DEFAULT_WINDOW_SIZE:
+        display_window_size = hp.get("window_size")
+        print(f"Using trained window size for display: {display_window_size}")
+    else:
+        display_window_size = CUSTOM_WINDOW_SIZE
+        print(f"Overriding dataset window size for display. Using custom window size: {display_window_size}")
+    
     # Load the custom dataset and pass the split parameter directly
     dataset = SignSegmentationDataset(
         keypoints_dir="processed_data/keypoints",
         labels_dir="processed_data/BIO_tags",
-        window_size=hp.get("window_size"),
+        window_size=display_window_size,  # <-- Use the selected display size here
         overlap=hp.get("overlap"),
         tolerance_window=hp.get("tolerance_window"),
         use_full_length=False, 
         base_features=hp.get("base_features"),
         kinematic_features=hp.get("kinematic_features"),
-        split=TARGET_SPLIT  # <-- Let the Dataset handle the filtering
+        split=TARGET_SPLIT
     )
     
     if len(dataset) == 0:
@@ -186,7 +223,7 @@ def main():
     model.eval()
     
     # Start the Sequential Viewer
-    viewer = InteractiveViewer(model, dataset, hp)
+    viewer = InteractiveViewer(model, dataset, hp, target_window_size=display_window_size)
     plt.show() 
 
 if __name__ == "__main__":
