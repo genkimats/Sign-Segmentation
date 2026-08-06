@@ -273,46 +273,37 @@ if __name__ == "__main__":
     if CHOSEN_TYPE == 'mamba':
         defaults = MAMBA_DEFAULTS
         experiments_to_run = [
-            # {
-            #     "basename": "latent_stgcn_mamba",
-            #     "window_size": 16,
-            #     "overlap": 0,
-            #     "kinematic_features": ["spatial_angles"],
-            #     "loss_function": "weighted_ce",
-            #     "description": "overlap ratio (0/16), loss=weighted_ce, spatial_angles"
-            # },
-            # {
-            #     "basename": "latent_stgcn_mamba",
-            #     "window_size": 32,
-            #     "overlap": 0,
-            #     "kinematic_features": ["spatial_angles"],
-            #     "loss_function": "weighted_ce",
-            #     "description": "overlap ratio (0/32), loss=weighted_ce, spatial_angles"
-            # },
-            # {
-            #     "basename": "latent_stgcn_mamba",
-            #     "window_size": 64,
-            #     "overlap": 0,
-            #     "kinematic_features": ["spatial_angles"],
-            #     "loss_function": "weighted_ce",
-            #     "description": "overlap ratio (0/64), loss=weighted_ce, spatial_angles"
-            # },
-            # {
-            #     "basename": "latent_stgcn_mamba",
-            #     "window_size": 128,
-            #     "overlap": 0,
-            #     "kinematic_features": ["spatial_angles"],
-            #     "loss_function": "weighted_ce",
-            #     "description": "overlap ratio (0/128), loss=weighted_ce, spatial_angles"
-            # },
             {
-                "basename": "stgcn_mamba",
+                "basename": "latent_stgcn_mamba",
                 "window_size": 16,
                 "overlap": 0,
                 "kinematic_features": ["spatial_angles"],
                 "loss_function": "weighted_ce",
-                "decoder_strategy": "argmax",
-                "description": "overlap ratio (0/256), decoder=argmax, loss=weighted_ce, spatial_angles"
+                "description": "overlap ratio (0/16), loss=weighted_ce, spatial_angles"
+            },
+            {
+                "basename": "latent_stgcn_mamba",
+                "window_size": 32,
+                "overlap": 0,
+                "kinematic_features": ["spatial_angles"],
+                "loss_function": "weighted_ce",
+                "description": "overlap ratio (0/32), loss=weighted_ce, spatial_angles"
+            },
+            {
+                "basename": "latent_stgcn_mamba",
+                "window_size": 64,
+                "overlap": 0,
+                "kinematic_features": ["spatial_angles"],
+                "loss_function": "weighted_ce",
+                "description": "overlap ratio (0/64), loss=weighted_ce, spatial_angles"
+            },
+            {
+                "basename": "latent_stgcn_mamba",
+                "window_size": 128,
+                "overlap": 0,
+                "kinematic_features": ["spatial_angles"],
+                "loss_function": "weighted_ce",
+                "description": "overlap ratio (0/128), loss=weighted_ce, spatial_angles"
             },
             {
                 "basename": "stgcn_mamba",
@@ -320,8 +311,8 @@ if __name__ == "__main__":
                 "overlap": 0,
                 "kinematic_features": ["spatial_angles"],
                 "loss_function": "weighted_ce",
-                "decoder_strategy": "threshold",
-                "description": "overlap ratio (0/256), decoder=threshold, loss=weighted_ce, spatial_angles"
+                "tolerance_window": 1,
+                "description": "overlap ratio (0/256), tolerance=1, loss=weighted_ce, spatial_angles"
             },
             {
                 "basename": "stgcn_mamba",
@@ -329,9 +320,27 @@ if __name__ == "__main__":
                 "overlap": 0,
                 "kinematic_features": ["spatial_angles"],
                 "loss_function": "weighted_ce",
-                "decoder_strategy": "argmax",
-                "description": "overlap ratio (0/256), decoder=linguistic, loss=weighted_ce, spatial_angles"
+                "tolerance_window": 3,
+                "description": "overlap ratio (0/256), tolerance=3, loss=weighted_ce, spatial_angles"
             },
+            {
+                "basename": "stgcn_mamba",
+                "window_size": 16,
+                "overlap": 0,
+                "kinematic_features": ["spatial_angles"],
+                "loss_function": "weighted_ce",
+                "tolerance_window": 5,
+                "description": "overlap ratio (0/256), tolerance=5, loss=weighted_ce, spatial_angles"
+            },
+            {
+                "basename": "stgcn_mamba",
+                "window_size": 16,
+                "overlap": 0,
+                "kinematic_features": ["spatial_angles"],
+                "loss_function": "weighted_ce",
+                "tolerance_window": 7,
+                "description": "overlap ratio (0/256), tolerance=7, loss=weighted_ce, spatial_angles"
+            }
             
             
 
