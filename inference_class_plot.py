@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 
 # Import custom modules from your project
 from src.dataset import SignSegmentationDataset
-from src.decoder import decode_predictions
 from src.models import (
     PureMambaBaseline, 
     BiMambaBaseline, 
@@ -18,7 +17,7 @@ from src.models import (
 # 🎛️ CONFIGURATION
 # ==============================================================================
 CHOSEN_MODEL = "stgcn_mamba"
-PREFIX = "230"
+PREFIX = "226"
 WEIGHTS_PATH = f"saved_models/{CHOSEN_MODEL}-{PREFIX}.pth"
 HYPERPARAMETER_PATH = f"experiments/{CHOSEN_MODEL}-{PREFIX}/hyperparameters.json"
 
@@ -27,7 +26,7 @@ HYPERPARAMETER_PATH = f"experiments/{CHOSEN_MODEL}-{PREFIX}/hyperparameters.json
 TARGET_SPLIT = "val" 
 
 USE_DEFAULT_WINDOW_SIZE = False
-CUSTOM_WINDOW_SIZE = 512
+CUSTOM_WINDOW_SIZE = 256
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -39,7 +38,7 @@ MODEL_REGISTRY = {
 }
 
 # ==============================================================================
-# 🖼️ SEQUENTIAL VIEWER
+# 🖼️ CONFIDENCE PROBABILITY VIEWER
 # ==============================================================================
 class InteractiveViewer:
     def __init__(self, model, dataset, hp, target_window_size):
@@ -50,7 +49,7 @@ class InteractiveViewer:
         self.trained_window_size = hp.get("window_size", 512)
         self.temporal_downsample = hp.get("temporal_downsample_factor", 1)
         
-        # Calculate the chunk size expected by the model during inference.
+        # Calculate the chunk size expected by the model during inference
         self.chunk_size = self.trained_window_size // self.temporal_downsample
         
         # Start exactly at the beginning of the split list
@@ -59,7 +58,7 @@ class InteractiveViewer:
         # Setup Plot
         self.fig, self.ax = plt.subplots(figsize=(15, 6))
         self.fig.canvas.mpl_connect('key_press_event', self.on_press)
-        self.fig.canvas.manager.set_window_title(f"Viewer - {CHOSEN_MODEL.upper()} [{TARGET_SPLIT.upper()}]")
+        self.fig.canvas.manager.set_window_title(f"Confidence Viewer - {CHOSEN_MODEL.upper()} [{TARGET_SPLIT.upper()}]")
         
         # Draw the first plot
         self.draw_graph()
@@ -78,6 +77,7 @@ class InteractiveViewer:
                 
                 outputs = self.model(chunk_inputs)
                 
+                # Handle models using Boundary Contrastive Loss which return (logits, embeddings)
                 if isinstance(outputs, tuple):
                     chunk_logits = outputs[0]
                 else:
@@ -85,20 +85,16 @@ class InteractiveViewer:
                     
                 all_logits.append(chunk_logits)
                 
-        # Concatenate all logits along the time dimension
+        # Concatenate all logits along the time dimension (dim=2)
         concatenated_logits = torch.cat(all_logits, dim=2)
 
-        # Decode probabilities into hard predictions
-        preds = decode_predictions(
-            concatenated_logits, 
-            strategy=self.hp.get("decoder_strategy", "argmax"), 
-            threshold=self.hp.get("decoder_threshold", 0.5)
-        )
+        # --- Compute Softmax Probabilities instead of argmax ---
+        probs = torch.softmax(concatenated_logits, dim=1) # Shape: (B, Classes, T)
         
-        # --- FIX: Re-added missing formatting to push targets to the correct shape ---
+        # Add batch dimension and move to device for target processing
         targets = targets.unsqueeze(0).to(DEVICE)
         
-        # Extract ground truth 
+        # Extract ground truth (hard boundaries)
         if targets.dim() == 3:
             if targets.shape[1] == 3:
                 truths = torch.argmax(targets, dim=1) 
@@ -107,28 +103,29 @@ class InteractiveViewer:
         else:
             truths = targets
             
-        # --- FIX: Added [0] to truths so it matches preds[0] ---
-        return truths[0].cpu().numpy(), preds[0].cpu().numpy()
+        return truths[0].cpu().numpy(), probs[0].cpu().numpy()
 
     def draw_graph(self):
-        truths, preds = self.run_inference()
+        truths, probs = self.run_inference()
         
         self.ax.clear()
-        
-        # BIO Mapping: 0=Outside, 1=Inside, 2=Begin
         x_axis = np.arange(len(truths))
         
-        # Plot Ground Truth: Dashed yellow line, slightly transparent so it doesn't overpower
-        self.ax.step(x_axis, truths, label="Ground Truth", color="gold", linestyle="--", alpha=0.8, linewidth=4, where='post')
+        # --- 1. Plot Ground Truth as Shaded Backgrounds ---
+        self.ax.fill_between(x_axis, 0, 1.05, where=(truths == 0), color='gray', alpha=0.15, label="GT: Outside", step="post")
+        self.ax.fill_between(x_axis, 0, 1.05, where=(truths == 1), color='blue', alpha=0.10, label="GT: Inside", step="post")
+        self.ax.fill_between(x_axis, 0, 1.05, where=(truths == 2), color='red', alpha=0.25, label="GT: Begin", step="post")
         
-        # Plot Prediction: Solid blue line, slightly offset vertically (+0.05) to avoid overlap
-        self.ax.step(x_axis, preds + 0.05, label="Prediction", color="dodgerblue", linestyle="-", linewidth=2.5, where='post')
+        # --- 2. Plot the Continuous Confidence Probabilities ---
+        self.ax.plot(x_axis, probs[0], color='black', linewidth=2, label="P(Outside)")
+        self.ax.plot(x_axis, probs[1], color='dodgerblue', linewidth=2, label="P(Inside)")
+        self.ax.plot(x_axis, probs[2], color='red', linewidth=2.5, label="P(Begin)")
         
-        self.ax.set_yticks([0, 1, 2])
-        self.ax.set_yticklabels(["Outside (0)", "Inside (1)", "Begin (2)"])
-        # Set y-limits slightly wider to accommodate the visual offset
-        self.ax.set_ylim(-0.2, 2.2)
-        self.ax.set_xlabel("Frames")
+        # Graph Formatting
+        self.ax.set_ylim(-0.05, 1.05)
+        self.ax.set_yticks([0.0, 0.25, 0.5, 0.75, 1.0])
+        self.ax.set_ylabel("Confidence (Probability)", fontsize=12, fontweight='bold')
+        self.ax.set_xlabel("Frames", fontsize=12, fontweight='bold')
         
         # Adjust Title Information
         if hasattr(self.dataset, 'use_full_length') and self.dataset.use_full_length:
@@ -146,16 +143,17 @@ class InteractiveViewer:
         if self.temporal_downsample > 1:
              model_chunk_str += f" (Downsampled to {self.chunk_size})"
         
-        title = (f"File: {file_id} | Split: {TARGET_SPLIT.upper()} | "
+        title = (f"Confidence Plot | File: {file_id} | Split: {TARGET_SPLIT.upper()} | "
                  f"Displayed Frames: {start_f}-{end_f} | {model_chunk_str}\n"
                  f"Dataset Index: {self.current_idx + 1} / {len(self.dataset)} (Use Left/Right Arrows to navigate)")
                  
         self.ax.set_title(title, fontsize=12, fontweight='bold')
-        self.ax.legend(loc="upper right")
-        # Ensure grid is visible behind the plots
-        self.ax.set_axisbelow(True)
+        
+        # Move legend slightly outside to not block the graph
+        self.ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1), borderaxespad=0.)
         self.ax.grid(True, linestyle='--', alpha=0.5)
         
+        plt.tight_layout()
         self.fig.canvas.draw()
 
     def on_press(self, event):
@@ -197,7 +195,7 @@ def main():
     dataset = SignSegmentationDataset(
         keypoints_dir="processed_data/keypoints",
         labels_dir="processed_data/BIO_tags",
-        window_size=display_window_size,  
+        window_size=display_window_size,  # <-- Use the selected display size here
         overlap=hp.get("overlap"),
         tolerance_window=hp.get("tolerance_window"),
         use_full_length=False, 
