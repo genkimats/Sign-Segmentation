@@ -276,11 +276,11 @@ if __name__ == "__main__":
             {
                 "basename": "stgcn_mamba",
                 "window_size": 16,
-                "batch_size": 4,
                 "overlap": 0,
                 "kinematic_features": ["spatial_angles"],
                 "loss_function": "weighted_ce",
-                "description": "overlap ratio (0/8), batch=4, loss=weighted_ce, spatial_angles"
+                "n_layers": 2,
+                "description": "overlap ratio (0/8), layers=2, loss=weighted_ce, spatial_angles"
             },
             {
                 "basename": "stgcn_mamba",
@@ -289,7 +289,8 @@ if __name__ == "__main__":
                 "overlap": 0,
                 "kinematic_features": ["spatial_angles"],
                 "loss_function": "weighted_ce",
-                "description": "overlap ratio (0/16), batch=8, loss=weighted_ce, spatial_angles"
+                "n_layers": 4,
+                "description": "overlap ratio (0/16), layers=4, loss=weighted_ce, spatial_angles"
             },
             {
                 "basename": "stgcn_mamba",
@@ -298,20 +299,9 @@ if __name__ == "__main__":
                 "overlap": 0,
                 "kinematic_features": ["spatial_angles"],
                 "loss_function": "weighted_ce",
-                "description": "overlap ratio (0/16), batch=16, loss=weighted_ce, spatial_angles"
-            },
-            {
-                "basename": "stgcn_mamba",
-                "window_size": 16,
-                "batch_size": 32,
-                "overlap": 0,
-                "kinematic_features": ["spatial_angles"],
-                "loss_function": "weighted_ce",
-                "description": "overlap ratio (0/16), batch=32, loss=weighted_ce, spatial_angles"
+                "n_layers": 8,
+                "description": "overlap ratio (0/16), layers=8, loss=weighted_ce, spatial_angles"
             }
-            
-            
-
         ]
         
     elif CHOSEN_TYPE == 'stgcn_mlp_mamba':
