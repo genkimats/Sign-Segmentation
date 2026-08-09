@@ -279,6 +279,15 @@ if __name__ == "__main__":
                 "overlap": 0,
                 "kinematic_features": ["spatial_angles"],
                 "loss_function": "weighted_ce",
+                "tolerance_window": 1,
+                "description": "overlap ratio (0/16), tolerance=1, loss=weighted_ce, spatial_angles"
+            },
+            {
+                "basename": "stgcn_mamba",
+                "window_size": 16,
+                "overlap": 0,
+                "kinematic_features": ["spatial_angles"],
+                "loss_function": "weighted_ce",
                 "tolerance_window": 3,
                 "description": "overlap ratio (0/16), tolerance=3, loss=weighted_ce, spatial_angles"
             },
