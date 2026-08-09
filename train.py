@@ -228,7 +228,8 @@ def train_model(config):
             valid_batches = 0
             
             loop = tqdm(train_loader, desc=f"Epoch {epoch}/{EPOCHS} [Train]", leave=False)
-            for features, labels in loop:
+            # Add the 3 underscores to absorb the vid, start, and end metadata!
+            for features, labels, _, _, _ in loop:
                 features = features.to(device)
                 labels = labels.to(device)
                 
@@ -290,7 +291,8 @@ def train_model(config):
             
             with torch.no_grad():
                 val_loop = tqdm(val_loader, desc=f"Epoch {epoch}/{EPOCHS} [Val]", leave=False)
-                for features, labels in val_loop:
+                # It should look something like this:
+                for features, labels, vids, start_indices, end_indices in val_loop:
                     features = features.to(device)
                     labels = labels.to(device)
                     features = torch.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
