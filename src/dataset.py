@@ -2,8 +2,8 @@ import os
 import json
 import torch
 import numpy as np
-import pandas as pd
 from torch.utils.data import Dataset
+from tqdm import tqdm
 
 def apply_label_smoothing(labels_array, window_size=5):
     """
@@ -47,7 +47,7 @@ def apply_label_smoothing(labels_array, window_size=5):
     return soft_labels
 
 class SignSegmentationDataset(Dataset):
-    def __init__(self, keypoints_dir, labels_dir, split_file="dataset_splits.json", split="train", window_size=1000, overlap=200, tolerance_window=5, use_full_length=False, base_features=None, kinematic_features=None, temporal_downsample_factor=1):
+    def __init__(self, keypoints_dir, labels_dir, split_file="dataset_splits.json", split="train", window_size=16, overlap=0, tolerance_window=5, use_full_length=False, base_features=None, kinematic_features=None, temporal_downsample_factor=1):
         self.labels_dir = labels_dir
         self.kinetic_dir = "processed_data/kinematic_features" 
         self.split_file = split_file
@@ -73,49 +73,72 @@ class SignSegmentationDataset(Dataset):
         if split not in splits:
             raise ValueError(f"Split '{split}' not found in {split_file}")
             
-        self.video_ids = [vid.replace('.npy', '') for vid in splits[split]]
+        self.video_ids = [vid.replace('.npy', '').replace('.pt', '') for vid in splits[split]]
         
         self.samples = []  
         self.windows = []  
+        
+        # --- THE RAM CACHE ---
+        self.video_cache = {}
 
-        print(f"[{split.upper()}] Indexing {len(self.video_ids)} videos (Streaming from Disk)...")
-        for vid in self.video_ids:
+        print(f"[{split.upper()}] Loading {len(self.video_ids)} videos into RAM Cache (Bypassing Disk I/O)...")
+        
+        # Load everything into RAM exactly ONCE
+        for vid in tqdm(self.video_ids, desc=f"Caching {split}"):
             label_path = os.path.join(self.labels_dir, f"{vid}.npy")
             kinetic_path = os.path.join(self.kinetic_dir, f"{vid}.pt")
             
-            # Skip if the preprocessed feature file doesn't exist yet
             if not os.path.exists(label_path) or not os.path.exists(kinetic_path):
                 continue
                 
             labels = np.load(label_path)
             num_frames = len(labels)
             
-            self.samples.append({
-                'video_id': vid,
-                'start_idx': 0,
-                'end_idx': num_frames
-            })
+            # CPU Bottleneck Fix: Pre-calculate smoothing once per video, not once per window!
+            soft_labels = apply_label_smoothing(labels, self.tolerance_window)
+            
+            try:
+                kin_data = torch.load(kinetic_path, weights_only=False)
+                # Robustly handle dictionary extraction
+                if "mediapipe" in kin_data:
+                    kin_data = kin_data["mediapipe"]
+            except Exception:
+                continue
+
+            channels = []
+            base_indices = [self.feature_map[f] for f in self.base_features if f in self.feature_map]
+            if base_indices:
+                channels.append(kin_data["base"][:, :, base_indices])
+                
+            deriv_indices = base_indices if base_indices else [0, 1, 2]
+            
+            if "velocity" in self.kinematic_features: channels.append(kin_data["velocity"][:, :, deriv_indices])
+            if "acceleration" in self.kinematic_features: channels.append(kin_data["acceleration"][:, :, deriv_indices])
+            if "jerk" in self.kinematic_features: channels.append(kin_data["jerk"][:, :, deriv_indices])
+            if "velocity-mag" in self.kinematic_features: channels.append(kin_data["velocity-mag"])
+            if "angular-vel" in self.kinematic_features: channels.append(kin_data["angular-vel"])
+            if "spatial_angles" in self.kinematic_features: channels.append(kin_data["spatial_angles"])
+            if "temporal_angles" in self.kinematic_features: channels.append(kin_data["temporal_angles"])
+                
+            # Compress to FP16 to keep RAM super low, and save it to the dictionary!
+            final_tensor = torch.cat(channels, dim=-1).to(torch.float16)
+            
+            self.video_cache[vid] = {
+                'features': final_tensor,
+                'labels': soft_labels
+            }
+            
+            # Map out the windows only for videos successfully loaded
+            self.samples.append({'video_id': vid, 'start_idx': 0, 'end_idx': num_frames})
             
             if num_frames > self.window_size:
                 step = self.window_size - self.overlap
                 for start in range(0, num_frames - self.window_size + 1, step):
-                    self.windows.append({
-                        'video_id': vid,
-                        'start_idx': start,
-                        'end_idx': start + self.window_size
-                    })
+                    self.windows.append({'video_id': vid, 'start_idx': start, 'end_idx': start + self.window_size})
                 if start + self.window_size < num_frames:
-                    self.windows.append({
-                        'video_id': vid,
-                        'start_idx': num_frames - self.window_size,
-                        'end_idx': num_frames
-                    })
+                    self.windows.append({'video_id': vid, 'start_idx': num_frames - self.window_size, 'end_idx': num_frames})
             else:
-                self.windows.append({
-                    'video_id': vid,
-                    'start_idx': 0,
-                    'end_idx': num_frames
-                })
+                self.windows.append({'video_id': vid, 'start_idx': 0, 'end_idx': num_frames})
 
     def __len__(self):
         if self.use_full_length:
@@ -132,34 +155,16 @@ class SignSegmentationDataset(Dataset):
         start_idx = window_info['start_idx']
         end_idx = window_info['end_idx']
         
-        # 1. Load Labels
-        window_labels = np.load(os.path.join(self.labels_dir, f"{vid}.npy"))[start_idx:end_idx]
-        soft_labels = apply_label_smoothing(window_labels, self.tolerance_window)
-        labels_tensor = torch.tensor(soft_labels, dtype=torch.float32).permute(1, 0)
+        # --- ⚡ 0-LATENCY MEMORY SLICE ⚡ ---
+        cached_data = self.video_cache[vid]
         
-        # 2. Stream Precomputed Kinematics from SSD
-        kin_data = torch.load(os.path.join(self.kinetic_dir, f"{vid}.pt"), weights_only=False)
-
-        # 3. Assemble Custom Tensor dynamically
-        channels = []
+        # Instantly slice the data and restore to FP32 for PyTorch's mathematical operations
+        window_features = cached_data['features'][start_idx:end_idx].to(torch.float32)
+        window_labels = cached_data['labels'][start_idx:end_idx]
         
-        base_indices = [self.feature_map[f] for f in self.base_features if f in self.feature_map]
-        if base_indices:
-            channels.append(kin_data["base"][:, :, base_indices])
-            
-        deriv_indices = base_indices if base_indices else [0, 1, 2]
+        final_input_tensor = window_features.permute(2, 0, 1)
+        labels_tensor = torch.tensor(window_labels, dtype=torch.float32).permute(1, 0)
         
-        if "velocity" in self.kinematic_features: channels.append(kin_data["velocity"][:, :, deriv_indices])
-        if "acceleration" in self.kinematic_features: channels.append(kin_data["acceleration"][:, :, deriv_indices])
-        if "jerk" in self.kinematic_features: channels.append(kin_data["jerk"][:, :, deriv_indices])
-        if "velocity-mag" in self.kinematic_features: channels.append(kin_data["velocity-mag"])
-        if "angular-vel" in self.kinematic_features: channels.append(kin_data["angular-vel"])
-        if "spatial_angles" in self.kinematic_features: channels.append(kin_data["spatial_angles"])
-        if "temporal_angles" in self.kinematic_features: channels.append(kin_data["temporal_angles"])
-            
-        # Convert back from FP16 to FP32, slice window, format for PyTorch
-        final_input_tensor = torch.cat(channels, dim=-1).to(torch.float32)[start_idx:end_idx].permute(2, 0, 1)
-
         # 4. Handle Downsampling & Padding
         if self.temporal_downsample_factor > 1:
             final_input_tensor = final_input_tensor[:, ::self.temporal_downsample_factor, :]
