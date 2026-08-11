@@ -4,22 +4,49 @@ import os
 QUEUE_FILE = "train_queue.json"
 
 # ==============================================================================
+# 🚦 DYNAMIC IN_CHANNELS CALCULATOR
+# ==============================================================================
+def calculate_in_channels(config):
+    base_features = config.get("base_features", [])
+    kinematic_features = config.get("kinematic_features", [])
+    
+    # --- PURE HAMER CALCULATION ---
+    if "pure_hamer" in base_features:
+        total = config.get("hamer_dim", 288) 
+        
+        for feat in kinematic_features:
+            if feat in ["velocity", "acceleration", "jerk"]:
+                total += (65 * 3) # 195
+            elif feat in ["velocity-mag"]:
+                total += (65 * 1) # 65
+            elif feat in ["angular-vel"]:
+                total += (65 * 1) # 65
+            elif feat in ["spatial_angles", "temporal_angles"]:
+                total += (65 * 2) # 130
+        return total
+    
+    # --- STANDARD / HYBRID CALCULATION ---
+    valid_base_cords = [f for f in base_features if f in ["x-cord", "y-cord", "z-cord"]]
+    total_channels = len(valid_base_cords)
+    deriv_channels = len(valid_base_cords) if valid_base_cords else 3
+    
+    for feat in kinematic_features:
+        if feat in ["velocity", "acceleration", "jerk"]:
+            total_channels += deriv_channels
+        elif feat in ["velocity-mag", "angular-vel"]:
+            total_channels += 1
+        elif feat in ["spatial_angles", "temporal_angles"]:
+            total_channels += 2 
+            
+    return total_channels
+
+# ==============================================================================
 # 🚦 MODEL TYPE SELECTOR
 # ==============================================================================
-# Change this variable to determine which defaults and experiments are queued:
-# Options: 'mamba'             - ST-GCN + Mamba architecture
-#          'pure_mamba'        - Pure Mamba baseline architecture (No GCN)
-#          'lstm'              - Baseline BiLSTM architecture (No GCN)
-#          'stgcn_lstm'        - Hybrid ST-GCN + BiLSTM architecture
-#          'transformer'       - Pure Multi-Head Attention architecture (No GCN)
-#          'stgcn_transformer' - Hybrid ST-GCN + Transformer architecture
-#          'stgcn_mlp_mamba'   - ST-GCN + MLP Bridge + Mamba architecture
 CHOSEN_TYPE = 'mamba'
 
-#region
-
 # ==============================================================================
-# 🐍 MAMBA-BASED DEFAULT HYPERPARAMETERS (ST-GCN + Mamba)
+# 🐍 MAMBA-BASED DEFAULT HYPERPARAMETERS
 # ==============================================================================
 MAMBA_DEFAULTS = {
     "basename": "stgcn_mamba",  
@@ -31,402 +58,175 @@ MAMBA_DEFAULTS = {
     "num_vertices": 65,
     "tolerance_window": 5,
     "temporal_downsample_factor": 1, 
-    "loss_function": "standard_ce",  # <-- UPDATED
-    "ctc_weight": 0.5,               # <-- NEW
-    "class_weights": [0.6, 0.8, 1.0],
-    "tmse_weight": 0.15,             # <-- NEW: How strongly to penalize flickering
-    "tmse_threshold": 0.1,           # <-- NEW: Max cap to protect real boundaries
+    "loss_function": "standard_ce",  
+    "ctc_weight": 0.5,             
+    "class_weights": [0.6, 0.8, 1.0], 
+    "tmse_weight": 0.15,            
+    "tmse_threshold": 0.1,          
     "use_full_length": False,
-    "base_features": ["x-cord", "y-cord", "z-cord"],
-    "kinematic_features": [],
-    "in_channels": 14, 
-    "decoder_strategy": "argmax",
-    "decoder_threshold": 0.5,
+    "base_features": ["x-cord", "y-cord", "z-cord"], 
+    "kinematic_features": ["spatial_angles"],        
+    "in_channels": 5, 
+    "decoder_strategy": "argmax",  
+    "decoder_threshold": 0.5,      
     "d_model": 256,
     "n_layers": 4,
-    "focal_loss_gamma": 2.0,
+    "focal_loss_gamma": 2.0,       
     "optimizer": "AdamW",
     "scheduler": "CosineAnnealingLR"
 }
 
-# ==============================================================================
-# 🌉 ST-GCN + MLP + MAMBA DEFAULTS
-# ==============================================================================
-STGCN_MLP_MAMBA_DEFAULTS = {
-    "basename": "stgcn_mlp_mamba",  
-    "batch_size": 16,
-    "epochs": 50,
-    "early_stopping": True,
-    "patience": 10,
-    "learning_rate": 0.0001,
-    "num_vertices": 65,
-    "tolerance_window": 5,
-    "temporal_downsample_factor": 1, 
-    "loss_function": "standard_ce",  # <-- UPDATED
-    "ctc_weight": 0.5,               # <-- NEW
-    "class_weights": [0.6, 0.8, 1.0],
-    "tmse_weight": 0.15,             # <-- NEW: How strongly to penalize flickering
-    "tmse_threshold": 0.1,           # <-- NEW: Max cap to protect real boundaries
-    "use_full_length": False,
-    "base_features": ["x-cord", "y-cord", "z-cord"],
-    "kinematic_features": [],
-    "in_channels": 14, 
-    "decoder_strategy": "argmax",
-    "decoder_threshold": 0.5,
-    "d_model": 256,
-    "n_layers": 4,
-    "mlp_expansion_factor": 4, 
-    "focal_loss_gamma": 2.0,
-    "optimizer": "AdamW",
-    "scheduler": "CosineAnnealingLR"
-}
+EXPERIMENTS_TO_RUN = [
+    {
+        "basename": "latent_stgcn_mamba",             
+        "description": "Model 1/5: Baseline ST-GCN + Mamba",
+        "latent_dim": 128,
+        "loss_function": "weighted_ce",
+        "window_size": 16,
+        "overlap": 0
+    },
+    {
+        "basename": "ctrgcn_mamba",             
+        "description": "Model 2/5: CTR-GCN (Dynamic Channel Graph) + Mamba",
+        "latent_dim": 128,
+        "loss_function": "weighted_ce",
+        "window_size": 16,
+        "overlap": 0
+    },
+    {
+        "basename": "infogcn_mamba",             
+        "description": "Model 3/5: InfoGCN (Multi-Scale Attention) + Mamba",
+        "latent_dim": 128,
+        "loss_function": "weighted_ce",
+        "window_size": 16,
+        "overlap": 0
+    },
+    {
+        "basename": "shiftgcn_mamba",             
+        "description": "Model 4/5: ShiftGCN (No Graph / Spatial Shifts) + Mamba",
+        "latent_dim": 128,
+        "loss_function": "weighted_ce",
+        "window_size": 16,
+        "overlap": 0
+    },
+    {
+        "basename": "spatial_transformer_mamba",             
+        "description": "Model 5/5: Spatial Self-Attention + Mamba",
+        "latent_dim": 128,
+        "loss_function": "weighted_ce",
+        "window_size": 16,
+        "overlap": 0
+    }
+]
 
-# ==============================================================================
-# 🐍 PURE MAMBA DEFAULT HYPERPARAMETERS (No GCN)
-# ==============================================================================
-PURE_MAMBA_DEFAULTS = {
-    "basename": "pure_mamba",  
-    "batch_size": 16,
-    "epochs": 50,
-    "early_stopping": True,
-    "patience": 10,
-    "learning_rate": 0.0003,
-    "num_vertices": 65,
-    "tolerance_window": 5,
-    "temporal_downsample_factor": 1, 
-    "loss_function": "standard_ce",  # <-- UPDATED
-    "ctc_weight": 0.5,               # <-- NEW
-    "class_weights": [0.6, 0.8, 1.0],
-    "tmse_weight": 0.15,             # <-- NEW: How strongly to penalize flickering
-    "tmse_threshold": 0.1,           # <-- NEW: Max cap to protect real boundaries
-    "use_full_length": False,
-    "base_features": ["x-cord", "y-cord", "z-cord"],
-    "kinematic_features": [],
-    "in_channels": 14, 
-    "decoder_strategy": "argmax",
-    "decoder_threshold": 0.5,
-    "d_model": 256,
-    "n_layers": 4,
-    "focal_loss_gamma": 2.0,
-    "optimizer": "AdamW",
-    "scheduler": "CosineAnnealingLR"
-}
-
-# ==============================================================================
-# 🔄 LSTM-BASED DEFAULT HYPERPARAMETERS (Baseline)
-# ==============================================================================
-LSTM_DEFAULTS = {
-    "basename": "bilstm_baseline",
-    "batch_size": 16,
-    "epochs": 50,
-    "early_stopping": True,
-    "patience": 10,
-    "learning_rate": 0.0001,
-    "num_vertices": 65,
-    "tolerance_window": 5,
-    "temporal_downsample_factor": 1, 
-    "loss_function": "standard_ce",  # <-- UPDATED
-    "ctc_weight": 0.5,               # <-- NEW
-    "class_weights": [0.6, 0.8, 1.0],
-    "tmse_weight": 0.15,             # <-- NEW: How strongly to penalize flickering
-    "tmse_threshold": 0.1,           # <-- NEW: Max cap to protect real boundaries
-    "use_full_length": False,
-    "base_features": ["x-cord", "y-cord", "z-cord"],
-    "kinematic_features": [],
-    "in_channels": 14, 
-    "decoder_strategy": "argmax",
-    "decoder_threshold": 0.5,
-    "d_model": 256,  
-    "n_layers": 4,   
-    "focal_loss_gamma": 2.0,
-    "optimizer": "AdamW",
-    "scheduler": "CosineAnnealingLR"
-}
-
-# ==============================================================================
-# 🔗 HYBRID STGCN + LSTM DEFAULTS
-# ==============================================================================
-STGCN_LSTM_DEFAULTS = {
-    "basename": "stgcn_bilstm",
-    "batch_size": 16,
-    "epochs": 50,
-    "early_stopping": True,
-    "patience": 10,
-    "learning_rate": 0.0001,
-    "num_vertices": 65,
-    "tolerance_window": 5,
-    "temporal_downsample_factor": 1,
-    "loss_function": "standard_ce",  # <-- UPDATED
-    "ctc_weight": 0.5,               # <-- NEW
-    "class_weights": [0.6, 0.8, 1.0],
-    "tmse_weight": 0.15,             # <-- NEW: How strongly to penalize flickering
-    "tmse_threshold": 0.1,           # <-- NEW: Max cap to protect real boundaries
-    "use_full_length": False,
-    "base_features": ["x-cord", "y-cord", "z-cord"],
-    "kinematic_features": [],
-    "in_channels": 14,
-    "decoder_strategy": "argmax",
-    "decoder_threshold": 0.5,
-    "d_model": 256,
-    "n_layers": 4,
-    "focal_loss_gamma": 2.0,
-    "optimizer": "AdamW",
-    "scheduler": "CosineAnnealingLR"
-}
-
-# ==============================================================================
-# 🤖 TRANSFORMER DEFAULT HYPERPARAMETERS
-# ==============================================================================
-TRANSFORMER_DEFAULTS = {
-    "basename": "transformer_baseline",
-    "batch_size": 16, 
-    "epochs": 50,
-    "early_stopping": True,
-    "patience": 10,
-    "learning_rate": 0.0001,
-    "num_vertices": 65,
-    "tolerance_window": 5,
-    "temporal_downsample_factor": 1,
-    "loss_function": "standard_ce",  # <-- UPDATED
-    "ctc_weight": 0.5,               # <-- NEW
-    "class_weights": [0.6, 0.8, 1.0],
-    "tmse_weight": 0.15,             # <-- NEW: How strongly to penalize flickering
-    "tmse_threshold": 0.1,           # <-- NEW: Max cap to protect real boundaries
-    "use_full_length": False,
-    "base_features": ["x-cord", "y-cord", "z-cord"],
-    "kinematic_features": [],
-    "in_channels": 14,
-    "decoder_strategy": "argmax",
-    "decoder_threshold": 0.5,
-    "d_model": 256,
-    "n_layers": 4,
-    "nhead": 8,              
-    "dim_feedforward": 1024, 
-    "focal_loss_gamma": 2.0,
-    "optimizer": "AdamW",
-    "scheduler": "CosineAnnealingLR"
-}
-
-# ==============================================================================
-# 🔗🤖 HYBRID STGCN + TRANSFORMER DEFAULTS
-# ==============================================================================
-STGCN_TRANSFORMER_DEFAULTS = {
-    "basename": "stgcn_transformer",
-    "batch_size": 16, 
-    "epochs": 50,
-    "early_stopping": True,
-    "patience": 10,
-    "learning_rate": 0.0001,
-    "num_vertices": 65,
-    "tolerance_window": 5,
-    "temporal_downsample_factor": 1,
-    "loss_function": "standard_ce",  # <-- UPDATED
-    "ctc_weight": 0.5,               # <-- NEW
-    "class_weights": [0.6, 0.8, 1.0],
-    "tmse_weight": 0.15,             # <-- NEW: How strongly to penalize flickering
-    "tmse_threshold": 0.1,           # <-- NEW: Max cap to protect real boundaries
-    "use_full_length": False,
-    "base_features": ["x-cord", "y-cord", "z-cord"],
-    "kinematic_features": [],
-    "in_channels": 14,
-    "decoder_strategy": "argmax",
-    "decoder_threshold": 0.5,
-    "d_model": 256,
-    "n_layers": 4,
-    "nhead": 8,              
-    "dim_feedforward": 1024, 
-    "focal_loss_gamma": 2.0,
-    "optimizer": "AdamW",
-    "scheduler": "CosineAnnealingLR"
-}
-
-def calculate_in_channels(base_features, kinematic_features):
-    """
-    Dynamically calculates the total number of input channels for the ST-GCN
-    based on the exact features requested in the payload.
-    """
-    total_channels = 0
-    
-    # 1. Base Features (1 channel per string in the list)
-    total_channels += len(base_features)
-    
-    # In dataset.py, derivatives default to [x, y, z] (3 channels) if no base features exist.
-    # Otherwise, they match the number of active coordinate features.
-    valid_base_cords = [f for f in base_features if f in ["x-cord", "y-cord", "z-cord"]]
-    deriv_channels = len(valid_base_cords) if valid_base_cords else 3
-    
-    # 2. Kinematic Features
-    for feat in kinematic_features:
-        if feat in ["velocity", "acceleration", "jerk"]:
-            total_channels += deriv_channels
-        elif feat in ["velocity-mag", "angular-vel"]:
-            total_channels += 1
-        elif feat in ["spatial_angles", "temporal_angles"]:
-            total_channels += 2 # Adds Theta (Pitch) and Phi (Yaw)
-            
-    return total_channels
-
-#endregion
+if CHOSEN_TYPE == 'mamba':
+    defaults = MAMBA_DEFAULTS
+    experiments_to_run = EXPERIMENTS_TO_RUN
+else:
+    raise ValueError(f"Unknown CHOSEN_TYPE: {CHOSEN_TYPE}")
 
 
 if __name__ == "__main__":
-    if CHOSEN_TYPE == 'mamba':
-        defaults = MAMBA_DEFAULTS
-        experiments_to_run = [
-            {
-                "basename": "stgcn_mamba",
-                "window_size": 16,
-                "overlap": 0,
-                "kinematic_features": ["spatial_angles"],
-                "loss_function": "weighted_ce",
-                "n_layers": 2,
-                "description": "overlap ratio (0/8), layers=2, loss=weighted_ce, spatial_angles"
-            },
-            {
-                "basename": "stgcn_mamba",
-                "window_size": 16,
-                "batch_size": 8,
-                "overlap": 0,
-                "kinematic_features": ["spatial_angles"],
-                "loss_function": "weighted_ce",
-                "n_layers": 4,
-                "description": "overlap ratio (0/16), layers=4, loss=weighted_ce, spatial_angles"
-            },
-            {
-                "basename": "stgcn_mamba",
-                "window_size": 16,
-                "batch_size": 16,
-                "overlap": 0,
-                "kinematic_features": ["spatial_angles"],
-                "loss_function": "weighted_ce",
-                "n_layers": 8,
-                "description": "overlap ratio (0/16), layers=8, loss=weighted_ce, spatial_angles"
-            }
-        ]
-        
-    elif CHOSEN_TYPE == 'stgcn_mlp_mamba':
-        defaults = STGCN_MLP_MAMBA_DEFAULTS
-        experiments_to_run = [
-            {
-                "window_size": 256,
-                "overlap": 128,
-                "mlp_expansion_factor": 4,
-                "description": "ST-GCN + MLP Bridge + Mamba (Unified CTC Loss Enabled)"
-            }
-        ]
-        
-    elif CHOSEN_TYPE == 'pure_mamba':
-        defaults = PURE_MAMBA_DEFAULTS
-        experiments_to_run = [
-            {
-                "window_size": 128,
-                "overlap": 64,
-                "description": "Pure Mamba Baseline (No ST-GCN feature extraction)"
-            }
-        ]
-        
-    elif CHOSEN_TYPE == 'lstm':
-        defaults = LSTM_DEFAULTS
-        experiments_to_run = [
-            {
-                "window_size": 128,
-                "overlap": 64,
-                "description": "LSTM-baseline overlap ratio (64/128)"
-            }
-        ]
-        
-    elif CHOSEN_TYPE == 'stgcn_lstm':
-        defaults = STGCN_LSTM_DEFAULTS
-        experiments_to_run = [
-            {
-                "window_size": 128,
-                "overlap": 64,
-                "description": "Hybrid ST-GCN + BiLSTM (Evaluating GCN impact over standard MLPs)"
-            }
-        ]
-        
-    elif CHOSEN_TYPE == 'transformer':
-        defaults = TRANSFORMER_DEFAULTS
-        experiments_to_run = [
-            {
-                "window_size": 128,
-                "overlap": 64,
-                "description": "Pure Transformer Baseline (Evaluating Multi-Head Attention vs. Mamba/LSTM)"
-            }
-        ]
-        
-    elif CHOSEN_TYPE == 'stgcn_transformer':
-        defaults = STGCN_TRANSFORMER_DEFAULTS
-        experiments_to_run = [
-            {
-                "window_size": 128,
-                "overlap": 64,
-                "description": "Hybrid ST-GCN + Transformer Encoder (Full Spatial/Temporal awareness)"
-            }
-        ]
-        
-    else:
-        raise ValueError(f"Unknown CHOSEN_TYPE: '{CHOSEN_TYPE}'.")
-
+    # ==============================================================================
+    # 📝 BUILD QUEUE
+    # ==============================================================================
     if os.path.exists(QUEUE_FILE):
         with open(QUEUE_FILE, "r") as f:
-            try:
-                queue = json.load(f)
-                if len(queue) == 0 or "prefixes" not in queue[0]:
-                    queue.insert(0, {"prefixes": []})
-            except json.JSONDecodeError:
-                queue = [{"prefixes": []}]
+            queue = json.load(f)
     else:
-        queue = [{"prefixes": []}]
-
-    prefixes = queue[0]["prefixes"]
-    print(f"Current tracked prefixes in {QUEUE_FILE}: {prefixes}")
-    
-    suggested_prefix = max(prefixes) + 1 if prefixes else 1
-    
-    while True:
-        user_input = input(f"\nEnter starting prefix number [Press Enter to use {suggested_prefix}]: ").strip()
+        queue = [{"prefixes": {}}]
         
-        if not user_input:
-            next_prefix = suggested_prefix
-            break
+    # --- MIGRATION: Convert old flat list to dict format ---
+    prefixes_data = queue[0].get("prefixes", {})
+    if isinstance(prefixes_data, list):
+        prefixes_data = {"legacy_models": prefixes_data}
+        queue[0]["prefixes"] = prefixes_data
+
+    print("Current tracked prefixes by model in train_queue.json:")
+    if not prefixes_data:
+        print("  (None)")
+    else:
+        for m_name, p_list in prefixes_data.items():
+            print(f"  - {m_name}: {p_list}")
+    print()
+
+    # --- PREFIX INPUT PHASE ---
+    while True:
         try:
-            next_prefix = int(user_input)
-            if next_prefix <= 0:
+            user_input = input("Enter a starting prefix for this batch [Press Enter to auto-assign per model]: ").strip()
+            
+            if not user_input:
+                base_prefix = None
+                break
+                
+            base_prefix = int(user_input)
+            if base_prefix <= 0:
                 print("⚠️ Prefix must be a positive integer.")
-            elif next_prefix in prefixes:
-                print(f"⚠️ Warning: Prefix {next_prefix} is already in the queue array!")
+                continue
+                
+            # Check for collisions with the specific models we are about to queue
+            collision = False
+            for exp in experiments_to_run:
+                m_name = exp.get("basename", defaults.get("basename", "unknown"))
+                if base_prefix in prefixes_data.get(m_name, []):
+                    collision = True
+                    break
+                    
+            if collision:
+                print(f"⚠️ Warning: Prefix {base_prefix} is already tracked for one of the models in this batch!")
                 override = input("Do you want to override and use it anyway? (y/N): ").strip().lower()
                 if override == 'y':
                     break
             else:
                 break
+                
         except ValueError:
             print("⚠️ Please enter a valid number.")
 
+    current_model_prefix = {}
     count = 0
+    
     for exp in experiments_to_run:
         full_config = defaults.copy()
         full_config.update(exp)
         
-        calculated_channels = calculate_in_channels(
-            base_features=full_config.get("base_features", []),
-            kinematic_features=full_config.get("kinematic_features", [])
-        )
+        m_name = full_config.get("basename", "unknown")
+        
+        # 1. Determine the exact prefix for this specific architecture
+        if m_name not in current_model_prefix:
+            if base_prefix is not None:
+                current_model_prefix[m_name] = base_prefix
+            else:
+                existing = prefixes_data.get(m_name, [])
+                current_model_prefix[m_name] = max(existing) + 1 if existing else 1
+                
+        assigned_prefix = current_model_prefix[m_name]
+        
+        # Increment just in case you queue two of the EXACT SAME model in one batch
+        current_model_prefix[m_name] += 1 
+        
+        # 2. Calculate Input Channels dynamically
+        calculated_channels = calculate_in_channels(full_config)
         full_config["in_channels"] = calculated_channels
         
-        prefix_str = f"{next_prefix:02d}"
+        prefix_str = f"{assigned_prefix:02d}"
         full_config["prefix"] = prefix_str
         
+        # 3. Add to Queue Array
         queue.append(full_config)
-        if next_prefix not in queue[0]["prefixes"]:
-            queue[0]["prefixes"].append(next_prefix)
         
-        print(f"Added to queue (Prefix {prefix_str} | Channels: {calculated_channels}): {full_config['description']}")
-        next_prefix += 1
+        # 4. Save to Tracker Dictionary
+        if m_name not in queue[0]["prefixes"]:
+            queue[0]["prefixes"][m_name] = []
+            
+        if assigned_prefix not in queue[0]["prefixes"][m_name]:
+            queue[0]["prefixes"][m_name].append(assigned_prefix)
+        
+        print(f"Added to queue ({m_name}-{prefix_str} | Channels: {calculated_channels}): {full_config['description']}")
         count += 1
         
     with open(QUEUE_FILE, "w") as f:
         json.dump(queue, f, indent=4)
         
-    print(f"\n✅ Successfully added {count} {CHOSEN_TYPE.upper()} experiments to {QUEUE_FILE}")
+    print(f"\n✅ Successfully added {count} {CHOSEN_TYPE.upper()} experiments to the queue.")
+    print(f"▶️  Run 'python train.py' to start processing.")

@@ -17,7 +17,10 @@ from sklearn.metrics import confusion_matrix
 
 # Import our custom modules
 from src.dataset import SignSegmentationDataset
-from src.models import PureMambaBaseline, BiMambaBaseline, STGCN_Mamba, STGCN_MLP_Mamba, STGCN_BiMamba, Decoupled_STGCN_Mamba, BiLSTM_Baseline, STGCN_BiLSTM, TransformerBaseline, STGCN_Transformer, Latent_STGCN_Mamba
+from src.models import (PureMambaBaseline, BiMambaBaseline, STGCN_Mamba, STGCN_MLP_Mamba, 
+                        STGCN_BiMamba, Decoupled_STGCN_Mamba, BiLSTM_Baseline, STGCN_BiLSTM, 
+                        TransformerBaseline, STGCN_Transformer, Latent_STGCN_Mamba,
+                        CTRGCN_Mamba, InfoGCN_Mamba, ShiftGCN_Mamba, SpatialTransformer_Mamba)
 from src.metrics import evaluate_batch
 from src.loss import CombinedBoundaryLoss, FocalLoss, StandardCrossEntropyLoss, WeightedCrossEntropyLoss, UnifiedCTCLoss, WeightedCE_TMSE_Loss, WeightedNLLLoss
 # (Removed decoder import since we no longer use it in training/validation)
@@ -38,7 +41,11 @@ MODEL_REGISTRY = {
     "stgcn_bilstm": STGCN_BiLSTM,
     "transformer_baseline": TransformerBaseline,
     "stgcn_transformer": STGCN_Transformer,
-    "latent_stgcn_mamba": Latent_STGCN_Mamba 
+    "latent_stgcn_mamba": Latent_STGCN_Mamba,
+    "ctrgcn_mamba": CTRGCN_Mamba,
+    "infogcn_mamba": InfoGCN_Mamba,
+    "shiftgcn_mamba": ShiftGCN_Mamba,
+    "spatial_transformer_mamba": SpatialTransformer_Mamba
 }
 
 def get_next_job():
@@ -156,7 +163,7 @@ def train_model(config):
     if MODEL_NAME == "stgcn_mlp_mamba":
         model_kwargs["mlp_expansion_factor"] = config.get("mlp_expansion_factor", 4)
         
-    if MODEL_NAME == "latent_stgcn_mamba":
+    if MODEL_NAME in ["latent_stgcn_mamba", "ctrgcn_mamba", "infogcn_mamba", "shiftgcn_mamba", "spatial_transformer_mamba"]:
         model_kwargs["latent_dim"] = config.get("latent_dim", 128)
 
     MAX_REDOS = 5
