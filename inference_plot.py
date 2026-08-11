@@ -18,7 +18,7 @@ from src.models import (
 # 🎛️ CONFIGURATION
 # ==============================================================================
 CHOSEN_MODEL = "stgcn_mamba"
-PREFIX = "230"
+PREFIX = "257"
 WEIGHTS_PATH = f"saved_models/{CHOSEN_MODEL}-{PREFIX}.pth"
 HYPERPARAMETER_PATH = f"experiments/{CHOSEN_MODEL}-{PREFIX}/hyperparameters.json"
 
@@ -27,7 +27,7 @@ HYPERPARAMETER_PATH = f"experiments/{CHOSEN_MODEL}-{PREFIX}/hyperparameters.json
 TARGET_SPLIT = "val" 
 
 USE_DEFAULT_WINDOW_SIZE = False
-CUSTOM_WINDOW_SIZE = 512
+CUSTOM_WINDOW_SIZE = 256
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -65,7 +65,8 @@ class InteractiveViewer:
         self.draw_graph()
 
     def run_inference(self):
-        inputs, targets = self.dataset[self.current_idx]
+        # --- FIX: Unpack all 5 variables returned by the new dataset.py ---
+        inputs, targets, vid, start_idx, end_idx = self.dataset[self.current_idx]
         
         seq_len = inputs.shape[1] # Time dimension
         all_logits = []
@@ -95,7 +96,6 @@ class InteractiveViewer:
             threshold=self.hp.get("decoder_threshold", 0.5)
         )
         
-        # --- FIX: Re-added missing formatting to push targets to the correct shape ---
         targets = targets.unsqueeze(0).to(DEVICE)
         
         # Extract ground truth 
@@ -107,11 +107,12 @@ class InteractiveViewer:
         else:
             truths = targets
             
-        # --- FIX: Added [0] to truths so it matches preds[0] ---
-        return truths[0].cpu().numpy(), preds[0].cpu().numpy()
+        # Return the extracted video metadata as well
+        return truths[0].cpu().numpy(), preds[0].cpu().numpy(), vid, start_idx, end_idx
 
     def draw_graph(self):
-        truths, preds = self.run_inference()
+        # Pull the metadata natively directly from the inference loop
+        truths, preds, file_id, start_f, end_f = self.run_inference()
         
         self.ax.clear()
         
@@ -126,33 +127,20 @@ class InteractiveViewer:
         
         self.ax.set_yticks([0, 1, 2])
         self.ax.set_yticklabels(["Outside (0)", "Inside (1)", "Begin (2)"])
-        # Set y-limits slightly wider to accommodate the visual offset
         self.ax.set_ylim(-0.2, 2.2)
         self.ax.set_xlabel("Frames")
         
-        # Adjust Title Information
-        if hasattr(self.dataset, 'use_full_length') and self.dataset.use_full_length:
-            slice_info = self.dataset.samples[self.current_idx]
-            file_id = slice_info.get('video_id', 'Unknown')
-            start_f = 0
-            end_f = "Full"
-        else:
-            slice_info = self.dataset.windows[self.current_idx]
-            file_id = slice_info.get('video_id', 'Unknown')
-            start_f = slice_info.get('start_idx', 0)
-            end_f = slice_info.get('end_idx', 0)
-            
         model_chunk_str = f"Trained Window Size: {self.trained_window_size}"
         if self.temporal_downsample > 1:
              model_chunk_str += f" (Downsampled to {self.chunk_size})"
         
+        # --- FIX: Removed the clunky string slicing code and used the exact variables! ---
         title = (f"File: {file_id} | Split: {TARGET_SPLIT.upper()} | "
                  f"Displayed Frames: {start_f}-{end_f} | {model_chunk_str}\n"
                  f"Dataset Index: {self.current_idx + 1} / {len(self.dataset)} (Use Left/Right Arrows to navigate)")
                  
         self.ax.set_title(title, fontsize=12, fontweight='bold')
         self.ax.legend(loc="upper right")
-        # Ensure grid is visible behind the plots
         self.ax.set_axisbelow(True)
         self.ax.grid(True, linestyle='--', alpha=0.5)
         
@@ -185,7 +173,6 @@ def main():
     print(f"Loaded Hyperparameters for {CHOSEN_MODEL}-{PREFIX}")
     print(f"Targeting '{TARGET_SPLIT}' split via Dataset parameter.")
     
-    # Determine which window size to pass to the dataset
     if USE_DEFAULT_WINDOW_SIZE:
         display_window_size = hp.get("window_size")
         print(f"Using trained window size for display: {display_window_size}")
@@ -193,7 +180,6 @@ def main():
         display_window_size = CUSTOM_WINDOW_SIZE
         print(f"Overriding dataset window size for display. Using custom window size: {display_window_size}")
     
-    # Load the custom dataset and pass the split parameter directly
     dataset = SignSegmentationDataset(
         keypoints_dir="processed_data/keypoints",
         labels_dir="processed_data/BIO_tags",
@@ -209,7 +195,6 @@ def main():
     if len(dataset) == 0:
         raise ValueError(f"❌ Error: Dataset initialized with 0 slices for split '{TARGET_SPLIT}'.")
 
-    # Load Model
     model_class = MODEL_REGISTRY[CHOSEN_MODEL]
     model = model_class(
         num_vertices=hp.get("num_vertices"),
@@ -222,7 +207,6 @@ def main():
     model.load_state_dict(torch.load(WEIGHTS_PATH, map_location=DEVICE))
     model.eval()
     
-    # Start the Sequential Viewer
     viewer = InteractiveViewer(model, dataset, hp, target_window_size=display_window_size)
     plt.show() 
 
