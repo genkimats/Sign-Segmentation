@@ -4,43 +4,6 @@ import os
 QUEUE_FILE = "train_queue.json"
 
 # ==============================================================================
-# 🚦 DYNAMIC IN_CHANNELS CALCULATOR
-# ==============================================================================
-def calculate_in_channels(config):
-    base_features = config.get("base_features", [])
-    kinematic_features = config.get("kinematic_features", [])
-    
-    # --- PURE HAMER CALCULATION ---
-    if "pure_hamer" in base_features:
-        total = config.get("hamer_dim", 288) 
-        
-        for feat in kinematic_features:
-            if feat in ["velocity", "acceleration", "jerk"]:
-                total += (65 * 3) # 195
-            elif feat in ["velocity-mag"]:
-                total += (65 * 1) # 65
-            elif feat in ["angular-vel"]:
-                total += (65 * 1) # 65
-            elif feat in ["spatial_angles", "temporal_angles"]:
-                total += (65 * 2) # 130
-        return total
-    
-    # --- STANDARD / HYBRID CALCULATION ---
-    valid_base_cords = [f for f in base_features if f in ["x-cord", "y-cord", "z-cord"]]
-    total_channels = len(valid_base_cords)
-    deriv_channels = len(valid_base_cords) if valid_base_cords else 3
-    
-    for feat in kinematic_features:
-        if feat in ["velocity", "acceleration", "jerk"]:
-            total_channels += deriv_channels
-        elif feat in ["velocity-mag", "angular-vel"]:
-            total_channels += 1
-        elif feat in ["spatial_angles", "temporal_angles"]:
-            total_channels += 2 
-            
-    return total_channels
-
-# ==============================================================================
 # 🚦 MODEL TYPE SELECTOR
 # ==============================================================================
 CHOSEN_TYPE = 'mamba'
@@ -63,15 +26,11 @@ MAMBA_DEFAULTS = {
     "class_weights": [0.6, 0.8, 1.0], 
     "tmse_weight": 0.15,            
     "tmse_threshold": 0.1,          
-    "use_full_length": False,
     "base_features": ["x-cord", "y-cord", "z-cord"], 
     "kinematic_features": ["spatial_angles"],        
     "in_channels": 5, 
-    "decoder_strategy": "argmax",  
-    "decoder_threshold": 0.5,      
     "d_model": 256,
-    "n_layers": 4,
-    "focal_loss_gamma": 2.0,       
+    "n_layers": 4,     
     "optimizer": "AdamW",
     "scheduler": "CosineAnnealingLR"
 }

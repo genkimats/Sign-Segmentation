@@ -85,7 +85,7 @@ def train_model(config):
     DOWNSAMPLE_FACTOR = config.get("temporal_downsample_factor", 1) 
     LOSS_FUNCTION = config["loss_function"]
     CLASS_WEIGHTS = config["class_weights"]
-    USE_FULL_LENGTH = config["use_full_length"]
+    USE_FULL_LENGTH = config["use_full_length", False]
     BASE_FEATURES = config["base_features"]
     KINEMATIC_FEATURES = config["kinematic_features"]
     IN_CHANNELS = config["in_channels"]
