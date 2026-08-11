@@ -35,6 +35,43 @@ MAMBA_DEFAULTS = {
     "scheduler": "CosineAnnealingLR"
 }
 
+# ==============================================================================
+# 🚦 DYNAMIC IN_CHANNELS CALCULATOR
+# ==============================================================================
+def calculate_in_channels(config):
+    base_features = config.get("base_features", [])
+    kinematic_features = config.get("kinematic_features", [])
+    
+    # --- PURE HAMER CALCULATION ---
+    if "pure_hamer" in base_features:
+        total = config.get("hamer_dim", 288) 
+        
+        for feat in kinematic_features:
+            if feat in ["velocity", "acceleration", "jerk"]:
+                total += (65 * 3) # 195
+            elif feat in ["velocity-mag"]:
+                total += (65 * 1) # 65
+            elif feat in ["angular-vel"]:
+                total += (65 * 1) # 65
+            elif feat in ["spatial_angles", "temporal_angles"]:
+                total += (65 * 2) # 130
+        return total
+    
+    # --- STANDARD / HYBRID CALCULATION ---
+    valid_base_cords = [f for f in base_features if f in ["x-cord", "y-cord", "z-cord"]]
+    total_channels = len(valid_base_cords)
+    deriv_channels = len(valid_base_cords) if valid_base_cords else 3
+    
+    for feat in kinematic_features:
+        if feat in ["velocity", "acceleration", "jerk"]:
+            total_channels += deriv_channels
+        elif feat in ["velocity-mag", "angular-vel"]:
+            total_channels += 1
+        elif feat in ["spatial_angles", "temporal_angles"]:
+            total_channels += 2 
+            
+    return total_channels
+
 EXPERIMENTS_TO_RUN = [
     {
         "basename": "latent_stgcn_mamba",             
