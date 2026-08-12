@@ -49,9 +49,13 @@ def extract_faces_from_video(video_path):
         print(f"Error opening {video_path}")
         return None
         
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    if fps == 0 or np.isnan(fps): 
+        fps = 50.0 # Fallback safety
+        
     frames_data = []
     
-    # 1. Setup the Modern Tasks API Options
     base_options = python.BaseOptions(model_asset_path=MODEL_ASSET_PATH)
     options = vision.FaceLandmarkerOptions(
         base_options=base_options,
@@ -62,50 +66,44 @@ def extract_faces_from_video(video_path):
         min_tracking_confidence=0.5
     )
     
-    # 2. Process Video with the Landmarker
     with vision.FaceLandmarker.create_from_options(options) as landmarker:
-        last_timestamp_ms = -1
+        frame_idx = 0
         
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
+        # ⚡ NEW: Inner Frame-by-Frame Progress Bar
+        with tqdm(total=total_frames, desc=f"Processing {os.path.basename(video_path)}", leave=False, position=1) as pbar:
+            while True:
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                    
+                image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=image_rgb)
                 
-            # Convert BGR to RGB
-            image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            
-            # Create a MediaPipe Image object
-            mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=image_rgb)
-            
-            # The Tasks API requires strictly increasing timestamps
-            timestamp_ms = int(cap.get(cv2.CAP_PROP_POS_MSEC))
-            if timestamp_ms <= last_timestamp_ms:
-                timestamp_ms = last_timestamp_ms + 1
-            last_timestamp_ms = timestamp_ms
-            
-            # Detect
-            result = landmarker.detect_for_video(mp_image, timestamp_ms)
-            
-            frame_keypoints = np.zeros((NUM_FACE_VERTICES, 3), dtype=np.float32)
-            
-            if result.face_landmarks:
-                # The API returns a list of faces. We take the first one [0]
-                face_landmarks = result.face_landmarks[0]
+                # Math-based timestamp (Prevents OpenCV freezing)
+                timestamp_ms = int((frame_idx / fps) * 1000)
                 
-                for i, idx in enumerate(SELECTED_INDICES):
-                    landmark = face_landmarks[idx]
-                    frame_keypoints[i, 0] = landmark.x
-                    frame_keypoints[i, 1] = landmark.y
-                    frame_keypoints[i, 2] = landmark.z
-            
-            frames_data.append(frame_keypoints)
+                result = landmarker.detect_for_video(mp_image, timestamp_ms)
+                
+                frame_keypoints = np.zeros((NUM_FACE_VERTICES, 3), dtype=np.float32)
+                
+                if result.face_landmarks:
+                    face_landmarks = result.face_landmarks[0]
+                    
+                    for i, idx in enumerate(SELECTED_INDICES):
+                        landmark = face_landmarks[idx]
+                        frame_keypoints[i, 0] = landmark.x
+                        frame_keypoints[i, 1] = landmark.y
+                        frame_keypoints[i, 2] = landmark.z
+                
+                frames_data.append(frame_keypoints)
+                frame_idx += 1
+                pbar.update(1) # Tick the inner progress bar!
             
     cap.release()
     
     if not frames_data:
         return None
         
-    # Convert to Numpy Array: Shape (Frames, ~80 Vertices, 3 Coordinates)
     video_tensor = np.array(frames_data, dtype=np.float32)
     
     # Forward-fill any frames where the face tracker temporarily failed
@@ -119,14 +117,14 @@ if __name__ == "__main__":
     video_files = glob.glob(os.path.join(RAW_VIDEO_DIR, "*.mp4"))  # Or .avi / .mkv
     
     print(f"🚀 Found {len(video_files)} videos. Starting Face Mesh Extraction...")
-    print(f"🎯 Extracting {NUM_FACE_VERTICES} linguistically significant keypoints per frame.")
     
-    for vid_path in tqdm(video_files):
+    # Outer Progress Bar (Tracks completed videos)
+    for vid_path in tqdm(video_files, desc="Overall Progress", position=0):
         vid_name = os.path.basename(vid_path).split('.')[0]
         out_path = os.path.join(OUTPUT_DIR, f"{vid_name}.npy")
         
         if os.path.exists(out_path):
-            continue  # Skip if already processed
+            continue  
             
         face_data = extract_faces_from_video(vid_path)
         
