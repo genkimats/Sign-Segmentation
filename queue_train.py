@@ -74,7 +74,8 @@ def calculate_in_channels(config):
 
 EXPERIMENTS_TO_RUN = [
     {
-        "basename": "latent_stgcn_mamba",             
+        "basename": "latent_stgcn_mamba",
+        "window_size": 128,
         "description": "Model 1/5: Baseline ST-GCN + Mamba",
         "latent_dim": 128,
         "loss_function": "weighted_ce",
@@ -82,7 +83,8 @@ EXPERIMENTS_TO_RUN = [
         "overlap": 0
     },
     {
-        "basename": "ctrgcn_mamba",             
+        "basename": "ctrgcn_mamba",
+        "window_size": 128,
         "description": "Model 2/5: CTR-GCN (Dynamic Channel Graph) + Mamba",
         "latent_dim": 128,
         "loss_function": "weighted_ce",
@@ -90,7 +92,8 @@ EXPERIMENTS_TO_RUN = [
         "overlap": 0
     },
     {
-        "basename": "infogcn_mamba",             
+        "basename": "infogcn_mamba",
+        "window_size": 128,
         "description": "Model 3/5: InfoGCN (Multi-Scale Attention) + Mamba",
         "latent_dim": 128,
         "loss_function": "weighted_ce",
@@ -98,7 +101,8 @@ EXPERIMENTS_TO_RUN = [
         "overlap": 0
     },
     {
-        "basename": "shiftgcn_mamba",             
+        "basename": "shiftgcn_mamba",
+        "window_size": 128,             
         "description": "Model 4/5: ShiftGCN (No Graph / Spatial Shifts) + Mamba",
         "latent_dim": 128,
         "loss_function": "weighted_ce",
@@ -106,7 +110,8 @@ EXPERIMENTS_TO_RUN = [
         "overlap": 0
     },
     {
-        "basename": "spatial_transformer_mamba",             
+        "basename": "spatial_transformer_mamba",
+        "window_size": 128,             
         "description": "Model 5/5: Spatial Self-Attention + Mamba",
         "latent_dim": 128,
         "loss_function": "weighted_ce",
