@@ -18,7 +18,7 @@ from src.models import (
 # 🎛️ CONFIGURATION
 # ==============================================================================
 CHOSEN_MODEL = "stgcn_mamba"
-PREFIX = "259"
+PREFIX = "229"
 WEIGHTS_PATH = f"saved_models/{CHOSEN_MODEL}-{PREFIX}.pth"
 HYPERPARAMETER_PATH = f"experiments/{CHOSEN_MODEL}-{PREFIX}/hyperparameters.json"
 
@@ -27,7 +27,7 @@ HYPERPARAMETER_PATH = f"experiments/{CHOSEN_MODEL}-{PREFIX}/hyperparameters.json
 TARGET_SPLIT = "val" 
 
 USE_DEFAULT_WINDOW_SIZE = False
-CUSTOM_WINDOW_SIZE = 257
+CUSTOM_WINDOW_SIZE = 256
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
