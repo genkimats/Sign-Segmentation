@@ -74,50 +74,35 @@ def calculate_in_channels(config):
 
 EXPERIMENTS_TO_RUN = [
     {
-        "basename": "latent_stgcn_mamba",
+        "basename": "stgcn_mamba",
+        "window_size": 16,
+        "loss_function": "weighted_ce",
+        "description": "overlap ratio (0/16), loss=weighted_ce, spatial_angles"
+    },
+    {
+        "basename": "stgcn_mamba",
+        "window_size": 32,
+        "loss_function": "weighted_ce",
+        "description": "overlap ratio (0/32), loss=weighted_ce, spatial_angles"
+    },
+    {
+        "basename": "stgcn_mamba",
+        "window_size": 64,
+        "loss_function": "weighted_ce",
+        "description": "overlap ratio (0/64), loss=weighted_ce, spatial_angles"
+    },
+    {
+        "basename": "stgcn_mamba",
         "window_size": 128,
-        "description": "Model 1/5: Baseline ST-GCN + Mamba",
-        "latent_dim": 128,
         "loss_function": "weighted_ce",
-        "window_size": 16,
-        "overlap": 0
+        "description": "overlap ratio (0/128), loss=weighted_ce, spatial_angles"
     },
     {
-        "basename": "ctrgcn_mamba",
-        "window_size": 128,
-        "description": "Model 2/5: CTR-GCN (Dynamic Channel Graph) + Mamba",
-        "latent_dim": 128,
+        "basename": "stgcn_mamba",
+        "window_size": 256,
         "loss_function": "weighted_ce",
-        "window_size": 16,
-        "overlap": 0
+        "description": "overlap ratio (0/256), loss=weighted_ce, spatial_angles"
     },
-    {
-        "basename": "infogcn_mamba",
-        "window_size": 128,
-        "description": "Model 3/5: InfoGCN (Multi-Scale Attention) + Mamba",
-        "latent_dim": 128,
-        "loss_function": "weighted_ce",
-        "window_size": 16,
-        "overlap": 0
-    },
-    {
-        "basename": "shiftgcn_mamba",
-        "window_size": 128,             
-        "description": "Model 4/5: ShiftGCN (No Graph / Spatial Shifts) + Mamba",
-        "latent_dim": 128,
-        "loss_function": "weighted_ce",
-        "window_size": 16,
-        "overlap": 0
-    },
-    {
-        "basename": "spatial_transformer_mamba",
-        "window_size": 128,             
-        "description": "Model 5/5: Spatial Self-Attention + Mamba",
-        "latent_dim": 128,
-        "loss_function": "weighted_ce",
-        "window_size": 16,
-        "overlap": 0
-    }
 ]
 
 if CHOSEN_TYPE == 'mamba':
