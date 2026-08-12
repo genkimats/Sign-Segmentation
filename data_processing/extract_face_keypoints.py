@@ -28,7 +28,7 @@ NUM_FACE_VERTICES = len(SELECTED_INDICES)
 # ==============================================================================
 # ⚙️ EXTRACTION CONFIGURATION
 # ==============================================================================
-RAW_VIDEO_DIR = "raw_videos"  # <-- UPDATE THIS to your actual video folder
+RAW_VIDEO_DIR = "raw_data/videos/"  # <-- UPDATE THIS to your actual video folder
 OUTPUT_DIR = "processed_data/face_keypoints"
 MODEL_ASSET_PATH = "face_landmarker.task"
 
