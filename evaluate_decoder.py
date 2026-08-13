@@ -131,8 +131,11 @@ if __name__ == "__main__":
             # Decode the sequence using the linguistic rules
             preds = decode_predictions(logits, strategy=DECODING_STRATEGY, threshold=DECODING_THRESHOLD)
             
+            # Convert soft 2D labels back to hard 1D labels for sklearn metric calculation
+            hard_labels = torch.argmax(labels, dim=-1)
+            
             # Calculate F1/IoU metrics for this batch
-            metrics = evaluate_batch(preds, labels)
+            metrics = evaluate_batch(preds, hard_labels)
             total_frame_f1 += metrics['frame_f1']
             total_mean_iou += metrics['mean_iou']
             total_segment_f1 += metrics['segment_f1']
