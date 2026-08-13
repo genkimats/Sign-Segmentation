@@ -131,8 +131,8 @@ if __name__ == "__main__":
             # Decode the sequence using the linguistic rules
             preds = decode_predictions(logits, strategy=DECODING_STRATEGY, threshold=DECODING_THRESHOLD)
             
-            # Convert soft 2D labels back to hard 1D labels for sklearn metric calculation
-            hard_labels = torch.argmax(labels, dim=-1)
+            # Convert soft 2D labels back to hard 1D labels (Dim 1 is the Class dimension)
+            hard_labels = torch.argmax(labels, dim=1)
             
             # Calculate F1/IoU metrics for this batch
             metrics = evaluate_batch(preds, hard_labels)
