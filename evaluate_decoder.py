@@ -55,7 +55,6 @@ MODEL_REGISTRY = {
     "transformer": TransformerBaseline,
     "stgcn_transformer": STGCN_Transformer,
     "latent_stgcn_mamba": Latent_STGCN_Mamba,
-    "latent_mamba": Latent_Mamba,
     "ctrgcn_mamba": CTRGCN_Mamba,
     "infogcn_mamba": InfoGCN_Mamba,
     "shiftgcn_mamba": ShiftGCN_Mamba,
