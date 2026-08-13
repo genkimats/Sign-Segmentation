@@ -16,7 +16,7 @@ from inference_class_plot import InteractiveViewer
 from src.models import (
     PureMambaBaseline, BiMambaBaseline, STGCN_Mamba, STGCN_MLP_Mamba, 
     STGCN_BiMamba, Decoupled_STGCN_Mamba, BiLSTM_Baseline, STGCN_BiLSTM, 
-    TransformerBaseline, STGCN_Transformer, Latent_STGCN_Mamba,
+    TransformerBaseline, STGCN_Transformer, Latent_STGCN_Mamba, Latent_Mamba,
     CTRGCN_Mamba, InfoGCN_Mamba, ShiftGCN_Mamba, SpatialTransformer_Mamba
 )
 
@@ -27,14 +27,14 @@ CHOSEN_MODEL = "stgcn_mamba"
 PREFIX = "257"
 
 # Decoder Settings
-DECODING_STRATEGY = "argmax" # Options: "argmax", "threshold", "linguistic"
+DECODING_STRATEGY = "linguistic" # Options: "argmax", "threshold", "linguistic"
 DECODING_THRESHOLD = 0.60
 
 # Dataset Settings
 TARGET_SPLIT = "val" # "val" or "test"
-BATCH_SIZE = 16      # Batch size for rapid evaluation
+BATCH_SIZE = 16      
 
-# Window Display Logic (from inference_class_plot.py)
+# Window Display Logic (Strictly for the Viewer, NOT the model)
 USE_DEFAULT_WINDOW_SIZE = False
 CUSTOM_WINDOW_SIZE = 256
 
@@ -55,6 +55,7 @@ MODEL_REGISTRY = {
     "transformer": TransformerBaseline,
     "stgcn_transformer": STGCN_Transformer,
     "latent_stgcn_mamba": Latent_STGCN_Mamba,
+    "latent_mamba": Latent_Mamba,
     "ctrgcn_mamba": CTRGCN_Mamba,
     "infogcn_mamba": InfoGCN_Mamba,
     "shiftgcn_mamba": ShiftGCN_Mamba,
@@ -68,20 +69,17 @@ if __name__ == "__main__":
     with open(HYPERPARAMETER_PATH, 'r') as f:
         hp = json.load(f)
         
-    # 2. Extract Window Size Logic
-    if USE_DEFAULT_WINDOW_SIZE:
-        display_window_size = hp.get("window_size")
-        print(f"Using trained window size for display: {display_window_size}")
-    else:
-        display_window_size = CUSTOM_WINDOW_SIZE
-        print(f"Overriding dataset window size for display. Using custom window size: {display_window_size}")
+    # --- PROPER WINDOW ISOLATION ---
+    # The model MUST run on its trained window size to maintain valid hidden states
+    train_window_size = hp.get("window_size")
+    display_window_size = train_window_size if USE_DEFAULT_WINDOW_SIZE else CUSTOM_WINDOW_SIZE
         
-    # 3. Initialize Dataset (Streaming directly from RAM/Disk based on your dataset.py)
+    # 2. Initialize Dataset (Locked to the exact configuration used during training)
     dataset = SignSegmentationDataset(
         keypoints_dir="processed_data/keypoints",
         labels_dir="processed_data/BIO_tags",
-        window_size=display_window_size,  
-        overlap=0, # 0 overlap is standard for clean metric evaluation
+        window_size=train_window_size,  # Model strict limit
+        overlap=0, 
         tolerance_window=hp.get("tolerance_window"),
         use_full_length=False, 
         base_features=hp.get("base_features"),
@@ -94,7 +92,7 @@ if __name__ == "__main__":
         
     dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4)
 
-    # 4. Initialize Model
+    # 3. Initialize Model
     model_class = MODEL_REGISTRY[CHOSEN_MODEL]
     model_kwargs = {
         "num_vertices": hp.get("num_vertices"),
@@ -103,7 +101,6 @@ if __name__ == "__main__":
         "n_layers": hp.get("n_layers")
     }
     
-    # Inject latent_dim safely if evaluating modern architectures
     if CHOSEN_MODEL in ["latent_stgcn_mamba", "latent_mamba", "ctrgcn_mamba", "infogcn_mamba", "shiftgcn_mamba", "spatial_transformer_mamba"]:
         model_kwargs["latent_dim"] = hp.get("latent_dim", 128)
         
@@ -111,63 +108,75 @@ if __name__ == "__main__":
     model.load_state_dict(torch.load(WEIGHTS_PATH, map_location=DEVICE))
     model.eval()
 
-    # 5. Rapid Evaluation Loop
-    total_frame_f1 = 0
-    total_mean_iou = 0
-    total_segment_f1 = 0
-    batches = 0
+    # 4. Dictionary to hold chunks before stitching
+    video_predictions = {}
+    video_ground_truth = {}
 
-    print(f"\n🧪 Running Inference on '{TARGET_SPLIT}' split...")
+    print(f"\n🧪 Running Inference on '{TARGET_SPLIT}' split (Stitching 16-frame chunks)...")
     with torch.no_grad():
-        # Using 5 variables to catch the metadata safely from dataset.py
-        for features, labels, _, _, _ in tqdm(dataloader, desc="Evaluating"):
+        for features, labels, vids, starts, ends in tqdm(dataloader, desc="Evaluating"):
             features = features.to(DEVICE)
-            labels = labels.to(DEVICE)
             
-            # Forward pass (handles tuples if Mamba returns hidden states)
             outputs = model(features)
             logits = outputs[0] if isinstance(outputs, tuple) else outputs
             
-            # Decode the sequence using the linguistic rules
             preds = decode_predictions(logits, strategy=DECODING_STRATEGY, threshold=DECODING_THRESHOLD)
-            
-            # Convert soft 2D labels back to hard 1D labels (Dim 1 is the Class dimension)
             hard_labels = torch.argmax(labels, dim=1)
             
-            # Send both predictions and labels back to CPU for Scikit-Learn
-            preds_cpu = preds.cpu()
-            hard_labels_cpu = hard_labels.cpu()
+            preds_cpu = preds.cpu().numpy()
+            labels_cpu = hard_labels.cpu().numpy()
             
-            # Calculate F1/IoU metrics for this batch
-            metrics = evaluate_batch(preds_cpu, hard_labels_cpu)
-            
-            # Safely extract the raw values regardless of what the keys are named
-            vals = list(metrics.values())
-            total_frame_f1 += float(vals[0])
-            total_mean_iou += float(vals[1])
-            total_segment_f1 += float(vals[2])
-            
-            batches += 1
+            # Save the chunks to their respective videos
+            for i in range(len(vids)):
+                vid = vids[i]
+                s = starts[i].item()
+                
+                if vid not in video_predictions:
+                    video_predictions[vid] = []
+                    video_ground_truth[vid] = []
+                    
+                video_predictions[vid].append((s, preds_cpu[i]))
+                video_ground_truth[vid].append((s, labels_cpu[i]))
+
+    # 5. Evaluate the Stitched Videos
+    total_frame_f1 = 0
+    total_mean_iou = 0
+    total_segment_f1 = 0
+    num_videos = len(video_predictions)
+
+    for vid in video_predictions.keys():
+        # Sort chunks by start index to ensure chronological order
+        video_predictions[vid].sort(key=lambda x: x[0])
+        video_ground_truth[vid].sort(key=lambda x: x[0])
+        
+        # Concatenate chunks into continuous arrays
+        full_pred = np.concatenate([chunk[1] for chunk in video_predictions[vid]])
+        full_true = np.concatenate([chunk[1] for chunk in video_ground_truth[vid]])
+        
+        # Calculate F1 on the complete timeline!
+        metrics = evaluate_batch(torch.tensor([full_pred]), torch.tensor([full_true]))
+        vals = list(metrics.values())
+        
+        total_frame_f1 += float(vals[0])
+        total_mean_iou += float(vals[1])
+        total_segment_f1 += float(vals[2])
 
     # 6. Print Final Benchmark Results
     print("\n" + "="*50)
     print(f"📊 METRICS RESULTS ({DECODING_STRATEGY.upper()})")
     print("="*50)
-    print(f"Frame F1:   {total_frame_f1 / batches:.4f}")
-    print(f"Mean IoU:   {total_mean_iou / batches:.4f}")
-    print(f"Segment F1: {total_segment_f1 / batches:.4f}")
+    print(f"Frame F1:   {total_frame_f1 / num_videos:.4f}")
+    print(f"Mean IoU:   {total_mean_iou / num_videos:.4f}")
+    print(f"Segment F1: {total_segment_f1 / num_videos:.4f}")
     print("="*50 + "\n")
 
     # 7. Seamless Interactive Viewer Transfer
     user_choice = input("Do you want to visually inspect the predictions in the Interactive Viewer? (y/N): ").strip().lower()
     
     if user_choice == 'y':
-        print("Launching viewer... (Press Right Arrow to load optimal sequences)")
-        
-        # Passes the loaded model & dataset natively into your background thread plot engine
+        print(f"Launching viewer... (Using display window size: {display_window_size})")
+        # Pass the separated display window size to the viewer
         viewer = InteractiveViewer(model, dataset, hp, display_window_size)
-        
-        # Holds the script open while you interact with Matplotlib
         plt.show() 
     else:
         print("Exiting evaluation.")
