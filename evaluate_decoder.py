@@ -134,8 +134,12 @@ if __name__ == "__main__":
             # Convert soft 2D labels back to hard 1D labels (Dim 1 is the Class dimension)
             hard_labels = torch.argmax(labels, dim=1)
             
+            # Send both predictions and labels back to CPU for Scikit-Learn
+            preds_cpu = preds.cpu()
+            hard_labels_cpu = hard_labels.cpu()
+            
             # Calculate F1/IoU metrics for this batch
-            metrics = evaluate_batch(preds, hard_labels)
+            metrics = evaluate_batch(preds_cpu, hard_labels_cpu)
             total_frame_f1 += metrics['frame_f1']
             total_mean_iou += metrics['mean_iou']
             total_segment_f1 += metrics['segment_f1']
