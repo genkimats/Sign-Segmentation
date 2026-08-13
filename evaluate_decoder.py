@@ -16,7 +16,7 @@ from inference_class_plot import InteractiveViewer
 from src.models import (
     PureMambaBaseline, BiMambaBaseline, STGCN_Mamba, STGCN_MLP_Mamba, 
     STGCN_BiMamba, Decoupled_STGCN_Mamba, BiLSTM_Baseline, STGCN_BiLSTM, 
-    TransformerBaseline, STGCN_Transformer, Latent_STGCN_Mamba, Latent_Mamba,
+    TransformerBaseline, STGCN_Transformer, Latent_STGCN_Mamba,
     CTRGCN_Mamba, InfoGCN_Mamba, ShiftGCN_Mamba, SpatialTransformer_Mamba
 )
 
