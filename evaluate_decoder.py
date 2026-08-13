@@ -27,7 +27,7 @@ CHOSEN_MODEL = "stgcn_mamba"
 PREFIX = "257"
 
 # Decoder Settings
-DECODING_STRATEGY = "linguistic" # Options: "argmax", "threshold", "linguistic"
+DECODING_STRATEGY = "argmax" # Options: "argmax", "threshold", "linguistic"
 DECODING_THRESHOLD = 0.60
 
 # Dataset Settings
