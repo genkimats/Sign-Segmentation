@@ -140,9 +140,13 @@ if __name__ == "__main__":
             
             # Calculate F1/IoU metrics for this batch
             metrics = evaluate_batch(preds_cpu, hard_labels_cpu)
-            total_frame_f1 += metrics['frame_f1']
-            total_mean_iou += metrics['mean_iou']
-            total_segment_f1 += metrics['segment_f1']
+            
+            # Safely extract the raw values regardless of what the keys are named
+            vals = list(metrics.values())
+            total_frame_f1 += float(vals[0])
+            total_mean_iou += float(vals[1])
+            total_segment_f1 += float(vals[2])
+            
             batches += 1
 
     # 6. Print Final Benchmark Results
