@@ -14,6 +14,8 @@ CHOSEN_TYPE = 'mamba'
 # ==============================================================================
 MAMBA_DEFAULTS = {
     "basename": "stgcn_mamba",  
+    "window_size": 16,
+    "overlap": 0,
     "batch_size": 16,
     "epochs": 50,
     "early_stopping": True,
