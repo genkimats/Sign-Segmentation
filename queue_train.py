@@ -1,3 +1,4 @@
+#region
 import json
 import os
 
@@ -71,37 +72,15 @@ def calculate_in_channels(config):
             total_channels += 2 
             
     return total_channels
+#endregion
 
 EXPERIMENTS_TO_RUN = [
     {
         "basename": "stgcn_mamba",
-        "window_size": 16,
-        "loss_function": "weighted_ce",
-        "description": "overlap ratio (0/16), loss=weighted_ce, spatial_angles"
-    },
-    {
-        "basename": "stgcn_mamba",
-        "window_size": 32,
-        "loss_function": "weighted_ce",
-        "description": "overlap ratio (0/32), loss=weighted_ce, spatial_angles"
-    },
-    {
-        "basename": "stgcn_mamba",
-        "window_size": 64,
-        "loss_function": "weighted_ce",
-        "description": "overlap ratio (0/64), loss=weighted_ce, spatial_angles"
-    },
-    {
-        "basename": "stgcn_mamba",
-        "window_size": 128,
-        "loss_function": "weighted_ce",
-        "description": "overlap ratio (0/128), loss=weighted_ce, spatial_angles"
-    },
-    {
-        "basename": "stgcn_mamba",
         "window_size": 256,
+        "overlap": 64,
         "loss_function": "weighted_ce",
-        "description": "overlap ratio (0/256), loss=weighted_ce, spatial_angles"
+        "description": "overlap ratio (64/256), loss=weighted_ce, spatial_angles"
     },
 ]
 
