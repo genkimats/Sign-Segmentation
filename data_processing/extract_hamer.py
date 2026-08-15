@@ -19,6 +19,11 @@ os.makedirs(OUTPUT_FEATURE_DIR, exist_ok=True)
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+# HaMeR resolves its checkpoint/config via a path relative to ITS OWN repo root
+# (e.g. "_DATA/hamer_ckpts/model_config.yaml"), regardless of where you invoke this
+# script from. Point this at wherever you cloned/installed geopavlakos/hamer.
+HAMER_REPO_DIR = os.path.expanduser("~/Genki_GR/hamer")
+
 # GPU batch size for the HaMeR forward pass (unrelated to video frame stride below)
 BATCH_SIZE = 32
 
@@ -83,7 +88,15 @@ def get_pixel_bbox(landmarks, img_w, img_h):
 # ==============================================================================
 def main():
     print(f"Loading HaMeR Model on {DEVICE} with Batch Size {BATCH_SIZE}...")
-    model, model_cfg = load_hamer(DEFAULT_CHECKPOINT)
+    # load_hamer() reads files via paths relative to CWD (by design -- it expects to be
+    # run from inside the hamer repo, like `demo.py` is). Temporarily chdir there so it
+    # resolves correctly no matter where extract_hamer.py itself lives.
+    _prev_cwd = os.getcwd()
+    os.chdir(HAMER_REPO_DIR)
+    try:
+        model, model_cfg = load_hamer(DEFAULT_CHECKPOINT)
+    finally:
+        os.chdir(_prev_cwd)
     model = model.to(DEVICE)
     model.eval()
 
