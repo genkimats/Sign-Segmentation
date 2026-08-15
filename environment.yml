@@ -9,3 +9,4 @@ dependencies:
   - pip:
       - opencv-python
       - mediapipe
+      - sign-language-datasets

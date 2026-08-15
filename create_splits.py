@@ -1,138 +1,157 @@
 import os
 import glob
-import numpy as np
 import json
+import numpy as np
 from tqdm import tqdm
+
+# Requires: pip install sign-language-datasets
+# (same TFDS loader library used by Moryossef et al. 2023 / Zhang et al. 2023,
+#  ships the canonical "3.0.0-uzh-document" split as a plain JSON file, plus
+#  the DGS Corpus document index needed to map document IDs -> video files)
+from sign_language_datasets.datasets.dgs_corpus.dgs_corpus import load_split, INDEX_PATH
 
 LABELS_DIR = "processed_data/BIO_tags"
 SPLIT_FILE = "dataset_splits.json"
+OFFICIAL_SPLIT_NAME = "3.0.0-uzh-document"
 
-def analyze_dataset():
-    """Scans all label files to count glosses and BIO frames per video."""
-    print("🔍 Scanning dataset...")
-    label_files = sorted(glob.glob(os.path.join(LABELS_DIR, "*.npy")))
-    
-    if not label_files:
-        print(f"❌ Error: No .npy files found in {LABELS_DIR}")
-        return []
 
-    video_stats = []
-    
-    for file_path in tqdm(label_files, desc="Analyzing labels"):
-        filename = os.path.basename(file_path)
-        
-        # Load the label array
-        labels = np.load(file_path)
-        
-        # Check dimensionality. If it's a 2D soft-label array, convert to 1D hard labels.
-        # If it's already a 1D hard-label array, keep it as is!
-        if labels.ndim > 1:
-            if labels.shape[0] == 3:
-                hard_labels = np.argmax(labels, axis=0)
-            elif labels.shape[1] == 3:
-                hard_labels = np.argmax(labels, axis=1)
-            else:
-                hard_labels = np.argmax(labels, axis=-1)
-        else:
-            hard_labels = labels
-        
-        # Count the frames for each class safely
-        o_count = int(np.sum(hard_labels == 0))
-        i_count = int(np.sum(hard_labels == 1))
-        b_count = int(np.sum(hard_labels == 2))
-        
-        # In BIO tagging, the number of 'B' tags equals the number of glosses!
-        total_glosses = b_count
-        
-        # Use .size to safely get the length of the numpy array
-        total_frames = int(hard_labels.size)
-        
-        video_stats.append({
-            "filename": filename,
-            "gloss_count": total_glosses,
-            "b_frames": b_count,
-            "i_frames": i_count,
-            "o_frames": o_count,
-            "total_frames": total_frames
-        })
-        
-    return video_stats
+# ==============================================================================
+# STEP 1: FETCH THE OFFICIAL SPLIT + DOCUMENT INDEX
+# ==============================================================================
+def load_dgs_index():
+    """The DGS Corpus document index (dgs.json) ships inside sign_language_datasets
+    and maps each document_id -> its metadata, including video_a/video_b file paths."""
+    with open(INDEX_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)
 
-def create_balanced_split(video_stats, target_ratios=(0.8, 0.1, 0.1)):
-    """Distributes videos into Train/Val/Test attempting to hit target gloss ratios."""
-    print("\n⚖️ Calculating balanced splits...")
-    
-    # Sort videos by gloss count (descending) so we fit the biggest "rocks" in the buckets first
-    video_stats.sort(key=lambda x: x['gloss_count'], reverse=True)
-    
-    total_glosses_dataset = sum(v['gloss_count'] for v in video_stats)
-    
-    # Target gloss counts for each bucket
-    targets = {
-        "train": total_glosses_dataset * target_ratios[0],
-        "val": total_glosses_dataset * target_ratios[1],
-        "test": total_glosses_dataset * target_ratios[2]
-    }
-    
-    # Current state of each bucket
-    buckets = {
-        "train": {"videos": [], "glosses": 0, "b": 0, "i": 0, "o": 0},
-        "val": {"videos": [], "glosses": 0, "b": 0, "i": 0, "o": 0},
-        "test": {"videos": [], "glosses": 0, "b": 0, "i": 0, "o": 0}
-    }
-    
-    for video in video_stats:
-        # Calculate how "hungry" each bucket is relative to its target
-        def hunger(bucket_name):
-            if targets[bucket_name] == 0: return -float('inf')
-            # The lower the current percentage of its target, the hungrier it is
-            return 1.0 - (buckets[bucket_name]['glosses'] / targets[bucket_name])
-            
-        # Pick the hungriest bucket
-        best_bucket = max(["train", "val", "test"], key=hunger)
-        
-        # Assign video to the best bucket
-        b = buckets[best_bucket]
-        b["videos"].append(video["filename"])
-        b["glosses"] += video["gloss_count"]
-        b["b"] += video["b_frames"]
-        b["i"] += video["i_frames"]
-        b["o"] += video["o_frames"]
 
-    # --- Print Analytics ---
-    print("\n📊 SPLIT RESULTS:")
+def stem(path_or_name):
+    """Basename without extension."""
+    base = os.path.basename(str(path_or_name))
+    return os.path.splitext(base)[0]
+
+
+def resolve_document_video_stems(datum):
+    """Candidate local-file stems for a single DGS document, derived from its
+    video_a / video_b / video_c (participant camera) paths in the official index."""
+    candidates = []
+    for cam in ("video_a", "video_b", "video_c"):
+        path = datum.get(cam)
+        if path:
+            candidates.append(stem(path))
+    return candidates
+
+
+# ==============================================================================
+# STEP 2: MATCH OFFICIAL DOCUMENTS AGAINST YOUR LOCAL LABEL FILES
+# ==============================================================================
+def build_local_file_index(labels_dir):
+    """normalized stem (lowercase) -> actual filename on disk."""
+    index = {}
+    for fname in os.listdir(labels_dir):
+        if not fname.endswith(".npy"):
+            continue
+        index[stem(fname).lower()] = fname
+    return index
+
+
+def build_official_splits(labels_dir):
+    print(f"🔎 Fetching official split '{OFFICIAL_SPLIT_NAME}' via sign_language_datasets...")
+    split = load_split(OFFICIAL_SPLIT_NAME)  # {"train": [...], "dev": [...], "test": [...]} of document IDs
+
+    print("📖 Loading DGS Corpus document index (dgs.json)...")
+    index_data = load_dgs_index()
+
+    print(f"📁 Scanning local label files in '{labels_dir}'...")
+    local_index = build_local_file_index(labels_dir)
+
+    final_splits = {"train": [], "val": [], "test": []}
+    official_to_ours = {"train": "train", "dev": "val", "test": "test"}
+
+    unmatched_documents = []
+    claimed_local_keys = set()
+
+    for official_name, our_name in official_to_ours.items():
+        for document_id in split.get(official_name, []):
+            datum = index_data.get(document_id)
+            if datum is None:
+                unmatched_documents.append((document_id, "not found in dgs.json index"))
+                continue
+
+            candidates = resolve_document_video_stems(datum)
+            matched_any = False
+            for cand in candidates:
+                key = cand.lower()
+                if key in local_index:
+                    final_splits[our_name].append(local_index[key])
+                    claimed_local_keys.add(key)
+                    matched_any = True
+
+            if not matched_any:
+                unmatched_documents.append((document_id, f"no local file matched candidates {candidates}"))
+
+    unmatched_local = set(local_index.keys()) - claimed_local_keys
+
+    print("\n" + "=" * 60)
+    print(f"MATCHED   -> train={len(final_splits['train'])}  val={len(final_splits['val'])}  test={len(final_splits['test'])}")
+    print(f"UNMATCHED OFFICIAL DOCUMENTS: {len(unmatched_documents)}")
+    for doc_id, reason in unmatched_documents[:20]:
+        print(f"   - {doc_id}: {reason}")
+    if len(unmatched_documents) > 20:
+        print(f"   ... and {len(unmatched_documents) - 20} more")
+    print(f"LOCAL FILES NEVER CLAIMED BY THE OFFICIAL SPLIT: {len(unmatched_local)}")
+    for key in list(unmatched_local)[:20]:
+        print(f"   - {local_index[key]}")
+    print("=" * 60)
+
+    if unmatched_documents or unmatched_local:
+        print(
+            "\n⚠️  Matching was not fully clean -- inspect the lists above BEFORE trusting "
+            f"'{SPLIT_FILE}'. This almost always means your local .npy filenames don't share "
+            "a naming convention with the official 'video_a' / 'video_b' basenames. Adjust "
+            "`resolve_document_video_stems()` (e.g. strip a prefix/suffix, or match on a "
+            "substring) until UNMATCHED counts are ~0, rather than shipping a partial split."
+        )
+
+    return final_splits
+
+
+# ==============================================================================
+# STEP 3 (OPTIONAL DIAGNOSTIC): REPORT GLOSS / BIO STATS FOR THE RESULTING SPLIT
+# ==============================================================================
+def report_split_stats(final_splits, labels_dir):
+    print("\n📊 SPLIT DIAGNOSTICS (BIO distribution per split, informational only --")
+    print("   the split membership itself comes from the official protocol, not these stats):")
     print("-" * 60)
+
     for name in ["train", "val", "test"]:
-        b = buckets[name]
-        total_frames = b["b"] + b["i"] + b["o"]
-        actual_ratio = b["glosses"] / total_glosses_dataset if total_glosses_dataset > 0 else 0
-        
-        b_pct = (b["b"] / total_frames) * 100 if total_frames > 0 else 0
-        i_pct = (b["i"] / total_frames) * 100 if total_frames > 0 else 0
-        o_pct = (b["o"] / total_frames) * 100 if total_frames > 0 else 0
-        
-        print(f"[{name.upper()}] - {len(b['videos'])} Videos")
-        print(f"   Target Gloss Ratio:  {target_ratios[['train', 'val', 'test'].index(name)] * 100:.1f}%")
-        print(f"   Actual Gloss Ratio:  {actual_ratio * 100:.1f}% ({b['glosses']} glosses)")
-        print(f"   BIO Distribution:    B: {b_pct:.2f}% | I: {i_pct:.2f}% | O: {o_pct:.2f}%")
+        b = i = o = glosses = 0
+        for fname in tqdm(final_splits[name], desc=f"Analyzing {name}", leave=False):
+            labels = np.load(os.path.join(labels_dir, fname))
+            if labels.ndim > 1:
+                hard = np.argmax(labels, axis=0 if labels.shape[0] == 3 else -1)
+            else:
+                hard = labels
+            b += int(np.sum(hard == 2))
+            i += int(np.sum(hard == 1))
+            o += int(np.sum(hard == 0))
+            glosses += int(np.sum(hard == 2))
+
+        total = b + i + o
+        print(f"[{name.upper()}] - {len(final_splits[name])} videos, {glosses} glosses")
+        if total > 0:
+            print(f"   BIO Distribution: B: {100*b/total:.2f}% | I: {100*i/total:.2f}% | O: {100*o/total:.2f}%")
         print("-" * 60)
 
-    # Prepare output dictionary (Just saving the filenames)
-    final_split_dict = {
-        "train": buckets["train"]["videos"],
-        "val": buckets["val"]["videos"],
-        "test": buckets["test"]["videos"]
-    }
-    
-    return final_split_dict
 
 if __name__ == "__main__":
-    stats = analyze_dataset()
-    if stats:
-        final_splits = create_balanced_split(stats)
-        
+    if not glob.glob(os.path.join(LABELS_DIR, "*.npy")):
+        print(f"❌ Error: No .npy files found in {LABELS_DIR}")
+    else:
+        final_splits = build_official_splits(LABELS_DIR)
+        report_split_stats(final_splits, LABELS_DIR)
+
         with open(SPLIT_FILE, "w") as f:
             json.dump(final_splits, f, indent=4)
-            
-        print(f"✅ Splits successfully saved to '{SPLIT_FILE}'!")
-        print("You can now update dataset.py to load this file instead of using random_split.")
+
+        print(f"\n✅ Wrote '{SPLIT_FILE}' using the official '{OFFICIAL_SPLIT_NAME}' split.")
