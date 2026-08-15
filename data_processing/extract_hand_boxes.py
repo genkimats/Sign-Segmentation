@@ -18,7 +18,7 @@ from mediapipe.tasks import python as mp_python
 from mediapipe.tasks.python import vision as mp_vision
 from tqdm import tqdm
 
-INPUT_VIDEO_DIR = os.path.expanduser("~/Genki_GR/Sign-Segmentation/raw_data/videos")
+INPUT_VIDEO_DIR = os.path.expanduser("~/Genki_GR/Sign-Segmentation/data/raw_videos")
 OUTPUT_BOX_DIR = os.path.expanduser("~/Genki_GR/Sign-Segmentation/processed_data/hand_boxes")
 os.makedirs(OUTPUT_BOX_DIR, exist_ok=True)
 
@@ -59,14 +59,19 @@ def main():
 
     video_files = [f for f in os.listdir(INPUT_VIDEO_DIR) if f.endswith(('.mp4', '.avi', '.mov'))]
 
-    with mp_vision.HandLandmarker.create_from_options(options) as landmarker:
-        for video_name in tqdm(video_files, desc="Detecting hands (MediaPipe only)"):
-            video_path = os.path.join(INPUT_VIDEO_DIR, video_name)
-            save_name = video_name.rsplit('.', 1)[0] + "_boxes.pkl"
-            save_path = os.path.join(OUTPUT_BOX_DIR, save_name)
-            if os.path.exists(save_path):
-                continue
+    for video_name in tqdm(video_files, desc="Detecting hands (MediaPipe only)"):
+        video_path = os.path.join(INPUT_VIDEO_DIR, video_name)
+        save_name = video_name.rsplit('.', 1)[0] + "_boxes.pkl"
+        save_path = os.path.join(OUTPUT_BOX_DIR, save_name)
+        if os.path.exists(save_path):
+            continue
 
+        # A fresh landmarker per video: VIDEO running mode tracks an internal
+        # "last timestamp seen" and requires strictly increasing timestamps for
+        # the LIFETIME OF THE INSTANCE. Reusing one landmarker across multiple
+        # videos (each restarting its own timestamp count from 0) violates that
+        # and throws "Input timestamp must be monotonically increasing."
+        with mp_vision.HandLandmarker.create_from_options(options) as landmarker:
             cap = cv2.VideoCapture(video_path)
             fps = cap.get(cv2.CAP_PROP_FPS) or 25.0  # VIDEO mode needs real, monotonic timestamps
             frames_out = []
@@ -108,11 +113,11 @@ def main():
 
             cap.release()
 
-            with open(save_path, "wb") as f:
-                pickle.dump({
-                    "temporal_downsample_factor": TEMPORAL_DOWNSAMPLE_FACTOR,
-                    "frames": frames_out,
-                }, f)
+        with open(save_path, "wb") as f:
+            pickle.dump({
+                "temporal_downsample_factor": TEMPORAL_DOWNSAMPLE_FACTOR,
+                "frames": frames_out,
+            }, f)
 
 
 if __name__ == "__main__":
