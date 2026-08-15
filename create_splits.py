@@ -31,14 +31,21 @@ def stem(path_or_name):
     return os.path.splitext(base)[0]
 
 
-def resolve_document_video_stems(datum):
-    """Candidate local-file stems for a single DGS document, derived from its
-    video_a / video_b / video_c (participant camera) paths in the official index."""
+def resolve_document_video_stems(document_id, datum):
+    """
+    Candidate local-file stems for a single DGS document.
+
+    Your local .npy files are named "{document_id}_A.npy" / "{document_id}_B.npy"
+    (one per participant camera) -- the document_id itself is already the exact
+    prefix, so we don't need to parse the official video_a/video_b path suffixes
+    (e.g. "..._1a1.mp4") at all. Only offer a letter if that camera actually
+    exists for this document (some documents have a single signer only).
+    """
     candidates = []
-    for cam in ("video_a", "video_b", "video_c"):
-        path = datum.get(cam)
-        if path:
-            candidates.append(stem(path))
+    if datum.get("video_a"):
+        candidates.append(f"{document_id}_A")
+    if datum.get("video_b"):
+        candidates.append(f"{document_id}_B")
     return candidates
 
 
@@ -78,7 +85,7 @@ def build_official_splits(labels_dir):
                 unmatched_documents.append((document_id, "not found in dgs.json index"))
                 continue
 
-            candidates = resolve_document_video_stems(datum)
+            candidates = resolve_document_video_stems(document_id, datum)
             matched_any = False
             for cand in candidates:
                 key = cand.lower()
