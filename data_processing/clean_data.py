@@ -114,7 +114,15 @@ def clean_annotations(deletion_stats):
                     continue
 
                 if "Sign_r_A" not in tiers and "Sign_r_B" not in tiers:
-                    print(f"⚠️ Warning: {filename} does not contain 'Sign_r_A' or 'Sign_r_B'.")
+                    # No usable gloss tier -- this is exactly the "Joke" category in the
+                    # DGS Corpus (present + technically valid EAF, but never translated
+                    # or glossed). Without either tier there's nothing to derive BIO
+                    # labels from downstream, so exclude it here rather than just
+                    # warning and letting it into valid_ids.
+                    os.remove(file_path)
+                    record_deletion(deletion_stats, "No Sign_r_A/Sign_r_B tiers (likely Joke/unglossed)")
+                    print(f"🗑️ Removed (No Sign Tiers -- likely Joke/unannotated): {filename}")
+                    continue
 
                 # If it survives all checks, add to whitelist!
                 valid_ids.add(base_id)
