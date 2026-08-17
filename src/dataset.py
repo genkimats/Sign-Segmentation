@@ -47,7 +47,7 @@ def apply_label_smoothing(labels_array, window_size=5):
     return soft_labels
 
 class SignSegmentationDataset(Dataset):
-    def __init__(self, keypoints_dir, labels_dir, split_file="dataset_splits.json", split="train", window_size=16, overlap=0, tolerance_window=5, use_full_length=False, base_features=None, kinematic_features=None, temporal_downsample_factor=1):
+    def __init__(self, keypoints_dir, labels_dir, split_file="dataset_splits.json", split="train", window_size=16, overlap=0, tolerance_window=5, use_full_length=False, base_features=None, kinematic_features=None, temporal_downsample_factor=1, use_face_keypoints=False, face_dir="processed_data/face_keypoints_normalized"):
         self.labels_dir = labels_dir
         self.kinetic_dir = "processed_data/kinematic_features" 
         self.split_file = split_file
@@ -57,6 +57,8 @@ class SignSegmentationDataset(Dataset):
         self.tolerance_window = tolerance_window
         self.use_full_length = use_full_length
         self.temporal_downsample_factor = temporal_downsample_factor
+        self.use_face_keypoints = use_face_keypoints
+        self.face_dir = face_dir
 
         self.feature_map = {
             "x-cord": 0,
@@ -66,6 +68,19 @@ class SignSegmentationDataset(Dataset):
         
         self.base_features = base_features if base_features is not None else ["x-cord", "y-cord", "z-cord"]
         self.kinematic_features = kinematic_features if kinematic_features is not None else []
+
+        if self.use_face_keypoints:
+            # IMPORTANT: this changes the vertex axis (65 -> 65 + NUM_FACE_VERTICES), not the
+            # channel axis. Graph-based models (STGCN_Mamba, Decoupled_STGCN_Mamba, etc.) read
+            # their adjacency matrix from src/graph.py's SkeletonGraph, which is still hardcoded
+            # to 65 vertices -- using face keypoints with those models WILL fail with a shape
+            # mismatch in SpatialGraphConv until SkeletonGraph is extended to include face
+            # vertices/edges. Non-graph models (PureMambaBaseline, BiMambaBaseline) work as-is,
+            # since they don't depend on a fixed adjacency structure.
+            print(f"[{split.upper()}] use_face_keypoints=True -- vertex axis will be "
+                  f"65 + face-vertex-count (see processed_data/face_keypoints/*.npy shapes). "
+                  f"Make sure num_vertices in your config/queue matches, and that you're using "
+                  f"a non-graph model unless src/graph.py has been extended for face vertices.")
         
         with open(split_file, 'r') as f:
             splits = json.load(f)
@@ -120,8 +135,37 @@ class SignSegmentationDataset(Dataset):
             if "spatial_angles" in self.kinematic_features: channels.append(kin_data["spatial_angles"])
             if "temporal_angles" in self.kinematic_features: channels.append(kin_data["temporal_angles"])
                 
+            final_tensor = torch.cat(channels, dim=-1)  # (T, 65, K) -- defer FP16 cast until after optional face concat
+
+            # --- OPTIONAL: FACE KEYPOINTS (from extract_face_keypoints.py) ---
+            if self.use_face_keypoints:
+                face_path = os.path.join(self.face_dir, f"{vid}.npy")
+                if not os.path.exists(face_path):
+                    continue  # keep vertex layout consistent across the whole split; don't silently zero-fill a missing video
+
+                face_raw = torch.from_numpy(np.load(face_path)).float()  # (T_face, NUM_FACE_VERTICES, 3)
+                if face_raw.shape[0] != num_frames:
+                    continue  # frame count doesn't match labels/body -- skip rather than risk misaligning them
+
+                face_selected = face_raw[:, :, base_indices] if base_indices else face_raw
+
+                # extract_face_keypoints.py only outputs static x/y/z -- there's no face
+                # velocity/acceleration/angle equivalent yet, so any *derivative* channels
+                # requested via kinematic_features are zero-padded for the face vertices.
+                K_total = final_tensor.shape[-1]
+                face_padded = torch.zeros(num_frames, face_selected.shape[1], K_total, dtype=final_tensor.dtype)
+                face_padded[:, :, :face_selected.shape[-1]] = face_selected
+
+                # These are shoulder-normalized coordinates (see normalize_face_keypoints.py --
+                # same (coords - shoulder_midpoint) / shoulder_xy_distance transform as body/
+                # hands use), so this vertex block lives in the same coordinate frame as the
+                # rest of final_tensor. If you point face_dir back at the raw, unnormalized
+                # processed_data/face_keypoints/ directory instead, that guarantee no longer
+                # holds -- only do that deliberately (e.g. for debugging).
+                final_tensor = torch.cat([final_tensor, face_padded], dim=1)  # concat along the VERTEX axis
+
             # Compress to FP16 to keep RAM super low, and save it to the dictionary!
-            final_tensor = torch.cat(channels, dim=-1).to(torch.float16)
+            final_tensor = final_tensor.to(torch.float16)
             
             self.video_cache[vid] = {
                 'features': final_tensor,

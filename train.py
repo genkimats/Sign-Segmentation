@@ -89,6 +89,8 @@ def train_model(config):
     BASE_FEATURES = config["base_features"]
     KINEMATIC_FEATURES = config["kinematic_features"]
     IN_CHANNELS = config["in_channels"]
+    USE_FACE_KEYPOINTS = config.get("use_face_keypoints", False)
+    FACE_DIR = config.get("face_dir", "processed_data/face_keypoints_normalized")
     D_MODEL = config["d_model"]
     N_LAYERS = config["n_layers"]
     FOCAL_LOSS_GAMMA = config.get("focal_loss_gamma", 2.0)
@@ -120,7 +122,9 @@ def train_model(config):
         use_full_length=USE_FULL_LENGTH,
         base_features=BASE_FEATURES,
         kinematic_features=KINEMATIC_FEATURES,
-        temporal_downsample_factor=DOWNSAMPLE_FACTOR
+        temporal_downsample_factor=DOWNSAMPLE_FACTOR,
+        use_face_keypoints=USE_FACE_KEYPOINTS,
+        face_dir=FACE_DIR
     )
     
     val_dataset = SignSegmentationDataset(
@@ -134,7 +138,9 @@ def train_model(config):
         use_full_length=USE_FULL_LENGTH,
         base_features=BASE_FEATURES,
         kinematic_features=KINEMATIC_FEATURES,
-        temporal_downsample_factor=DOWNSAMPLE_FACTOR
+        temporal_downsample_factor=DOWNSAMPLE_FACTOR,
+        use_face_keypoints=USE_FACE_KEYPOINTS,
+        face_dir=FACE_DIR
     )
     
     loader_batch_size = 1 if USE_FULL_LENGTH else BATCH_SIZE
