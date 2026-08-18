@@ -132,7 +132,7 @@ def clean_annotations(deletion_stats):
 
             # --- WHOLE-DOCUMENT FAILURE: genuinely nothing salvageable ---
             if analysis['fatal']:
-                os.remove(file_path)
+                # os.remove(file_path)
                 record_deletion(deletion_stats, "Corrupted ELAN (fatal, whole document)")
                 print(f"🗑️ Removed (Corrupted, fatal): {filename} -> {analysis['fatal_reason']}")
                 continue
@@ -141,13 +141,13 @@ def clean_annotations(deletion_stats):
                 eaf = pympi.Elan.Eaf(file_path)
                 tiers = eaf.get_tier_names()
             except Exception:
-                os.remove(file_path)
+                # os.remove(file_path)
                 record_deletion(deletion_stats, "Unexpected ELAN Error")
                 print(f"🗑️ Removed (Unexpected Error): {filename}")
                 continue
 
             if len(tiers) == 0:
-                os.remove(file_path)
+                # os.remove(file_path)
                 record_deletion(deletion_stats, "Empty/No Tiers")
                 print(f"🗑️ Removed (Empty/No Tiers): {filename}")
                 continue
@@ -156,7 +156,7 @@ def clean_annotations(deletion_stats):
             # This is what should catch the "Joke"/unglossed category in the DGS
             # Corpus (present + technically valid EAF, but never translated/glossed).
             if not analysis['a_ok'] and not analysis['b_ok']:
-                os.remove(file_path)
+                # os.remove(file_path)
                 record_deletion(deletion_stats, "No usable Sign_r_A/Sign_r_B data (likely Joke/unglossed)")
                 print(f"🗑️ Removed (No usable sign data): {filename} "
                       f"-> A: {analysis['a_reason']} | B: {analysis['b_reason']}")
@@ -200,7 +200,7 @@ def clean_videos(valid_ids_a, valid_ids_b, deletion_stats):
                 participant, valid_ids = "B", valid_ids_b
             else:
                 duration_seconds = get_video_duration_seconds(file_path)
-                os.remove(file_path)
+                # os.remove(file_path)
                 record_deletion(deletion_stats, "Wrong Angle", duration_seconds)
                 print(f"🗑️ Removed (Wrong Angle): {filename}")
                 continue
@@ -211,7 +211,7 @@ def clean_videos(valid_ids_a, valid_ids_b, deletion_stats):
             #    problem (and B's video is no longer kept alive by A's data).
             if base_id not in valid_ids:
                 duration_seconds = get_video_duration_seconds(file_path)
-                os.remove(file_path)
+                # os.remove(file_path)
                 record_deletion(deletion_stats, f"Orphaned - No usable ELAN data for participant {participant}", duration_seconds)
                 print(f"🗑️ Removed (Orphaned - participant {participant} unusable): {filename}")
 
