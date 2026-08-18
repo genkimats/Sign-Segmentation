@@ -27,7 +27,7 @@ os.makedirs(OUTPUT_BOX_DIR, exist_ok=True)
 #   wget https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task
 # (same pattern as the face_landmarker.task you already have at the repo root).
 HAND_LANDMARKER_MODEL_PATH = os.path.expanduser(
-    "~/Genki_GR/Sign-Segmentation/hand_landmarker.task"
+    "./hand_landmarker.task"
 )
 
 # Must match TEMPORAL_DOWNSAMPLE_FACTOR in extract_hamer_features.py.
