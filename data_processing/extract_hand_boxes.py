@@ -18,8 +18,8 @@ from mediapipe.tasks import python as mp_python
 from mediapipe.tasks.python import vision as mp_vision
 from tqdm import tqdm
 
-INPUT_VIDEO_DIR = os.path.expanduser("~/Genki_GR/Sign-Segmentation/raw_data/videos")
-OUTPUT_BOX_DIR = os.path.expanduser("~/Genki_GR/Sign-Segmentation/processed_data/hand_boxes")
+INPUT_VIDEO_DIR = os.path.expanduser("./raw_data/videos")
+OUTPUT_BOX_DIR = os.path.expanduser("./processed_data/hand_boxes")
 os.makedirs(OUTPUT_BOX_DIR, exist_ok=True)
 
 # mp.solutions.hands was removed in MediaPipe >= 0.10.31; this now uses the
