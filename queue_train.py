@@ -103,11 +103,40 @@ def calculate_num_vertices(config):
 EXPERIMENTS_TO_RUN = [
     {
         "basename": "stgcn_mamba",
-        "window_size": 256,
-        "overlap": 64,
+        "window_size": 16,
+        "overlap": 0,
         "loss_function": "weighted_ce",
-        "description": "overlap ratio (64/256), loss=weighted_ce, spatial_angles"
+        "description": "--NEW DATASPLIT-- overlap ratio (0/16), loss=weighted_ce, spatial_angles"
     },
+    {
+        "basename": "stgcn_mamba",
+        "window_size": 32,
+        "overlap": 0,
+        "loss_function": "weighted_ce",
+        "description": "--NEW DATASPLIT-- overlap ratio (0/32), loss=weighted_ce, spatial_angles"
+    },
+    {
+        "basename": "stgcn_mamba",
+        "window_size": 64,
+        "overlap": 0,
+        "loss_function": "weighted_ce",
+        "description": "--NEW DATASPLIT-- overlap ratio (0/64), loss=weighted_ce, spatial_angles"
+    },
+    {
+        "basename": "stgcn_mamba",
+        "window_size": 128,
+        "overlap": 0,
+        "loss_function": "weighted_ce",
+        "description": "--NEW DATASPLIT-- overlap ratio (0/128), loss=weighted_ce, spatial_angles"
+    },
+    {
+        "basename": "stgcn_mamba",
+        "window_size": 256,
+        "overlap": 0,
+        "loss_function": "weighted_ce",
+        "description": "--NEW DATASPLIT-- overlap ratio (0/256), loss=weighted_ce, spatial_angles"
+    }
+
 ]
 
 if CHOSEN_TYPE == 'mamba':
