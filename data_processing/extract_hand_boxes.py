@@ -33,7 +33,7 @@ HAND_LANDMARKER_MODEL_PATH = os.path.expanduser(
 # Must match TEMPORAL_DOWNSAMPLE_FACTOR in extract_hamer_features.py.
 # (Stage 2 also reads this value back out of the cached file, so the two
 # scripts can never silently disagree -- but keep them equal for clarity.)
-TEMPORAL_DOWNSAMPLE_FACTOR = 2
+TEMPORAL_DOWNSAMPLE_FACTOR = 1
 
 
 def get_pixel_bbox(landmarks, img_w, img_h):
