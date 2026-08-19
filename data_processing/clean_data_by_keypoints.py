@@ -48,7 +48,7 @@ def clean_videos_by_keypoints(ids_a, ids_b):
         print(f"Directory not found: {VIDEOS_DIR}")
         return
 
-    removed, kept, skipped = 0, 0, 0
+    removed, kept, wrong_angle = 0, 0, 0
 
     for fname in sorted(os.listdir(VIDEOS_DIR)):
         if not fname.endswith(".mp4"):
@@ -61,9 +61,14 @@ def clean_videos_by_keypoints(ids_a, ids_b):
             video_id = fname[:-len("_1b1.mp4")]
             has_keypoints = video_id in ids_b
         else:
-            # Not a recognized camera-angle suffix -- that's clean_data.py's
-            # "Wrong Angle" check's job, not this script's. Leave it alone.
-            skipped += 1
+            # Wrong camera angle (e.g. an overview "_1c" file) -- delete
+            # unconditionally, regardless of keypoints.
+            wrong_angle += 1
+            if DRY_RUN:
+                print(f"[DRY RUN] Would remove (wrong angle -- not _1a1/_1b1): {fname}")
+            else:
+                os.remove(os.path.join(VIDEOS_DIR, fname))
+                print(f"🗑️ Removed (wrong angle -- not _1a1/_1b1): {fname}")
             continue
 
         if has_keypoints:
@@ -79,8 +84,8 @@ def clean_videos_by_keypoints(ids_a, ids_b):
 
     verb = "Would keep" if DRY_RUN else "Kept"
     verb2 = "would remove" if DRY_RUN else "removed"
-    print(f"\n✅ {verb} {kept} videos with matching keypoints; {verb2} {removed} without "
-          f"({skipped} files skipped -- not a recognized _1a1/_1b1 filename).")
+    print(f"\n✅ {verb} {kept} videos with matching keypoints; {verb2} {removed} for missing "
+          f"keypoints; {verb2} {wrong_angle} for wrong camera angle.")
 
 
 def clean_annotations_by_keypoints(ids_a, ids_b):
