@@ -12,7 +12,7 @@ KEYPOINTS_DIR = os.path.join(PARENT_DIR, "processed_data", "keypoints")
 # Set to False to actually delete. Defaults to a dry run (prints what WOULD be
 # removed, deletes nothing) given how many surprises this pipeline has produced
 # recently -- review the printed list once before flipping this.
-DRY_RUN = True
+DRY_RUN = False
 
 
 def get_keypoint_ids():
