@@ -42,7 +42,7 @@ TEMPORAL_DOWNSAMPLE_FACTOR = 1
 # Tasks API on CPU), so this is a straightforward core-count tradeoff -- raise
 # it if you have more cores to spare and want it faster, lower it (or drop to
 # 1) if it's contending with something else running on the same machine.
-NUM_WORKERS = 2
+NUM_WORKERS = 6
 
 
 def get_pixel_bbox(landmarks, img_w, img_h):
