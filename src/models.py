@@ -226,8 +226,8 @@ class Decoupled_STGCN_Mamba(nn.Module):
     def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3):
         super().__init__()
         self.stgcn_blocks = nn.Sequential(
-            DecoupledSTGCNBlock(in_channels, stgcn_channels),
-            DecoupledSTGCNBlock(stgcn_channels, stgcn_channels)
+            DecoupledSTGCNBlock(in_channels, stgcn_channels, num_vertices=num_vertices),
+            DecoupledSTGCNBlock(stgcn_channels, stgcn_channels, num_vertices=num_vertices)
         )
         self.bridge_dim = num_vertices * stgcn_channels
         self.feature_proj = nn.Sequential(

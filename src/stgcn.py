@@ -39,17 +39,19 @@ class STGCNBlock(nn.Module):
 
 class DecoupledSTGCNBlock(nn.Module):
     """
-    Splits the 65-vertex graph into Body (23), LH (21), and RH (21),
-    processes them through independent GCN filters, and concatenates them back.
+    Splits the graph into Body (23), LH (21), RH (21), and -- when num_vertices > 65 --
+    Face (num_vertices - 65), processes each through independent GCN filters, and
+    concatenates them back.
     """
-    def __init__(self, in_channels, out_channels, temporal_kernel=9):
+    def __init__(self, in_channels, out_channels, num_vertices=65, temporal_kernel=9):
         super().__init__()
         
         # Get the sub-graphs
-        graph = SkeletonGraph(num_vertices=65)
+        graph = SkeletonGraph(num_vertices=num_vertices)
         self.body_indices = graph.body_indices
         self.lh_indices = graph.lh_indices
         self.rh_indices = graph.rh_indices
+        self.has_face = graph.has_face
         
         # 1. Independent Spatial Graph Convolutions
         # Because we decoupled them, we can allocate different channel widths if we want, 
@@ -57,6 +59,10 @@ class DecoupledSTGCNBlock(nn.Module):
         self.gcn_body = SpatialGraphConv(in_channels, out_channels, graph.A_body)
         self.gcn_lh = SpatialGraphConv(in_channels, out_channels, graph.A_lh)
         self.gcn_rh = SpatialGraphConv(in_channels, out_channels, graph.A_rh)
+
+        if self.has_face:
+            self.face_indices = graph.face_indices
+            self.gcn_face = SpatialGraphConv(in_channels, out_channels, graph.A_face)
         
         # 2. Shared Temporal Convolution (Runs across the time dimension after fusion)
         padding = (temporal_kernel - 1) // 2
@@ -86,10 +92,17 @@ class DecoupledSTGCNBlock(nn.Module):
         out_body = self.gcn_body(x_body)
         out_lh = self.gcn_lh(x_lh)
         out_rh = self.gcn_rh(x_rh)
+
+        parts = [out_body, out_lh, out_rh]
+
+        if self.has_face:
+            x_face = x[:, :, :, self.face_indices]
+            out_face = self.gcn_face(x_face)
+            parts.append(out_face)
         
         # Fuse them back together along the vertex dimension
-        # Resulting shape goes back to (B, out_channels, T, 65)
-        x_fused = torch.cat([out_body, out_lh, out_rh], dim=3)
+        # Resulting shape goes back to (B, out_channels, T, num_vertices)
+        x_fused = torch.cat(parts, dim=3)
         
         # Apply temporal convolution to the fused graph
         x_fused = self.tcn(x_fused)
