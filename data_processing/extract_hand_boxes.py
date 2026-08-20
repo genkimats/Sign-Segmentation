@@ -138,7 +138,25 @@ def process_one_video(video_name):
 
 
 def main():
-    video_files = [f for f in os.listdir(INPUT_VIDEO_DIR) if f.endswith(('.mp4', '.avi', '.mov'))]
+    all_video_files = [f for f in os.listdir(INPUT_VIDEO_DIR) if f.endswith(('.mp4', '.avi', '.mov'))]
+
+    # Only extract videos whose output doesn't already exist. Scanning the output
+    # directory ONCE up front (by id, i.e. video stem) rather than relying solely
+    # on the per-video check inside process_one_video means the worker pool and
+    # progress bar only ever see videos that actually need work -- an already-done
+    # video is never even dispatched to a worker.
+    existing_ids = {
+        f[:-len("_boxes.pkl")] for f in os.listdir(OUTPUT_BOX_DIR) if f.endswith("_boxes.pkl")
+    }
+    video_files = [f for f in all_video_files if f.rsplit('.', 1)[0] not in existing_ids]
+
+    skipped = len(all_video_files) - len(video_files)
+    print(f"Found {len(all_video_files)} videos, {skipped} already extracted -- "
+          f"processing the remaining {len(video_files)}.")
+
+    if not video_files:
+        print("Nothing to do.")
+        return
 
     # 'spawn', not the Linux default 'fork': keeps each worker a genuinely fresh
     # interpreter, avoiding any ambiguity around forking a process that may have

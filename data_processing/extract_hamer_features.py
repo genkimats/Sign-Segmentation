@@ -205,7 +205,26 @@ def process_one_video(video_name):
 
 
 def main():
-    video_files = [f for f in os.listdir(INPUT_VIDEO_DIR) if f.endswith(('.mp4', '.avi', '.mov'))]
+    all_video_files = [f for f in os.listdir(INPUT_VIDEO_DIR) if f.endswith(('.mp4', '.avi', '.mov'))]
+
+    # Only extract videos whose output doesn't already exist. Scanning the output
+    # directory ONCE up front (by id, i.e. video stem) rather than relying solely
+    # on the per-video check inside process_one_video means an already-done video
+    # is never dispatched to a worker -- important here specifically, since a
+    # trivially-skipped video would still have paid for a loaded HaMeR model
+    # sitting idle in that worker if we didn't filter first.
+    existing_ids = {
+        f[:-len("_hamer.pt")] for f in os.listdir(OUTPUT_FEATURE_DIR) if f.endswith("_hamer.pt")
+    }
+    video_files = [f for f in all_video_files if f.rsplit('.', 1)[0] not in existing_ids]
+
+    skipped = len(all_video_files) - len(video_files)
+    print(f"Found {len(all_video_files)} videos, {skipped} already extracted -- "
+          f"processing the remaining {len(video_files)}.")
+
+    if not video_files:
+        print("Nothing to do.")
+        return
 
     # 'spawn', not the Linux default 'fork': PyTorch/CUDA explicitly does not
     # support being forked once a CUDA context may have been touched -- 'spawn'
