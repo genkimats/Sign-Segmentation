@@ -30,9 +30,9 @@ from hamer.models import load_hamer, DEFAULT_CHECKPOINT
 from hamer.datasets.vitdet_dataset import ViTDetDataset
 from hamer.utils import recursive_to
 
-INPUT_VIDEO_DIR = os.path.expanduser("~/Genki_GR/Sign-Segmentation/data/raw_videos")
-INPUT_BOX_DIR = os.path.expanduser("~/Genki_GR/Sign-Segmentation/processed_data/hand_boxes")
-OUTPUT_FEATURE_DIR = os.path.expanduser("~/Genki_GR/Sign-Segmentation/processed_data/hamer_features")
+INPUT_VIDEO_DIR = os.path.expanduser("./data/raw_videos")
+INPUT_BOX_DIR = os.path.expanduser("./processed_data/hand_boxes")
+OUTPUT_FEATURE_DIR = os.path.expanduser("./processed_data/hamer_features")
 os.makedirs(OUTPUT_FEATURE_DIR, exist_ok=True)
 
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

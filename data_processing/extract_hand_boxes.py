@@ -21,8 +21,8 @@ from mediapipe.tasks import python as mp_python
 from mediapipe.tasks.python import vision as mp_vision
 from tqdm import tqdm
 
-INPUT_VIDEO_DIR = os.path.expanduser("~/Genki_GR/Sign-Segmentation/data/raw_videos")
-OUTPUT_BOX_DIR = os.path.expanduser("~/Genki_GR/Sign-Segmentation/processed_data/hand_boxes")
+INPUT_VIDEO_DIR = os.path.expanduser("./data/raw_videos")
+OUTPUT_BOX_DIR = os.path.expanduser("./processed_data/hand_boxes")
 os.makedirs(OUTPUT_BOX_DIR, exist_ok=True)
 
 # mp.solutions.hands was removed in MediaPipe >= 0.10.31; this now uses the
@@ -30,7 +30,7 @@ os.makedirs(OUTPUT_BOX_DIR, exist_ok=True)
 #   wget https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task
 # (same pattern as the face_landmarker.task you already have at the repo root).
 HAND_LANDMARKER_MODEL_PATH = os.path.expanduser(
-    "~/Genki_GR/Sign-Segmentation/hand_landmarker.task"
+    "./hand_landmarker.task"
 )
 
 # Must match TEMPORAL_DOWNSAMPLE_FACTOR in extract_hamer_features.py.
