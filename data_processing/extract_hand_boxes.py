@@ -21,7 +21,7 @@ from mediapipe.tasks import python as mp_python
 from mediapipe.tasks.python import vision as mp_vision
 from tqdm import tqdm
 
-INPUT_VIDEO_DIR = os.path.expanduser("./data/raw_videos")
+INPUT_VIDEO_DIR = os.path.expanduser("./raw_data/videos")
 OUTPUT_BOX_DIR = os.path.expanduser("./processed_data/hand_boxes")
 os.makedirs(OUTPUT_BOX_DIR, exist_ok=True)
 
@@ -36,7 +36,7 @@ HAND_LANDMARKER_MODEL_PATH = os.path.expanduser(
 # Must match TEMPORAL_DOWNSAMPLE_FACTOR in extract_hamer_features.py.
 # (Stage 2 also reads this value back out of the cached file, so the two
 # scripts can never silently disagree -- but keep them equal for clarity.)
-TEMPORAL_DOWNSAMPLE_FACTOR = 2
+TEMPORAL_DOWNSAMPLE_FACTOR = 1
 
 # Number of videos processed in parallel. This is CPU-bound work (MediaPipe
 # Tasks API on CPU), so this is a straightforward core-count tradeoff -- raise
