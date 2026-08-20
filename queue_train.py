@@ -106,41 +106,76 @@ EXPERIMENTS_TO_RUN = [
         "window_size": 16,
         "overlap": 0,
         "loss_function": "weighted_ce",
-        "use_face_keypoints": True,
-        "description": "overlap ratio (0/16), loss=weighted_ce, spatial_angles & face_keypoints"
+        "description": "--NEW DATASPLIT-- overlap ratio (0/16), loss=weighted_ce, spatial_angles"
     },
     {
         "basename": "stgcn_mamba",
         "window_size": 32,
         "overlap": 0,
         "loss_function": "weighted_ce",
-        "use_face_keypoints": True,
-        "description": "overlap ratio (0/32), loss=weighted_ce, spatial_angles & face_keypoints"
+        "description": "--NEW DATASPLIT-- overlap ratio (0/32), loss=weighted_ce, spatial_angles"
     },
     {
         "basename": "stgcn_mamba",
         "window_size": 64,
         "overlap": 0,
         "loss_function": "weighted_ce",
-        "use_face_keypoints": True,
-        "description": "overlap ratio (0/64), loss=weighted_ce, spatial_angles & face_keypoints"
+        "description": "--NEW DATASPLIT-- overlap ratio (0/64), loss=weighted_ce, spatial_angles"
     },
     {
         "basename": "stgcn_mamba",
         "window_size": 128,
         "overlap": 0,
         "loss_function": "weighted_ce",
-        "use_face_keypoints": True,
-        "description": "overlap ratio (0/128), loss=weighted_ce, spatial_angles & face_keypoints"
+        "description": "--NEW DATASPLIT-- overlap ratio (0/128), loss=weighted_ce, spatial_angles"
     },
     {
         "basename": "stgcn_mamba",
         "window_size": 256,
         "overlap": 0,
         "loss_function": "weighted_ce",
-        "use_face_keypoints": True,
-        "description": "overlap ratio (0/256), loss=weighted_ce, spatial_angles & face_keypoints"
+        "description": "--NEW DATASPLIT-- overlap ratio (0/256), loss=weighted_ce, spatial_angles"
     }
+    # {
+    #     "basename": "stgcn_mamba",
+    #     "window_size": 16,
+    #     "overlap": 0,
+    #     "loss_function": "weighted_ce",
+    #     "use_face_keypoints": True,
+    #     "description": "overlap ratio (0/16), loss=weighted_ce, spatial_angles & face_keypoints"
+    # },
+    # {
+    #     "basename": "stgcn_mamba",
+    #     "window_size": 32,
+    #     "overlap": 0,
+    #     "loss_function": "weighted_ce",
+    #     "use_face_keypoints": True,
+    #     "description": "overlap ratio (0/32), loss=weighted_ce, spatial_angles & face_keypoints"
+    # },
+    # {
+    #     "basename": "stgcn_mamba",
+    #     "window_size": 64,
+    #     "overlap": 0,
+    #     "loss_function": "weighted_ce",
+    #     "use_face_keypoints": True,
+    #     "description": "overlap ratio (0/64), loss=weighted_ce, spatial_angles & face_keypoints"
+    # },
+    # {
+    #     "basename": "stgcn_mamba",
+    #     "window_size": 128,
+    #     "overlap": 0,
+    #     "loss_function": "weighted_ce",
+    #     "use_face_keypoints": True,
+    #     "description": "overlap ratio (0/128), loss=weighted_ce, spatial_angles & face_keypoints"
+    # },
+    # {
+    #     "basename": "stgcn_mamba",
+    #     "window_size": 256,
+    #     "overlap": 0,
+    #     "loss_function": "weighted_ce",
+    #     "use_face_keypoints": True,
+    #     "description": "overlap ratio (0/256), loss=weighted_ce, spatial_angles & face_keypoints"
+    # }
 
 ]
 
