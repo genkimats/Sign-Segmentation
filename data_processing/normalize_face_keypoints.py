@@ -1,4 +1,5 @@
 import os
+import multiprocessing as mproc
 import cv2
 import numpy as np
 import pandas as pd
@@ -27,6 +28,13 @@ POSE_MODEL_URL = (
     "https://storage.googleapis.com/mediapipe-models/pose_landmarker/"
     "pose_landmarker_full/float16/1/pose_landmarker_full.task"
 )
+
+# Number of files normalized in parallel. Every video either hits the cheap
+# cache path (pure numpy, trivially parallel) or the fallback path (another
+# CPU-bound MediaPipe Pose-only pass, same cost profile as extract_hand_boxes.py) --
+# no GPU/big-model-per-worker concern here, but this is still CPU-core-bound,
+# so more than your actual core count may not help. Check with `nproc`.
+NUM_WORKERS = 6
 
 # MediaPipe Pose Landmarker's own (raw, un-reduced, 33-point) landmark indices.
 # Confirmed against extract_poses.py's normalize_skeleton() comment ("Shoulders are
@@ -131,15 +139,49 @@ def find_video_path(vid):
     return None
 
 
+def process_one_file(fname):
+    """
+    Runs in a worker process. Returns (fname, message_or_None) so the parent
+    can report skips/warnings without multiple processes' prints colliding in
+    the terminal.
+    """
+    vid = fname[:-4]
+    out_path = os.path.join(NORMALIZED_FACE_DIR, fname)
+
+    face_raw = np.load(os.path.join(RAW_FACE_DIR, fname))  # (T, NUM_FACE_VERTICES, 3)
+
+    # 1. Cheap path: reuse cached root/scale if extract_poses.py already wrote one.
+    cache_path = os.path.join(POSE_NORM_CACHE_DIR, f"{vid}.npz")
+    if os.path.exists(cache_path):
+        cached = np.load(cache_path)
+        root, scale = cached["root"], cached["scale"]
+    else:
+        # 2. Fallback: re-derive it from the raw video (one more decode + a
+        #    lightweight Pose-only inference pass -- slower, but exact).
+        video_path = find_video_path(vid)
+        if video_path is None:
+            return fname, (f"Skipping {vid}: no source video found to re-derive shoulder "
+                            f"root/scale (and no cached {cache_path}).")
+        root, scale = compute_root_and_scale_from_video(video_path)
+
+    if root.shape[0] != face_raw.shape[0]:
+        return fname, (f"Skipping {vid}: frame count mismatch (face={face_raw.shape[0]}, "
+                        f"pose={root.shape[0]}). Investigate before trusting this video.")
+
+    face_normalized = normalize_face_array(face_raw, root, scale).astype(np.float32)
+    np.save(out_path, face_normalized)
+
+    return fname, None
+
+
 def main():
     all_face_files = sorted(f for f in os.listdir(RAW_FACE_DIR) if f.endswith('.npy'))
 
     # Only normalize videos whose output doesn't already exist. Scanning the
     # output directory ONCE up front (by id, i.e. video stem) rather than relying
-    # solely on the per-file check inside the loop keeps this consistent with
-    # extract_hand_boxes.py / extract_hamer_features.py, and means a fully-resumed
-    # run skips the pose-model download check and every per-file os.path.exists
-    # call for work that's already done.
+    # solely on a per-file check keeps this consistent with extract_hand_boxes.py /
+    # extract_hamer_features.py, and means a fully-resumed run skips the pose-model
+    # download check and the worker pool entirely.
     existing_ids = {f[:-4] for f in os.listdir(NORMALIZED_FACE_DIR) if f.endswith('.npy')}
     face_files = [f for f in all_face_files if f[:-4] not in existing_ids]
 
@@ -153,34 +195,19 @@ def main():
 
     download_pose_model_if_needed()
 
-    for fname in tqdm(face_files, desc="Normalizing face keypoints"):
-        vid = fname[:-4]
-        out_path = os.path.join(NORMALIZED_FACE_DIR, fname)
-
-        face_raw = np.load(os.path.join(RAW_FACE_DIR, fname))  # (T, NUM_FACE_VERTICES, 3)
-
-        # 1. Cheap path: reuse cached root/scale if extract_poses.py already wrote one.
-        cache_path = os.path.join(POSE_NORM_CACHE_DIR, f"{vid}.npz")
-        if os.path.exists(cache_path):
-            cached = np.load(cache_path)
-            root, scale = cached["root"], cached["scale"]
-        else:
-            # 2. Fallback: re-derive it from the raw video (one more decode + a
-            #    lightweight Pose-only inference pass -- slower, but exact).
-            video_path = find_video_path(vid)
-            if video_path is None:
-                print(f"Skipping {vid}: no source video found to re-derive shoulder "
-                      f"root/scale (and no cached {cache_path}).")
-                continue
-            root, scale = compute_root_and_scale_from_video(video_path)
-
-        if root.shape[0] != face_raw.shape[0]:
-            print(f"Skipping {vid}: frame count mismatch (face={face_raw.shape[0]}, "
-                  f"pose={root.shape[0]}). Investigate before trusting this video.")
-            continue
-
-        face_normalized = normalize_face_array(face_raw, root, scale).astype(np.float32)
-        np.save(out_path, face_normalized)
+    # 'spawn', not the Linux default 'fork': keeps each worker a genuinely fresh
+    # interpreter, avoiding any ambiguity around forking a process that may have
+    # touched native library state (same habit as extract_hand_boxes.py /
+    # extract_hamer_features.py).
+    ctx = mproc.get_context('spawn')
+    with ctx.Pool(processes=NUM_WORKERS) as pool:
+        for fname, message in tqdm(
+            pool.imap_unordered(process_one_file, face_files),
+            total=len(face_files),
+            desc=f"Normalizing face keypoints ({NUM_WORKERS} workers)",
+        ):
+            if message:
+                tqdm.write(message)
 
     print(f"Done. Normalized files written to {NORMALIZED_FACE_DIR}")
     print(f"Raw files in {RAW_FACE_DIR} were not modified.")
