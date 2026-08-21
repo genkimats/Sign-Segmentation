@@ -132,16 +132,30 @@ def find_video_path(vid):
 
 
 def main():
-    download_pose_model_if_needed()
+    all_face_files = sorted(f for f in os.listdir(RAW_FACE_DIR) if f.endswith('.npy'))
 
-    face_files = sorted(f for f in os.listdir(RAW_FACE_DIR) if f.endswith('.npy'))
-    print(f"Found {len(face_files)} raw face-keypoint files to normalize.")
+    # Only normalize videos whose output doesn't already exist. Scanning the
+    # output directory ONCE up front (by id, i.e. video stem) rather than relying
+    # solely on the per-file check inside the loop keeps this consistent with
+    # extract_hand_boxes.py / extract_hamer_features.py, and means a fully-resumed
+    # run skips the pose-model download check and every per-file os.path.exists
+    # call for work that's already done.
+    existing_ids = {f[:-4] for f in os.listdir(NORMALIZED_FACE_DIR) if f.endswith('.npy')}
+    face_files = [f for f in all_face_files if f[:-4] not in existing_ids]
+
+    skipped = len(all_face_files) - len(face_files)
+    print(f"Found {len(all_face_files)} raw face-keypoint files, {skipped} already "
+          f"normalized -- processing the remaining {len(face_files)}.")
+
+    if not face_files:
+        print("Nothing to do.")
+        return
+
+    download_pose_model_if_needed()
 
     for fname in tqdm(face_files, desc="Normalizing face keypoints"):
         vid = fname[:-4]
         out_path = os.path.join(NORMALIZED_FACE_DIR, fname)
-        if os.path.exists(out_path):
-            continue
 
         face_raw = np.load(os.path.join(RAW_FACE_DIR, fname))  # (T, NUM_FACE_VERTICES, 3)
 
