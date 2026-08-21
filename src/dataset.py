@@ -96,6 +96,16 @@ class SignSegmentationDataset(Dataset):
         # --- THE RAM CACHE ---
         self.video_cache = {}
 
+        # Tracks WHY a video got skipped, so an empty/near-empty dataset fails loudly
+        # with an actionable reason instead of surfacing as a cryptic
+        # "num_samples=0" error three layers deep in the DataLoader/RandomSampler.
+        skip_counts = {
+            "missing_label_or_kinetic": 0,
+            "kinetic_load_error": 0,
+            "missing_face": 0,
+            "face_frame_mismatch": 0,
+        }
+
         print(f"[{split.upper()}] Loading {len(self.video_ids)} videos into RAM Cache (Bypassing Disk I/O)...")
         
         # Load everything into RAM exactly ONCE
@@ -104,6 +114,7 @@ class SignSegmentationDataset(Dataset):
             kinetic_path = os.path.join(self.kinetic_dir, f"{vid}.pt")
             
             if not os.path.exists(label_path) or not os.path.exists(kinetic_path):
+                skip_counts["missing_label_or_kinetic"] += 1
                 continue
                 
             labels = np.load(label_path)
@@ -118,6 +129,7 @@ class SignSegmentationDataset(Dataset):
                 if "mediapipe" in kin_data:
                     kin_data = kin_data["mediapipe"]
             except Exception:
+                skip_counts["kinetic_load_error"] += 1
                 continue
 
             channels = []
@@ -141,10 +153,12 @@ class SignSegmentationDataset(Dataset):
             if self.use_face_keypoints:
                 face_path = os.path.join(self.face_dir, f"{vid}.npy")
                 if not os.path.exists(face_path):
+                    skip_counts["missing_face"] += 1
                     continue  # keep vertex layout consistent across the whole split; don't silently zero-fill a missing video
 
                 face_raw = torch.from_numpy(np.load(face_path)).float()  # (T_face, NUM_FACE_VERTICES, 3)
                 if face_raw.shape[0] != num_frames:
+                    skip_counts["face_frame_mismatch"] += 1
                     continue  # frame count doesn't match labels/body -- skip rather than risk misaligning them
 
                 face_selected = face_raw[:, :, base_indices] if base_indices else face_raw
@@ -183,6 +197,24 @@ class SignSegmentationDataset(Dataset):
                     self.windows.append({'video_id': vid, 'start_idx': num_frames - self.window_size, 'end_idx': num_frames})
             else:
                 self.windows.append({'video_id': vid, 'start_idx': 0, 'end_idx': num_frames})
+
+        total_attempted = len(self.video_ids)
+        total_cached = len(self.video_cache)
+        if total_cached < total_attempted:
+            print(f"[{split.upper()}] Cached {total_cached}/{total_attempted} videos "
+                  f"({total_attempted - total_cached} skipped). Skip reasons: {skip_counts}")
+
+        if len(self.windows) == 0:
+            raise RuntimeError(
+                f"[{split.upper()}] SignSegmentationDataset ended up with 0 windows/samples "
+                f"(0 of {total_attempted} videos were successfully cached) -- this dataset is "
+                f"EMPTY. Skip reasons: {skip_counts}. This fails here, loudly, instead of three "
+                f"layers deep in DataLoader/RandomSampler as a confusing 'num_samples=0' error. "
+                f"If missing_face is nonzero, check that {self.face_dir!r} actually contains "
+                f"files named EXACTLY like your split's video ids (e.g. '{self.video_ids[0]}.npy' "
+                f"if that helps) -- a naming-convention mismatch between how face keypoints were "
+                f"extracted and how body/hand keypoints are named is the most common cause."
+            )
 
     def __len__(self):
         if self.use_full_length:
