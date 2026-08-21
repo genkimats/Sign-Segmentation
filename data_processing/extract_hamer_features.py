@@ -30,7 +30,7 @@ from hamer.models import load_hamer, DEFAULT_CHECKPOINT
 from hamer.datasets.vitdet_dataset import ViTDetDataset
 from hamer.utils import recursive_to
 
-INPUT_VIDEO_DIR = os.path.expanduser("./data/raw_videos")
+INPUT_VIDEO_DIR = os.path.expanduser("./raw_data/videos")
 INPUT_BOX_DIR = os.path.expanduser("./processed_data/hand_boxes")
 OUTPUT_FEATURE_DIR = os.path.expanduser("./processed_data/hamer_features")
 os.makedirs(OUTPUT_FEATURE_DIR, exist_ok=True)
