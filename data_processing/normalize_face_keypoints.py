@@ -34,7 +34,7 @@ POSE_MODEL_URL = (
 # CPU-bound MediaPipe Pose-only pass, same cost profile as extract_hand_boxes.py) --
 # no GPU/big-model-per-worker concern here, but this is still CPU-core-bound,
 # so more than your actual core count may not help. Check with `nproc`.
-NUM_WORKERS = 6
+NUM_WORKERS = 10
 
 # MediaPipe Pose Landmarker's own (raw, un-reduced, 33-point) landmark indices.
 # Confirmed against extract_poses.py's normalize_skeleton() comment ("Shoulders are
