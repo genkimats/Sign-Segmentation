@@ -47,7 +47,7 @@ RESCALE_FACTOR = 2.0  # matches HaMeR's own ViTDetDataset default context paddin
 
 # Number of videos processed in parallel, each with its OWN loaded HaMeR model
 # (see the module docstring for the GPU-memory tradeoff this implies).
-NUM_WORKERS = 6
+NUM_WORKERS = 4
 
 # HaMeR always regresses in a canonical RIGHT-hand frame; left-hand crops are
 # mirrored on the way in (handled by ViTDetDataset via the `right` flag passed
