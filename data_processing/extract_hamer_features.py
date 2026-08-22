@@ -43,7 +43,7 @@ DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 HAMER_REPO_DIR = os.path.expanduser("~/Genki_GR/hamer")
 
 BATCH_SIZE = 32
-RESCALE_FACTOR = 1.0  # matches HaMeR's own ViTDetDataset default context padding
+RESCALE_FACTOR = 2.0  # matches HaMeR's own ViTDetDataset default context padding
 
 # Number of videos processed in parallel, each with its OWN loaded HaMeR model
 # (see the module docstring for the GPU-memory tradeoff this implies).
