@@ -133,9 +133,9 @@ def process_one_video(video_name):
             out = model(batch)
 
         # First run: sanity-check these before trusting the full extraction:
-        #   print(out['pred_mano_params'].keys())
-        #   print(out['pred_mano_params']['hand_pose'].shape)      # expect (B, 15, 3, 3)
-        #   print(out['pred_mano_params']['global_orient'].shape)  # expect (B, 1, 3, 3) or (B, 3, 3)
+        print(out['pred_mano_params'].keys())
+        print(out['pred_mano_params']['hand_pose'].shape)      # expect (B, 15, 3, 3)
+        print(out['pred_mano_params']['global_orient'].shape)  # expect (B, 1, 3, 3) or (B, 3, 3)
         mano = out['pred_mano_params']
         hand_pose = mano['hand_pose'].detach().cpu().numpy()
         global_orient = mano['global_orient'].detach().cpu().numpy()
