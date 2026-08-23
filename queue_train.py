@@ -24,7 +24,7 @@ MAMBA_DEFAULTS = {
     "num_vertices": 65,
     "tolerance_window": 5,
     "temporal_downsample_factor": 1, 
-    "loss_function": "standard_ce",  
+    "loss_function": "weighted_ce",  
     "ctc_weight": 0.5,             
     "class_weights": [0.6, 0.8, 1.0], 
     "tmse_weight": 0.15,            
@@ -103,19 +103,19 @@ def calculate_num_vertices(config):
 EXPERIMENTS_TO_RUN = [
     {
         "basename": "stgcn_mamba",
-        "window_size": 16,
+        "window_size": 64,
         "overlap": 0,
-        "loss_function": "weighted_ce",
+        "downsample_factor": 2,
         "use_face_keypoints": True,
-        "description": "overlap ratio (0/16), loss=weighted_ce, spatial_angles & face_keypoints"
+        "description": "overlap ratio (0/64), downsample_factor=2, spatial_angles & face_keypoints"
     },
     {
         "basename": "stgcn_mamba",
-        "window_size": 32,
+        "window_size": 64,
         "overlap": 0,
-        "loss_function": "weighted_ce",
+        "batch_size": 8,
         "use_face_keypoints": True,
-        "description": "overlap ratio (0/32), loss=weighted_ce, spatial_angles & face_keypoints"
+        "description": "overlap ratio (0/64), batch_size=8, spatial_angles & face_keypoints"
     },
     {
         "basename": "stgcn_mamba",

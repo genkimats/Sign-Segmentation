@@ -175,7 +175,6 @@ def train_model(config):
     MAX_REDOS = 5
     redo_count = 0
     total_nan_this_run = 0
-    start_train_time = time.time()
     
     while redo_count <= MAX_REDOS:
         if redo_count > 0:
@@ -227,6 +226,10 @@ def train_model(config):
         actual_epochs_ran = 0
         total_nan_this_run = 0
         gpu_utilization_samples = []
+        # Reset here (not once before the while loop) so total_training_time only ever
+        # reflects the LATEST attempt -- a NaN-triggered restart no longer inflates it
+        # with time spent on earlier, discarded attempts.
+        start_train_time = time.time()
         if torch.cuda.is_available():
             torch.cuda.reset_peak_memory_stats(device)
             

@@ -1,8 +1,8 @@
 {
     "machine_hostname": "z790",
     "gpu_name": "NVIDIA GeForce RTX 5060 Ti",
-    "total_training_time": "200m 52s",
-    "total_training_seconds": 12052.36,
+    "total_training_time": "200m 49s",
+    "total_training_seconds": 12048.89,
     "total_epochs_ran": 20,
     "early_stopping_triggered": true,
     "average_time_per_epoch": "10m 2s",
