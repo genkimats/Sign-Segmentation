@@ -105,6 +105,20 @@ EXPERIMENTS_TO_RUN = [
         "basename": "stgcn_mamba",
         "window_size": 64,
         "overlap": 0,
+        "kinematic_features": [],
+        "description": "overlap ratio (0/64), no kinematic"
+    },
+    {
+        "basename": "stgcn_mamba",
+        "window_size": 64,
+        "overlap": 0,
+        "downsample_factor": 2,
+        "description": "overlap ratio (0/64), downsample_factor=2, spatial_angles"
+    },
+    {
+        "basename": "stgcn_mamba",
+        "window_size": 64,
+        "overlap": 0,
         "downsample_factor": 2,
         "use_face_keypoints": True,
         "description": "overlap ratio (0/64), downsample_factor=2, spatial_angles & face_keypoints"
@@ -116,30 +130,6 @@ EXPERIMENTS_TO_RUN = [
         "batch_size": 8,
         "use_face_keypoints": True,
         "description": "overlap ratio (0/64), batch_size=8, spatial_angles & face_keypoints"
-    },
-    {
-        "basename": "stgcn_mamba",
-        "window_size": 64,
-        "overlap": 0,
-        "loss_function": "weighted_ce",
-        "use_face_keypoints": True,
-        "description": "overlap ratio (0/64), loss=weighted_ce, spatial_angles & face_keypoints"
-    },
-    {
-        "basename": "stgcn_mamba",
-        "window_size": 128,
-        "overlap": 0,
-        "loss_function": "weighted_ce",
-        "use_face_keypoints": True,
-        "description": "overlap ratio (0/128), loss=weighted_ce, spatial_angles & face_keypoints"
-    },
-    {
-        "basename": "stgcn_mamba",
-        "window_size": 256,
-        "overlap": 0,
-        "loss_function": "weighted_ce",
-        "use_face_keypoints": True,
-        "description": "overlap ratio (0/256), loss=weighted_ce, spatial_angles & face_keypoints"
     }
 ]
 
