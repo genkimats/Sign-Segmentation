@@ -102,20 +102,39 @@ def calculate_num_vertices(config):
 
 EXPERIMENTS_TO_RUN = [
     {
-        "basename": "stgcn_mamba",
-        "window_size": 64,
-        "overlap": 0,
-        "batch_size": 32,
-        "use_face_keypoints": True,
-        "description": "overlap ratio (0/64), batch_size=32, spatial_angles & face_keypoints"
-    },
-    {
-        "basename": "stgcn_mamba",
+        "basename": "ctrgcn_mamba",
         "window_size": 64,
         "overlap": 0,
         "kinematic_features": [],
-        "use_face_keypoints": True,
-        "description": "overlap ratio (0/64), face_keypoints"
+        "description": "overlap ratio (0/64), no kinematic"
+    },
+    {
+        "basename": "infogcn_mamba",
+        "window_size": 64,
+        "overlap": 0,
+        "kinematic_features": [],
+        "description": "overlap ratio (0/64), no kinematic"
+    },
+    {
+        "basename": "shiftgcn_mamba",
+        "window_size": 64,
+        "overlap": 0,
+        "kinematic_features": [],
+        "description": "overlap ratio (0/64), no kinematic"
+    },
+    {
+        "basename": "spatial_transformer_mamba",
+        "window_size": 64,
+        "overlap": 0,
+        "kinematic_features": [],
+        "description": "overlap ratio (0/64), no kinematic"
+    },
+    {
+        "basename": "stgcn_bimamba",
+        "window_size": 64,
+        "overlap": 0,
+        "kinematic_features": [],
+        "description": "overlap ratio (0/64), no kinematic"
     }
 ]
 
