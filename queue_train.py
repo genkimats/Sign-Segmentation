@@ -105,31 +105,17 @@ EXPERIMENTS_TO_RUN = [
         "basename": "stgcn_mamba",
         "window_size": 64,
         "overlap": 0,
+        "batch_size": 32,
+        "use_face_keypoints": True,
+        "description": "overlap ratio (0/64), batch_size=32, spatial_angles & face_keypoints"
+    },
+    {
+        "basename": "stgcn_mamba",
+        "window_size": 64,
+        "overlap": 0,
         "kinematic_features": [],
-        "description": "overlap ratio (0/64), no kinematic"
-    },
-    {
-        "basename": "stgcn_mamba",
-        "window_size": 64,
-        "overlap": 0,
-        "downsample_factor": 2,
-        "description": "overlap ratio (0/64), downsample_factor=2, spatial_angles"
-    },
-    {
-        "basename": "stgcn_mamba",
-        "window_size": 64,
-        "overlap": 0,
-        "downsample_factor": 2,
         "use_face_keypoints": True,
-        "description": "overlap ratio (0/64), downsample_factor=2, spatial_angles & face_keypoints"
-    },
-    {
-        "basename": "stgcn_mamba",
-        "window_size": 64,
-        "overlap": 0,
-        "batch_size": 8,
-        "use_face_keypoints": True,
-        "description": "overlap ratio (0/64), batch_size=8, spatial_angles & face_keypoints"
+        "description": "overlap ratio (0/64), face_keypoints"
     }
 ]
 
