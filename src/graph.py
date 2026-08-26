@@ -149,3 +149,111 @@ class SkeletonGraph:
         D = np.diag(np.sum(A, axis=1) ** -0.5)
         A_normalized = D @ A @ D
         return A_normalized
+
+    # ==========================================================================
+    # HD-GCN support: hierarchical (multi-hop) adjacency decomposition.
+    # ==========================================================================
+    def _all_pairs_hop_distance(self, node_indices, edges, max_hop):
+        """
+        BFS shortest-path distance (in hops) between every pair of vertices,
+        using ONLY the given edges (1-hop = a direct edge). Distances beyond
+        max_hop are left as "infinite" (never selected for any level).
+        """
+        num_nodes = len(node_indices)
+        idx_map = {g: l for l, g in enumerate(node_indices)}
+
+        raw_adj = np.zeros((num_nodes, num_nodes), dtype=np.int32)
+        for i, j in edges:
+            if i in idx_map and j in idx_map:
+                li, lj = idx_map[i], idx_map[j]
+                raw_adj[li, lj] = 1
+                raw_adj[lj, li] = 1
+
+        INF = max_hop + 1
+        dist = np.full((num_nodes, num_nodes), INF, dtype=np.int32)
+        for src in range(num_nodes):
+            dist[src, src] = 0
+            frontier = [src]
+            visited = {src}
+            d = 0
+            while frontier and d < max_hop:
+                d += 1
+                next_frontier = []
+                for u in frontier:
+                    for v in np.where(raw_adj[u] > 0)[0]:
+                        v = int(v)
+                        if v not in visited:
+                            visited.add(v)
+                            dist[src, v] = d
+                            next_frontier.append(v)
+                frontier = next_frontier
+
+        return dist
+
+    def get_hop_adjacencies(self, max_hop=3):
+        """
+        HD-GCN's core idea (Lee et al., ICCV 2023): instead of one adjacency
+        covering all neighbor distances, decompose the graph into separate
+        hop-distance LEVELS -- level h contains an edge between i and j iff
+        their shortest-path distance is EXACTLY h -- so direct neighbors,
+        2-hop neighbors, 3-hop neighbors etc. each get their own dedicated
+        (normalized) adjacency matrix instead of being flattened into one.
+
+        Returns a list of `max_hop` normalized (V, V) matrices, covering the
+        UNIFIED graph (same vertex set as self.A -- body+hands, plus face
+        when present).
+        """
+        node_indices = list(range(self.num_vertices))
+        edges = self._get_all_edges()
+        dist = self._all_pairs_hop_distance(node_indices, edges, max_hop)
+
+        num_nodes = self.num_vertices
+        matrices = []
+        for h in range(1, max_hop + 1):
+            H = (dist == h).astype(np.float64)
+            H = H + np.eye(num_nodes)  # self-loops, same as _get_subgraph_adjacency
+            D = np.diag(np.sum(H, axis=1) ** -0.5)
+            matrices.append(D @ H @ D)
+        return matrices
+
+    # ==========================================================================
+    # HyperSign support: anatomically-grounded hyperedges (multi-vertex groups).
+    # ==========================================================================
+    def get_anatomical_hyperedges(self):
+        """
+        Explicit, hand-designed multi-vertex groups -- a simplification of
+        HyperSign's k-NN-constructed "dynamic geometric hypergraphs" (we use
+        fixed, interpretable anatomical groups instead of a differentiable
+        k-NN construction). Each group is a hand-shape or coordination unit
+        that's naturally a MULTI-way relationship, not a pairwise one -- e.g.
+        all 5 fingertips jointly define hand aperture/shape in a way no
+        single pairwise edge captures.
+
+        Returns a list of vertex-index lists (each list = one hyperedge).
+        """
+        hyperedges = []
+
+        # Hand topology (within each 21-point hand block, LOCAL indices):
+        # 0=wrist, 1-4=thumb, 5-8=index, 9-12=middle, 13-16=ring, 17-20=pinky
+        # (standard MediaPipe Hands numbering -- matches _get_hand_edges above).
+        fingertip_local = [4, 8, 12, 16, 20]
+        for offset in (23, 44):  # left hand, right hand
+            tips = [offset + i for i in fingertip_local]
+            hyperedges.append(tips)                    # all 5 fingertips: hand shape/aperture
+            hyperedges.append([offset] + tips)          # + wrist: shape relative to hand root
+
+        # Upper-body configuration: both shoulders, elbows, wrists together
+        # (raw MediaPipe Pose indices 11-16, confirmed against the body edge
+        # list and extract_poses.py's shoulder comment -- see graph.py history).
+        hyperedges.append([11, 12, 13, 14, 15, 16])
+
+        if self.has_face:
+            face_pos = {raw_idx: local_pos for local_pos, raw_idx in enumerate(self._FACE_SELECTED_INDICES)}
+            def face_group(raw_indices):
+                return [65 + face_pos[i] for i in raw_indices if i in face_pos]
+
+            hyperedges.append(face_group(self._LIPS_INDICES))
+            hyperedges.append(face_group(self._LEFT_EYE_INDICES))
+            hyperedges.append(face_group(self._RIGHT_EYE_INDICES))
+
+        return hyperedges

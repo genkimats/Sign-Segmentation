@@ -20,7 +20,8 @@ from src.dataset import SignSegmentationDataset
 from src.models import (PureMambaBaseline, BiMambaBaseline, STGCN_Mamba, STGCN_MLP_Mamba, 
                         STGCN_BiMamba, Decoupled_STGCN_Mamba, BiLSTM_Baseline, STGCN_BiLSTM, 
                         TransformerBaseline, STGCN_Transformer, Latent_STGCN_Mamba,
-                        CTRGCN_Mamba, InfoGCN_Mamba, ShiftGCN_Mamba, SpatialTransformer_Mamba)
+                        CTRGCN_Mamba, InfoGCN_Mamba, ShiftGCN_Mamba, SpatialTransformer_Mamba,
+                        HDGCN_Mamba, HyperSign_Mamba)
 from src.metrics import evaluate_batch
 from src.loss import CombinedBoundaryLoss, FocalLoss, StandardCrossEntropyLoss, WeightedCrossEntropyLoss, UnifiedCTCLoss, WeightedCE_TMSE_Loss, WeightedNLLLoss
 # (Removed decoder import since we no longer use it in training/validation)
@@ -45,7 +46,9 @@ MODEL_REGISTRY = {
     "ctrgcn_mamba": CTRGCN_Mamba,
     "infogcn_mamba": InfoGCN_Mamba,
     "shiftgcn_mamba": ShiftGCN_Mamba,
-    "spatial_transformer_mamba": SpatialTransformer_Mamba
+    "spatial_transformer_mamba": SpatialTransformer_Mamba,
+    "hdgcn_mamba": HDGCN_Mamba,
+    "hypersign_mamba": HyperSign_Mamba
 }
 
 def get_next_job():
@@ -169,7 +172,7 @@ def train_model(config):
     if MODEL_NAME == "stgcn_mlp_mamba":
         model_kwargs["mlp_expansion_factor"] = config.get("mlp_expansion_factor", 4)
         
-    if MODEL_NAME in ["latent_stgcn_mamba", "ctrgcn_mamba", "infogcn_mamba", "shiftgcn_mamba", "spatial_transformer_mamba"]:
+    if MODEL_NAME in ["latent_stgcn_mamba", "ctrgcn_mamba", "infogcn_mamba", "shiftgcn_mamba", "spatial_transformer_mamba", "hdgcn_mamba", "hypersign_mamba"]:
         model_kwargs["latent_dim"] = config.get("latent_dim", 128)
 
     MAX_REDOS = 5

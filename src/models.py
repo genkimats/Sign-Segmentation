@@ -1,4 +1,5 @@
 import math
+import numpy as np
 import torch
 import torch.nn as nn
 from mamba_ssm import Mamba
@@ -698,4 +699,171 @@ class SpatialTransformer_Mamba(Base_Latent_Mamba_Wrapper):
         self.spatial_blocks = nn.Sequential(
             SpatialTransformerBlock(in_channels, stgcn_channels, num_vertices),
             SpatialTransformerBlock(stgcn_channels, stgcn_channels, num_vertices)
+        )
+
+
+# ==============================================================================
+# 🆕 HD-GCN: hierarchical (multi-hop) graph decomposition + attention aggregation
+# ==============================================================================
+class HDGCNBlock(nn.Module):
+    """
+    Core idea from HD-GCN (Lee et al., ICCV 2023): decompose the graph into
+    multiple hop-DISTANCE levels (1-hop = direct neighbors, 2-hop, 3-hop, ...),
+    each with its own dedicated graph convolution, then combine the levels
+    with a learned, per-sample ATTENTION weighting -- "highlight the dominant
+    hierarchical edge sets" (the paper's Attention-Guided Hierarchy
+    Aggregation / A-HA module).
+
+    NOT implemented (simplified out of scope): the paper's S-EdgeConv
+    sample-wise key-relationship extraction, RSAP center-of-mass pooling, and
+    6-way joint/bone/motion ensemble. This captures the hierarchical-
+    decomposition + attention-aggregation core, not the full benchmark
+    pipeline -- describe as "HD-GCN-inspired" in any writeup, not a full
+    reproduction.
+    """
+    def __init__(self, in_channels, out_channels, hop_adjacencies):
+        super().__init__()
+        self.num_levels = len(hop_adjacencies)
+        self.A_levels = nn.ParameterList([
+            nn.Parameter(torch.tensor(A, dtype=torch.float32), requires_grad=False)
+            for A in hop_adjacencies
+        ])
+        self.level_convs = nn.ModuleList([
+            nn.Conv2d(in_channels, out_channels, kernel_size=1) for _ in range(self.num_levels)
+        ])
+        # Simplified Attention-Guided Hierarchy Aggregation: score each level's
+        # (globally-pooled) output, softmax across levels, weighted-sum combine.
+        self.level_score = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Flatten(),
+            nn.Linear(out_channels, 1)
+        )
+        self.bn = nn.BatchNorm2d(out_channels)
+        self.relu = nn.GELU()
+
+    def forward(self, x):
+        # x: (B, C, T, V)
+        B = x.shape[0]
+        level_outputs = []
+        level_scores = []
+        for A_h, conv_h in zip(self.A_levels, self.level_convs):
+            x_h = conv_h(x)                                  # (B, Cout, T, V)
+            x_h = torch.einsum('bctv,vw->bctw', x_h, A_h)     # aggregate over THIS hop level
+            level_outputs.append(x_h)
+            level_scores.append(self.level_score(x_h))        # (B, 1)
+
+        scores = torch.softmax(torch.cat(level_scores, dim=1), dim=1)  # (B, num_levels)
+        stacked = torch.stack(level_outputs, dim=1)            # (B, num_levels, Cout, T, V)
+        weights = scores.view(B, self.num_levels, 1, 1, 1)
+        fused = (stacked * weights).sum(dim=1)                 # (B, Cout, T, V)
+
+        return self.relu(self.bn(fused))
+
+
+class HDGCN_Mamba(Base_Latent_Mamba_Wrapper):
+    def __init__(self, num_vertices=65, in_channels=5, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hd_max_hop=3):
+        super().__init__(num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout)
+        graph = SkeletonGraph(num_vertices=num_vertices)
+        self.spatial_blocks = nn.Sequential(
+            HDGCNBlock(in_channels, stgcn_channels, graph.get_hop_adjacencies(max_hop=hd_max_hop)),
+            HDGCNBlock(stgcn_channels, stgcn_channels, graph.get_hop_adjacencies(max_hop=hd_max_hop))
+        )
+
+
+# ==============================================================================
+# 🆕 HyperSign: pairwise graph + fixed anatomical hyperedges + learned soft hyperedges
+# ==============================================================================
+class HyperSignBlock(nn.Module):
+    """
+    Core idea from HyperSign (hierarchical hypergraph co-occurrence modeling
+    for sign language): fuse THREE complementary structures over the same
+    vertex set, matching the paper's three pathways:
+
+      1. Standard pairwise graph convolution over the existing skeleton graph
+         -- "traditional graph convolutions for modeling physical joint
+         connections."
+      2. FIXED, hand-designed anatomical hyperedges (e.g. "all 5 left-hand
+         fingertips", "the lips as a group", from SkeletonGraph.
+         get_anatomical_hyperedges()) -- a simplification of the paper's
+         k-NN-built "dynamic geometric hypergraphs encoding local spatial
+         patterns": explicit, interpretable groups instead of a
+         differentiable k-NN construction.
+      3. A LEARNABLE "soft hypergraph": P learnable prototype hyperedges,
+         each with a softmax-normalized membership weight over all V
+         vertices -- a direct analog of the paper's "soft hypergraphs
+         generated by learnable prototypes to reveal latent semantic
+         associations."
+
+    NOT implemented: the paper's full multi-scale hierarchy and its specific
+    co-occurrence loss terms. This captures the three-pathway fusion idea,
+    not the complete paper -- describe as "HyperSign-inspired" in any
+    writeup, not a full reproduction.
+    """
+    def __init__(self, in_channels, out_channels, A, hyperedges, num_vertices, num_soft_hyperedges=8):
+        super().__init__()
+        self.V = num_vertices
+
+        # 1. Standard pairwise graph path
+        self.A = nn.Parameter(torch.tensor(A, dtype=torch.float32), requires_grad=False)
+        self.pair_conv = nn.Conv2d(in_channels, out_channels, kernel_size=1)
+
+        # 2. Fixed anatomical hyperedges -> incidence matrix (V, E_fixed)
+        H_fixed = np.zeros((num_vertices, len(hyperedges)), dtype=np.float32)
+        for e, members in enumerate(hyperedges):
+            for v in members:
+                H_fixed[v, e] = 1.0
+        self.register_buffer("H_fixed", torch.tensor(H_fixed, dtype=torch.float32))
+        self.fixed_conv = nn.Conv2d(in_channels, out_channels, kernel_size=1)
+
+        # 3. Learnable soft hyperedges: (V, P) incidence, softmax-normalized per hyperedge
+        self.soft_incidence_logits = nn.Parameter(torch.randn(num_vertices, num_soft_hyperedges) * 0.01)
+        self.soft_conv = nn.Conv2d(in_channels, out_channels, kernel_size=1)
+
+        self.fuse = nn.Conv2d(out_channels * 3, out_channels, kernel_size=1)
+        self.bn = nn.BatchNorm2d(out_channels)
+        self.relu = nn.GELU()
+
+    @staticmethod
+    def _hypergraph_propagate(x, H):
+        """
+        Standard hypergraph convolution propagation (Feng et al., HGNN 2019):
+        vertex -> hyperedge (averaged over hyperedge members) -> vertex
+        (averaged over the hyperedges each vertex belongs to).
+        x: (B, C, T, V); H: (V, E) incidence matrix (fixed 0/1, or soft).
+        """
+        deg_e = H.sum(dim=0).clamp(min=1e-6)              # (E,) hyperedge size
+        deg_v = H.sum(dim=1).clamp(min=1e-6)               # (V,) vertex's hyperedge count
+        H_norm = H / deg_e.unsqueeze(0)                    # normalize by hyperedge size
+        msg = torch.einsum('bctv,ve->bcte', x, H_norm)     # (B, C, T, E) vertex -> hyperedge
+        out = torch.einsum('bcte,ve->bctv', msg, H)         # (B, C, T, V) hyperedge -> vertex
+        out = out / deg_v.view(1, 1, 1, -1)
+        return out
+
+    def forward(self, x):
+        # 1. Standard pairwise path
+        x_pair = self.pair_conv(x)
+        x_pair = torch.einsum('bctv,vw->bctw', x_pair, self.A)
+
+        # 2. Fixed anatomical hyperedges
+        x_fixed = self.fixed_conv(x)
+        x_fixed = self._hypergraph_propagate(x_fixed, self.H_fixed)
+
+        # 3. Learnable soft hyperedges
+        H_soft = torch.softmax(self.soft_incidence_logits, dim=0)  # each hyperedge sums to 1 over vertices
+        x_soft = self.soft_conv(x)
+        x_soft = self._hypergraph_propagate(x_soft, H_soft)
+
+        fused = self.fuse(torch.cat([x_pair, x_fixed, x_soft], dim=1))
+        return self.relu(self.bn(fused))
+
+
+class HyperSign_Mamba(Base_Latent_Mamba_Wrapper):
+    def __init__(self, num_vertices=65, in_channels=5, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, num_soft_hyperedges=8):
+        super().__init__(num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout)
+        graph = SkeletonGraph(num_vertices=num_vertices)
+        A = graph.A
+        hyperedges = graph.get_anatomical_hyperedges()
+        self.spatial_blocks = nn.Sequential(
+            HyperSignBlock(in_channels, stgcn_channels, A, hyperedges, num_vertices, num_soft_hyperedges),
+            HyperSignBlock(stgcn_channels, stgcn_channels, A, hyperedges, num_vertices, num_soft_hyperedges)
         )

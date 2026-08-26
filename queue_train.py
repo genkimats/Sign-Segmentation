@@ -102,11 +102,12 @@ def calculate_num_vertices(config):
 
 EXPERIMENTS_TO_RUN = [
     {
-        "basename": "ctrgcn_mamba",
+        "basename": "stgcn_mamba",
         "window_size": 64,
         "overlap": 0,
-        "kinematic_features": [],
-        "description": "overlap ratio (0/64), no kinematic"
+        "base_features": [],
+        "kinematic_features": ["spatial_angles"],
+        "description": "overlap ratio (0/64), spatial_angles only (no coords)"
     },
     {
         "basename": "infogcn_mamba",
