@@ -110,33 +110,50 @@ EXPERIMENTS_TO_RUN = [
         "description": "overlap ratio (0/64), spatial_angles only (no coords)"
     },
     {
-        "basename": "infogcn_mamba",
+        "basename": "hdgcn_mamba",
         "window_size": 64,
         "overlap": 0,
         "kinematic_features": [],
         "description": "overlap ratio (0/64), no kinematic"
     },
     {
-        "basename": "shiftgcn_mamba",
+        "basename": "hdgcn_mamba",
+        "window_size": 64,
+        "overlap": 0,
+        "kinematic_features": ["spatial_angles"],
+        "description": "overlap ratio (0/64), spatial_angles"
+    },
+    {
+        "basename": "hdgcn_mamba",
+        "window_size": 64,
+        "overlap": 0,
+        "kinematic_features": ["spatial_angles"],
+        "use_face_keypoints": True,
+        "description": "overlap ratio (0/64), spatial_angles & face_keypoints"
+    },
+    {
+        "basename": "hypersign_mamba",
         "window_size": 64,
         "overlap": 0,
         "kinematic_features": [],
         "description": "overlap ratio (0/64), no kinematic"
     },
     {
-        "basename": "spatial_transformer_mamba",
+        "basename": "hypersign_mamba",
         "window_size": 64,
         "overlap": 0,
-        "kinematic_features": [],
-        "description": "overlap ratio (0/64), no kinematic"
+        "kinematic_features": ["spatial_angles"],
+        "description": "overlap ratio (0/64), spatial_angles"
     },
     {
-        "basename": "stgcn_bimamba",
+        "basename": "hypersign_mamba",
         "window_size": 64,
         "overlap": 0,
-        "kinematic_features": [],
-        "description": "overlap ratio (0/64), no kinematic"
+        "kinematic_features": ["spatial_angles"],
+        "use_face_keypoints": True,
+        "description": "overlap ratio (0/64), spatial_angles & face_keypoints"
     }
+
 ]
 
 if CHOSEN_TYPE == 'mamba':
