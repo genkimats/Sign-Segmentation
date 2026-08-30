@@ -103,57 +103,25 @@ def calculate_num_vertices(config):
 EXPERIMENTS_TO_RUN = [
     {
         "basename": "stgcn_mamba",
-        "window_size": 64,
-        "overlap": 0,
-        "base_features": [],
-        "kinematic_features": ["spatial_angles"],
-        "description": "overlap ratio (0/64), spatial_angles only (no coords)"
-    },
-    {
-        "basename": "hdgcn_mamba",
-        "window_size": 64,
+        "window_size": 48,
         "overlap": 0,
         "kinematic_features": [],
-        "description": "overlap ratio (0/64), no kinematic"
+        "description": "overlap ratio (0/48), no kinematic"
     },
     {
-        "basename": "hdgcn_mamba",
-        "window_size": 64,
-        "overlap": 0,
-        "kinematic_features": ["spatial_angles"],
-        "description": "overlap ratio (0/64), spatial_angles"
-    },
-    {
-        "basename": "hdgcn_mamba",
-        "window_size": 64,
-        "overlap": 0,
-        "kinematic_features": ["spatial_angles"],
-        "use_face_keypoints": True,
-        "description": "overlap ratio (0/64), spatial_angles & face_keypoints"
-    },
-    {
-        "basename": "hypersign_mamba",
-        "window_size": 64,
+        "basename": "stgcn_mamba",
+        "window_size": 80,
         "overlap": 0,
         "kinematic_features": [],
-        "description": "overlap ratio (0/64), no kinematic"
+        "description": "overlap ratio (0/80), no kinematic"
     },
     {
-        "basename": "hypersign_mamba",
-        "window_size": 64,
+        "basename": "stgcn_mamba",
+        "window_size": 96,
         "overlap": 0,
-        "kinematic_features": ["spatial_angles"],
-        "description": "overlap ratio (0/64), spatial_angles"
-    },
-    {
-        "basename": "hypersign_mamba",
-        "window_size": 64,
-        "overlap": 0,
-        "kinematic_features": ["spatial_angles"],
-        "use_face_keypoints": True,
-        "description": "overlap ratio (0/64), spatial_angles & face_keypoints"
+        "kinematic_features": [],
+        "description": "overlap ratio (0/96), no kinematic"
     }
-
 ]
 
 if CHOSEN_TYPE == 'mamba':
