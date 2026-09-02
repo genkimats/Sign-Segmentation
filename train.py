@@ -273,7 +273,7 @@ def train_model(config):
             # Add the 3 underscores to absorb the vid, start, and end metadata!
             for batch in loop:
                 if USE_HAMER_FEATURES:
-                    features, labels, hamer, _, _ = batch
+                    features, labels, hamer, _, _, _ = batch
                     hamer = hamer.to(device)
                     hamer = torch.nan_to_num(hamer, nan=0.0, posinf=0.0, neginf=0.0)
                 else:
