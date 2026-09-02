@@ -94,6 +94,8 @@ def train_model(config):
     IN_CHANNELS = config["in_channels"]
     USE_FACE_KEYPOINTS = config.get("use_face_keypoints", False)
     FACE_DIR = config.get("face_dir", "processed_data/face_keypoints_normalized")
+    USE_HAMER_FEATURES = config.get("use_hamer_features", False)
+    HAMER_DIR = config.get("hamer_dir", "processed_data/hamer_features")
     D_MODEL = config["d_model"]
     N_LAYERS = config["n_layers"]
     FOCAL_LOSS_GAMMA = config.get("focal_loss_gamma", 2.0)
@@ -127,7 +129,9 @@ def train_model(config):
         kinematic_features=KINEMATIC_FEATURES,
         temporal_downsample_factor=DOWNSAMPLE_FACTOR,
         use_face_keypoints=USE_FACE_KEYPOINTS,
-        face_dir=FACE_DIR
+        face_dir=FACE_DIR,
+        use_hamer_features=USE_HAMER_FEATURES,
+        hamer_dir=HAMER_DIR
     )
     
     val_dataset = SignSegmentationDataset(
@@ -143,7 +147,9 @@ def train_model(config):
         kinematic_features=KINEMATIC_FEATURES,
         temporal_downsample_factor=DOWNSAMPLE_FACTOR,
         use_face_keypoints=USE_FACE_KEYPOINTS,
-        face_dir=FACE_DIR
+        face_dir=FACE_DIR,
+        use_hamer_features=USE_HAMER_FEATURES,
+        hamer_dir=HAMER_DIR
     )
     
     loader_batch_size = 1 if USE_FULL_LENGTH else BATCH_SIZE
@@ -175,6 +181,16 @@ def train_model(config):
     if MODEL_NAME in ["latent_stgcn_mamba", "ctrgcn_mamba", "infogcn_mamba", "shiftgcn_mamba", "spatial_transformer_mamba", "hdgcn_mamba", "hypersign_mamba"]:
         model_kwargs["latent_dim"] = config.get("latent_dim", 128)
 
+    HAMER_SUPPORTED_MODELS = ["stgcn_mamba", "latent_stgcn_mamba", "ctrgcn_mamba", "infogcn_mamba",
+                               "shiftgcn_mamba", "spatial_transformer_mamba", "hdgcn_mamba", "hypersign_mamba"]
+    if USE_HAMER_FEATURES:
+        if MODEL_NAME not in HAMER_SUPPORTED_MODELS:
+            raise ValueError(
+                f"use_hamer_features=True but model '{MODEL_NAME}' doesn't have a hamer_dim "
+                f"argument implemented yet. Supported models: {HAMER_SUPPORTED_MODELS}."
+            )
+        model_kwargs["hamer_dim"] = 288  # 2 hands x (15x3x3 hand_pose + 1x3x3 global_orient)
+
     MAX_REDOS = 5
     redo_count = 0
     total_nan_this_run = 0
@@ -185,6 +201,13 @@ def train_model(config):
             
         model = model_class(**model_kwargs).to(device)
         weights = torch.tensor(CLASS_WEIGHTS, dtype=torch.float).to(device)
+
+        # Centralizes the "pass hamer or don't" branching in one place instead of
+        # repeating it at every model(...) call site below.
+        def call_model(feats, ham):
+            if USE_HAMER_FEATURES:
+                return model(feats, hamer=ham)
+            return model(feats)
         
         if LOSS_FUNCTION == "bcl":
             criterion = CombinedBoundaryLoss(focal_gamma=FOCAL_LOSS_GAMMA, contrastive_weight=config.get("contrastive_weight", 0.15))
@@ -248,7 +271,15 @@ def train_model(config):
             
             loop = tqdm(train_loader, desc=f"Epoch {epoch}/{EPOCHS} [Train]", leave=False)
             # Add the 3 underscores to absorb the vid, start, and end metadata!
-            for features, labels, _, _, _ in loop:
+            for batch in loop:
+                if USE_HAMER_FEATURES:
+                    features, labels, hamer, _, _ = batch
+                    hamer = hamer.to(device)
+                    hamer = torch.nan_to_num(hamer, nan=0.0, posinf=0.0, neginf=0.0)
+                else:
+                    features, labels, _, _, _ = batch
+                    hamer = None
+
                 features = features.to(device)
                 labels = labels.to(device)
                 
@@ -256,15 +287,15 @@ def train_model(config):
                 optimizer.zero_grad()
                 
                 if LOSS_FUNCTION == "bcl":
-                    logits, embeddings = model(features)
+                    logits, embeddings = call_model(features, hamer)
                     loss, _, _ = criterion(logits, embeddings, labels)
                 elif LOSS_FUNCTION == "unified_ctc":
-                    logits, _ = model(features)
+                    logits, _ = call_model(features, hamer)
                     hard_labels = torch.argmax(labels, dim=1)
                     loss, _, _ = criterion(logits, hard_labels)
                 else:
                     # Depending on the model, it might return (logits, embeddings) or just logits
-                    output = model(features)
+                    output = call_model(features, hamer)
                     logits = output[0] if isinstance(output, tuple) else output
                     hard_labels = torch.argmax(labels, dim=1)
                     loss = criterion(logits, hard_labels)
@@ -311,20 +342,28 @@ def train_model(config):
             with torch.no_grad():
                 val_loop = tqdm(val_loader, desc=f"Epoch {epoch}/{EPOCHS} [Val]", leave=False)
                 # It should look something like this:
-                for features, labels, vids, start_indices, end_indices in val_loop:
+                for batch in val_loop:
+                    if USE_HAMER_FEATURES:
+                        features, labels, hamer, vids, start_indices, end_indices = batch
+                        hamer = hamer.to(device)
+                        hamer = torch.nan_to_num(hamer, nan=0.0, posinf=0.0, neginf=0.0)
+                    else:
+                        features, labels, vids, start_indices, end_indices = batch
+                        hamer = None
+
                     features = features.to(device)
                     labels = labels.to(device)
                     features = torch.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
                     
                     if LOSS_FUNCTION == "bcl":
-                        logits, embeddings = model(features)
+                        logits, embeddings = call_model(features, hamer)
                         loss, _, _ = criterion(logits, embeddings, labels)
                     elif LOSS_FUNCTION == "unified_ctc":
-                        logits, _ = model(features)
+                        logits, _ = call_model(features, hamer)
                         hard_labels = torch.argmax(labels, dim=1)
                         loss, _, _ = criterion(logits, hard_labels)
                     else:
-                        output = model(features)
+                        output = call_model(features, hamer)
                         logits = output[0] if isinstance(output, tuple) else output
                         hard_labels = torch.argmax(labels, dim=1)
                         loss = criterion(logits, hard_labels)

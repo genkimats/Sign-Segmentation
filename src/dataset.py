@@ -47,7 +47,7 @@ def apply_label_smoothing(labels_array, window_size=5):
     return soft_labels
 
 class SignSegmentationDataset(Dataset):
-    def __init__(self, keypoints_dir, labels_dir, split_file="dataset_splits.json", split="train", window_size=16, overlap=0, tolerance_window=5, use_full_length=False, base_features=None, kinematic_features=None, temporal_downsample_factor=1, use_face_keypoints=False, face_dir="processed_data/face_keypoints_normalized"):
+    def __init__(self, keypoints_dir, labels_dir, split_file="dataset_splits.json", split="train", window_size=16, overlap=0, tolerance_window=5, use_full_length=False, base_features=None, kinematic_features=None, temporal_downsample_factor=1, use_face_keypoints=False, face_dir="processed_data/face_keypoints_normalized", use_hamer_features=False, hamer_dir="processed_data/hamer_features"):
         self.labels_dir = labels_dir
         self.kinetic_dir = "processed_data/kinematic_features" 
         self.split_file = split_file
@@ -59,6 +59,8 @@ class SignSegmentationDataset(Dataset):
         self.temporal_downsample_factor = temporal_downsample_factor
         self.use_face_keypoints = use_face_keypoints
         self.face_dir = face_dir
+        self.use_hamer_features = use_hamer_features
+        self.hamer_dir = hamer_dir
 
         self.feature_map = {
             "x-cord": 0,
@@ -104,6 +106,9 @@ class SignSegmentationDataset(Dataset):
             "kinetic_load_error": 0,
             "missing_face": 0,
             "face_frame_mismatch": 0,
+            "missing_hamer": 0,
+            "hamer_load_error": 0,
+            "hamer_empty": 0,
         }
 
         print(f"[{split.upper()}] Loading {len(self.video_ids)} videos into RAM Cache (Bypassing Disk I/O)...")
@@ -178,6 +183,48 @@ class SignSegmentationDataset(Dataset):
                 # holds -- only do that deliberately (e.g. for debugging).
                 final_tensor = torch.cat([final_tensor, face_padded], dim=1)  # concat along the VERTEX axis
 
+            # --- OPTIONAL: HAMER HAND-POSE FEATURES (from extract_hamer_features.py) ---
+            # Unlike face keypoints, HaMeR features are NOT folded into the per-vertex
+            # graph tensor -- they're MANO rotation parameters, not 3D point coordinates,
+            # so they're kept as a SEPARATE (num_frames, 288) stream and fused inside the
+            # model itself via a dedicated MLP branch (see models.py's hamer_dim support),
+            # matching the 2025 Hands-On paper's own architecture for this feature.
+            hamer_full = None
+            if self.use_hamer_features:
+                hamer_path = os.path.join(self.hamer_dir, f"{vid}_hamer.pt")
+                if not os.path.exists(hamer_path):
+                    skip_counts["missing_hamer"] += 1
+                    continue
+
+                try:
+                    hamer_data = torch.load(hamer_path, weights_only=False)
+                    hand_pose = hamer_data["hand_pose"]          # (T_ham, 2, 15, 3, 3)
+                    global_orient = hamer_data["global_orient"]  # (T_ham, 2, 3, 3)
+                    ham_downsample = hamer_data.get("temporal_downsample_factor", 1)
+                except Exception:
+                    skip_counts["hamer_load_error"] += 1
+                    continue
+
+                T_ham = hand_pose.shape[0]
+                if T_ham == 0:
+                    skip_counts["hamer_empty"] += 1
+                    continue
+
+                # Flatten each hand's (15,3,3) pose + (3,3) orientation into 144 values,
+                # concatenate left+right -> 288 per frame (matches F in R^288 from the
+                # 2025 paper exactly: 2 hands x (15x3x3 + 1x3x3) = 2 x 144 = 288).
+                hand_pose_flat = torch.as_tensor(hand_pose, dtype=torch.float32).reshape(T_ham, 2, 135)
+                global_orient_flat = torch.as_tensor(global_orient, dtype=torch.float32).reshape(T_ham, 2, 9)
+                hamer_flat = torch.cat([hand_pose_flat, global_orient_flat], dim=-1).reshape(T_ham, 288)
+
+                # extract_hamer_features.py runs at ham_downsample x the native frame
+                # rate (every Nth frame). Upsample back to num_frames via nearest-
+                # neighbor/forward-fill from the last extracted HaMeR frame, so this
+                # stream aligns 1:1 with labels/body and windowing downstream doesn't
+                # need to know HaMeR was extracted at a different rate.
+                frame_to_hamer_idx = (torch.arange(num_frames) // ham_downsample).clamp(max=T_ham - 1)
+                hamer_full = hamer_flat[frame_to_hamer_idx].to(torch.float16)  # (num_frames, 288)
+
             # Compress to FP16 to keep RAM super low, and save it to the dictionary!
             final_tensor = final_tensor.to(torch.float16)
             
@@ -185,6 +232,8 @@ class SignSegmentationDataset(Dataset):
                 'features': final_tensor,
                 'labels': soft_labels
             }
+            if self.use_hamer_features:
+                self.video_cache[vid]['hamer_features'] = hamer_full
             
             # Map out the windows only for videos successfully loaded
             self.samples.append({'video_id': vid, 'start_idx': 0, 'end_idx': num_frames})
@@ -210,9 +259,10 @@ class SignSegmentationDataset(Dataset):
                 f"(0 of {total_attempted} videos were successfully cached) -- this dataset is "
                 f"EMPTY. Skip reasons: {skip_counts}. This fails here, loudly, instead of three "
                 f"layers deep in DataLoader/RandomSampler as a confusing 'num_samples=0' error. "
-                f"If missing_face is nonzero, check that {self.face_dir!r} actually contains "
-                f"files named EXACTLY like your split's video ids (e.g. '{self.video_ids[0]}.npy' "
-                f"if that helps) -- a naming-convention mismatch between how face keypoints were "
+                f"If missing_face/missing_hamer is nonzero, check that {self.face_dir!r} / "
+                f"{self.hamer_dir!r} actually contain files named EXACTLY like your split's "
+                f"video ids (e.g. '{self.video_ids[0]}.npy' or '{self.video_ids[0]}_hamer.pt' if "
+                f"that helps) -- a naming-convention mismatch between how a feature stream was "
                 f"extracted and how body/hand keypoints are named is the most common cause."
             )
 
@@ -240,11 +290,17 @@ class SignSegmentationDataset(Dataset):
         
         final_input_tensor = window_features.permute(2, 0, 1)
         labels_tensor = torch.tensor(window_labels, dtype=torch.float32).permute(1, 0)
+
+        if self.use_hamer_features:
+            window_hamer = cached_data['hamer_features'][start_idx:end_idx].to(torch.float32)  # (T_win, 288)
+            hamer_tensor = window_hamer.permute(1, 0)  # (288, T_win) -- channel-first, matches final_input_tensor's convention
         
         # 4. Handle Downsampling & Padding
         if self.temporal_downsample_factor > 1:
             final_input_tensor = final_input_tensor[:, ::self.temporal_downsample_factor, :]
             labels_tensor = labels_tensor[:, ::self.temporal_downsample_factor]
+            if self.use_hamer_features:
+                hamer_tensor = hamer_tensor[:, ::self.temporal_downsample_factor]
             
         if not self.use_full_length:
             C, T, V = final_input_tensor.shape
@@ -258,8 +314,14 @@ class SignSegmentationDataset(Dataset):
                 label_pad = torch.zeros(3, pad_T, dtype=torch.float32)
                 label_pad[0, :] = 1.0 
                 labels_tensor = torch.cat([labels_tensor, label_pad], dim=1)
+
+                if self.use_hamer_features:
+                    hamer_pad = torch.zeros(hamer_tensor.shape[0], pad_T, dtype=torch.float32)
+                    hamer_tensor = torch.cat([hamer_tensor, hamer_pad], dim=1)
                 
         start_scaled = start_idx // self.temporal_downsample_factor
         end_scaled = end_idx // self.temporal_downsample_factor
         
+        if self.use_hamer_features:
+            return final_input_tensor, labels_tensor, hamer_tensor, vid, start_scaled, end_scaled
         return final_input_tensor, labels_tensor, vid, start_scaled, end_scaled

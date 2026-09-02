@@ -186,7 +186,7 @@ class STGCN_Transformer(nn.Module):
 
 
 class STGCN_Mamba(nn.Module):
-    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3):
+    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3, hamer_dim=None, hamer_proj_dim=64):
         super().__init__()
         graph = SkeletonGraph(num_vertices=num_vertices)
         A = graph.A
@@ -195,6 +195,21 @@ class STGCN_Mamba(nn.Module):
             STGCNBlock(stgcn_channels, stgcn_channels, A)
         )
         self.bridge_dim = num_vertices * stgcn_channels
+
+        # Optional separate HaMeR branch (2025 Hands-On paper's design: HaMeR gets its
+        # own MLP, fused with the graph-based stream BEFORE the shared temporal
+        # backbone -- not folded into the per-vertex graph itself, since HaMeR's MANO
+        # rotation parameters aren't per-vertex 3D coordinates the graph conv expects).
+        self.hamer_dim = hamer_dim
+        if hamer_dim is not None:
+            self.hamer_encoder = nn.Sequential(
+                nn.Linear(hamer_dim, hamer_proj_dim),
+                nn.LayerNorm(hamer_proj_dim),
+                nn.GELU(),
+                nn.Dropout(0.1)
+            )
+            self.bridge_dim += hamer_proj_dim
+
         self.feature_proj = nn.Sequential(
             nn.Linear(self.bridge_dim, d_model),
             nn.LayerNorm(d_model),
@@ -206,11 +221,19 @@ class STGCN_Mamba(nn.Module):
         ])
         self.classifier = nn.Linear(d_model, num_classes)
 
-    def forward(self, x):
+    def forward(self, x, hamer=None):
         B, C, T, V = x.shape
         x = self.stgcn_blocks(x) 
         x = x.permute(0, 2, 3, 1).contiguous()
         x = x.view(B, T, -1) 
+
+        if self.hamer_dim is not None:
+            if hamer is None:
+                raise ValueError("This model was built with hamer_dim set, but forward() "
+                                  "was called without a `hamer` tensor.")
+            hamer_feat = self.hamer_encoder(hamer.permute(0, 2, 1))  # (B, T, hamer_proj_dim)
+            x = torch.cat([x, hamer_feat], dim=-1)
+
         x = self.feature_proj(x + 1e-5) 
         
         # Raw, sequential state-space memory calculation
@@ -440,7 +463,7 @@ class Latent_STGCN_Mamba(nn.Module):
     uses a dedicated Mamba block to extract temporal latent dynamics, 
     then up-projects to the main sequence modeler.
     """
-    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2):
+    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hamer_dim=None, hamer_proj_dim=64):
         super().__init__()
         # 1. Spatial Graph Encoder
         graph = SkeletonGraph(num_vertices=num_vertices)
@@ -451,6 +474,18 @@ class Latent_STGCN_Mamba(nn.Module):
         )
         
         flat_dim = num_vertices * stgcn_channels
+
+        # Optional separate HaMeR branch -- see STGCN_Mamba's comment for why this is
+        # fused here (before the latent bottleneck) rather than folded into the graph.
+        self.hamer_dim = hamer_dim
+        if hamer_dim is not None:
+            self.hamer_encoder = nn.Sequential(
+                nn.Linear(hamer_dim, hamer_proj_dim),
+                nn.LayerNorm(hamer_proj_dim),
+                nn.GELU(),
+                nn.Dropout(dropout)
+            )
+            flat_dim += hamer_proj_dim
         
         # 2. Continuous Latent Space Bottleneck (Encoder)
         self.latent_encoder = nn.Sequential(
@@ -481,12 +516,19 @@ class Latent_STGCN_Mamba(nn.Module):
         self.fusion = nn.Linear(d_model * 2, d_model)
         self.classifier = nn.Linear(d_model, num_classes)
 
-    def forward(self, x):
+    def forward(self, x, hamer=None):
         B, C, T, V = x.shape
         
         # Spatial Graph Processing
         x = self.stgcn_blocks(x)                   # (B, 64, T, 65)
         x = x.permute(0, 2, 1, 3).reshape(B, T, -1) # Flatten to (B, T, 4160)
+
+        if self.hamer_dim is not None:
+            if hamer is None:
+                raise ValueError("This model was built with hamer_dim set, but forward() "
+                                  "was called without a `hamer` tensor.")
+            hamer_feat = self.hamer_encoder(hamer.permute(0, 2, 1))  # (B, T, hamer_proj_dim)
+            x = torch.cat([x, hamer_feat], dim=-1)
         
         # Transform into Latent Space
         z = self.latent_encoder(x)                 # (B, T, 128)
@@ -625,9 +667,22 @@ class Base_Latent_Mamba_Wrapper(nn.Module):
     """
     Base shell for all the models to compress the spatial topology into Mamba.
     """
-    def __init__(self, num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout):
+    def __init__(self, num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout, hamer_dim=None, hamer_proj_dim=64):
         super().__init__()
         flat_dim = stgcn_channels * num_vertices
+
+        # Optional separate HaMeR branch -- see STGCN_Mamba's comment for why this is
+        # fused here (before the latent bottleneck) rather than folded into the graph.
+        self.hamer_dim = hamer_dim
+        if hamer_dim is not None:
+            self.hamer_encoder = nn.Sequential(
+                nn.Linear(hamer_dim, hamer_proj_dim),
+                nn.LayerNorm(hamer_proj_dim),
+                nn.GELU(),
+                nn.Dropout(dropout)
+            )
+            flat_dim += hamer_proj_dim
+
         self.latent_encoder = nn.Sequential(
             nn.Linear(flat_dim, latent_dim),
             nn.LayerNorm(latent_dim),
@@ -645,11 +700,18 @@ class Base_Latent_Mamba_Wrapper(nn.Module):
         self.fusion = nn.Linear(d_model * 2, d_model)
         self.classifier = nn.Linear(d_model, num_classes)
 
-    def forward(self, x):
+    def forward(self, x, hamer=None):
         B, C, T, V = x.shape
         # Spatial Processing (To be defined by subclasses)
         x = self.spatial_blocks(x)
         x = x.permute(0, 2, 1, 3).reshape(B, T, -1)
+
+        if self.hamer_dim is not None:
+            if hamer is None:
+                raise ValueError("This model was built with hamer_dim set, but forward() "
+                                  "was called without a `hamer` tensor.")
+            hamer_feat = self.hamer_encoder(hamer.permute(0, 2, 1))  # (B, T, hamer_proj_dim)
+            x = torch.cat([x, hamer_feat], dim=-1)
         
         z = self.latent_encoder(x)
         z_smooth = self.latent_mamba(z) + z
@@ -668,8 +730,8 @@ class Base_Latent_Mamba_Wrapper(nn.Module):
 
 
 class CTRGCN_Mamba(Base_Latent_Mamba_Wrapper):
-    def __init__(self, num_vertices=65, in_channels=5, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2):
-        super().__init__(num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout)
+    def __init__(self, num_vertices=65, in_channels=5, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hamer_dim=None, hamer_proj_dim=64):
+        super().__init__(num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout, hamer_dim, hamer_proj_dim)
         A = SkeletonGraph(num_vertices=num_vertices).A
         self.spatial_blocks = nn.Sequential(
             CTRGCNBlock(in_channels, stgcn_channels, A),
@@ -677,8 +739,8 @@ class CTRGCN_Mamba(Base_Latent_Mamba_Wrapper):
         )
 
 class InfoGCN_Mamba(Base_Latent_Mamba_Wrapper):
-    def __init__(self, num_vertices=65, in_channels=5, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2):
-        super().__init__(num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout)
+    def __init__(self, num_vertices=65, in_channels=5, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hamer_dim=None, hamer_proj_dim=64):
+        super().__init__(num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout, hamer_dim, hamer_proj_dim)
         A = SkeletonGraph(num_vertices=num_vertices).A
         self.spatial_blocks = nn.Sequential(
             InfoGCNBlock(in_channels, stgcn_channels, A),
@@ -686,16 +748,16 @@ class InfoGCN_Mamba(Base_Latent_Mamba_Wrapper):
         )
 
 class ShiftGCN_Mamba(Base_Latent_Mamba_Wrapper):
-    def __init__(self, num_vertices=65, in_channels=5, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2):
-        super().__init__(num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout)
+    def __init__(self, num_vertices=65, in_channels=5, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hamer_dim=None, hamer_proj_dim=64):
+        super().__init__(num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout, hamer_dim, hamer_proj_dim)
         self.spatial_blocks = nn.Sequential(
             ShiftGCNBlock(in_channels, stgcn_channels, num_vertices),
             ShiftGCNBlock(stgcn_channels, stgcn_channels, num_vertices)
         )
 
 class SpatialTransformer_Mamba(Base_Latent_Mamba_Wrapper):
-    def __init__(self, num_vertices=65, in_channels=5, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2):
-        super().__init__(num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout)
+    def __init__(self, num_vertices=65, in_channels=5, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hamer_dim=None, hamer_proj_dim=64):
+        super().__init__(num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout, hamer_dim, hamer_proj_dim)
         self.spatial_blocks = nn.Sequential(
             SpatialTransformerBlock(in_channels, stgcn_channels, num_vertices),
             SpatialTransformerBlock(stgcn_channels, stgcn_channels, num_vertices)
@@ -761,8 +823,8 @@ class HDGCNBlock(nn.Module):
 
 
 class HDGCN_Mamba(Base_Latent_Mamba_Wrapper):
-    def __init__(self, num_vertices=65, in_channels=5, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hd_max_hop=3):
-        super().__init__(num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout)
+    def __init__(self, num_vertices=65, in_channels=5, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hd_max_hop=3, hamer_dim=None, hamer_proj_dim=64):
+        super().__init__(num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout, hamer_dim, hamer_proj_dim)
         graph = SkeletonGraph(num_vertices=num_vertices)
         self.spatial_blocks = nn.Sequential(
             HDGCNBlock(in_channels, stgcn_channels, graph.get_hop_adjacencies(max_hop=hd_max_hop)),
@@ -858,8 +920,8 @@ class HyperSignBlock(nn.Module):
 
 
 class HyperSign_Mamba(Base_Latent_Mamba_Wrapper):
-    def __init__(self, num_vertices=65, in_channels=5, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, num_soft_hyperedges=8):
-        super().__init__(num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout)
+    def __init__(self, num_vertices=65, in_channels=5, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, num_soft_hyperedges=8, hamer_dim=None, hamer_proj_dim=64):
+        super().__init__(num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout, hamer_dim, hamer_proj_dim)
         graph = SkeletonGraph(num_vertices=num_vertices)
         A = graph.A
         hyperedges = graph.get_anatomical_hyperedges()

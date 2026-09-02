@@ -14,7 +14,7 @@ CHOSEN_TYPE = 'mamba'
 # ==============================================================================
 MAMBA_DEFAULTS = {
     "basename": "stgcn_mamba",  
-    "window_size": 16,
+    "window_size": 64,
     "overlap": 0,
     "batch_size": 16,
     "epochs": 50,
@@ -24,7 +24,7 @@ MAMBA_DEFAULTS = {
     "num_vertices": 65,
     "tolerance_window": 5,
     "temporal_downsample_factor": 1, 
-    "loss_function": "weighted_ce",  
+    "loss_function": "standard_ce",  
     "ctc_weight": 0.5,             
     "class_weights": [0.6, 0.8, 1.0], 
     "tmse_weight": 0.15,            
@@ -34,6 +34,8 @@ MAMBA_DEFAULTS = {
     "in_channels": 5, 
     "use_face_keypoints": False,
     "face_dir": "processed_data/face_keypoints_normalized",
+    "use_hamer_features": False,
+    "hamer_dir": "processed_data/hamer_features",
     "d_model": 256,
     "n_layers": 4,     
     "optimizer": "AdamW",
@@ -103,25 +105,11 @@ def calculate_num_vertices(config):
 EXPERIMENTS_TO_RUN = [
     {
         "basename": "stgcn_mamba",
-        "window_size": 48,
+        "window_size": 64,
         "overlap": 0,
-        "kinematic_features": [],
-        "description": "overlap ratio (0/48), no kinematic"
+        "loss_function": "weighted_ce",
+        "description": "overlap ratio (0/64), loss=weighted_ce, spatial_angles"
     },
-    {
-        "basename": "stgcn_mamba",
-        "window_size": 80,
-        "overlap": 0,
-        "kinematic_features": [],
-        "description": "overlap ratio (0/80), no kinematic"
-    },
-    {
-        "basename": "stgcn_mamba",
-        "window_size": 96,
-        "overlap": 0,
-        "kinematic_features": [],
-        "description": "overlap ratio (0/96), no kinematic"
-    }
 ]
 
 if CHOSEN_TYPE == 'mamba':
