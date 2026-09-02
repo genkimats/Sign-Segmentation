@@ -24,7 +24,7 @@ MAMBA_DEFAULTS = {
     "num_vertices": 65,
     "tolerance_window": 5,
     "temporal_downsample_factor": 1, 
-    "loss_function": "standard_ce",  
+    "loss_function": "weighted_ce",  
     "ctc_weight": 0.5,             
     "class_weights": [0.6, 0.8, 1.0], 
     "tmse_weight": 0.15,            
@@ -107,8 +107,8 @@ EXPERIMENTS_TO_RUN = [
         "basename": "stgcn_mamba",
         "window_size": 64,
         "overlap": 0,
-        "loss_function": "weighted_ce",
-        "description": "overlap ratio (0/64), loss=weighted_ce, spatial_angles"
+        "use_hamer_features": True,
+        "description": "overlap ratio (0/64), loss=weighted_ce, hamer"
     },
 ]
 
