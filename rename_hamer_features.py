@@ -16,7 +16,7 @@ RENAME_SUFFIXES = [
 
 # Defaults to a dry run (prints what WOULD be renamed, renames nothing).
 # Review the printed plan, then flip to False to actually apply it.
-DRY_RUN = True
+DRY_RUN = False
 
 
 def main():
