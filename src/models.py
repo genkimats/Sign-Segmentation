@@ -137,7 +137,7 @@ class STGCN_Transformer(nn.Module):
     Extracts isolated spatial kinetics using a Graph Convolutional Network, 
     then applies global temporal attention using a Transformer Encoder.
     """
-    def __init__(self, in_channels, num_vertices, num_classes=3, stgcn_channels=64, d_model=256, n_layers=4, nhead=8, dim_feedforward=1024, dropout=0.2):
+    def __init__(self, in_channels, num_vertices, num_classes=3, stgcn_channels=64, d_model=256, n_layers=4, nhead=8, dim_feedforward=1024, dropout=0.2, hamer_dim=None, hamer_proj_dim=64):
         super().__init__()
         
         graph = SkeletonGraph(num_vertices=num_vertices)
@@ -148,6 +148,19 @@ class STGCN_Transformer(nn.Module):
         )
         
         self.bridge_dim = num_vertices * stgcn_channels
+
+        # Optional separate HaMeR branch -- see STGCN_Mamba's comment for why this is
+        # fused here (before feature_proj) rather than folded into the graph.
+        self.hamer_dim = hamer_dim
+        if hamer_dim is not None:
+            self.hamer_encoder = nn.Sequential(
+                nn.Linear(hamer_dim, hamer_proj_dim),
+                nn.LayerNorm(hamer_proj_dim),
+                nn.GELU(),
+                nn.Dropout(dropout)
+            )
+            self.bridge_dim += hamer_proj_dim
+
         self.feature_proj = nn.Sequential(
             nn.Linear(self.bridge_dim, d_model),
             nn.LayerNorm(d_model),
@@ -168,12 +181,20 @@ class STGCN_Transformer(nn.Module):
         
         self.classifier = nn.Linear(d_model, num_classes)
 
-    def forward(self, x):
+    def forward(self, x, hamer=None):
         B, C, T, V = x.shape
         
         x = self.stgcn_blocks(x) 
         x = x.permute(0, 2, 3, 1).contiguous()
         x = x.view(B, T, -1)
+
+        if self.hamer_dim is not None:
+            if hamer is None:
+                raise ValueError("This model was built with hamer_dim set, but forward() "
+                                  "was called without a `hamer` tensor.")
+            hamer_feat = self.hamer_encoder(hamer.permute(0, 2, 1))  # (B, T, hamer_proj_dim)
+            x = torch.cat([x, hamer_feat], dim=-1)
+
         features = self.feature_proj(x + 1e-5) 
         
         features = self.pos_encoder(features)
@@ -324,7 +345,7 @@ class STGCN_BiMamba(nn.Module):
 
 
 class STGCN_BiLSTM(nn.Module):
-    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3, dropout=0.2):
+    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hamer_dim=None, hamer_proj_dim=64):
         super(STGCN_BiLSTM, self).__init__()
         graph = SkeletonGraph(num_vertices=num_vertices)
         A = graph.A
@@ -333,14 +354,32 @@ class STGCN_BiLSTM(nn.Module):
             STGCNBlock(stgcn_channels, stgcn_channels, A)
         )
         self.bridge_dim = num_vertices * stgcn_channels
+
+        # Optional separate HaMeR branch -- see STGCN_Mamba's comment for why this is
+        # fused here (before the LSTM) rather than folded into the graph.
+        self.hamer_dim = hamer_dim
+        if hamer_dim is not None:
+            self.hamer_encoder = nn.Sequential(
+                nn.Linear(hamer_dim, hamer_proj_dim),
+                nn.LayerNorm(hamer_proj_dim),
+                nn.GELU(),
+                nn.Dropout(dropout)
+            )
+            self.bridge_dim += hamer_proj_dim
+
+        # Matches the 2023 paper's exact spec: "flattened and projected into a
+        # standard dimension (256), then fed through an LSTM encoder" -- project
+        # to d_model, NOT d_model*2 (that was doubling the LSTM's actual input
+        # size relative to what the paper describes and what their own
+        # hyperparameter sweep found optimal for this hidden size).
         self.projection = nn.Sequential(
-            nn.Linear(self.bridge_dim, d_model * 2),
-            nn.LayerNorm(d_model * 2),
+            nn.Linear(self.bridge_dim, d_model),
+            nn.LayerNorm(d_model),
             nn.ReLU(),
             nn.Dropout(dropout)
         )
         self.lstm = nn.LSTM(
-            input_size=d_model * 2,
+            input_size=d_model,
             hidden_size=d_model,
             num_layers=n_layers,
             batch_first=True,
@@ -349,11 +388,19 @@ class STGCN_BiLSTM(nn.Module):
         )
         self.classifier = nn.Linear(d_model * 2, num_classes)
 
-    def forward(self, x):
+    def forward(self, x, hamer=None):
         B, C, T, V = x.shape
         x = self.stgcn_blocks(x) 
         x = x.permute(0, 2, 3, 1).contiguous() 
-        x = x.view(B, T, -1)                   
+        x = x.view(B, T, -1)
+
+        if self.hamer_dim is not None:
+            if hamer is None:
+                raise ValueError("This model was built with hamer_dim set, but forward() "
+                                  "was called without a `hamer` tensor.")
+            hamer_feat = self.hamer_encoder(hamer.permute(0, 2, 1))  # (B, T, hamer_proj_dim)
+            x = torch.cat([x, hamer_feat], dim=-1)
+
         features = self.projection(x + 1e-5)      
         lstm_out, _ = self.lstm(features)      
         logits = self.classifier(lstm_out)     
@@ -364,14 +411,16 @@ class BiLSTM_Baseline(nn.Module):
     def __init__(self, in_channels, num_vertices, num_classes=3, d_model=256, n_layers=4, dropout=0.2):
         super(BiLSTM_Baseline, self).__init__()
         self.feature_dim = in_channels * num_vertices
+        # Matches the 2023 paper's spec: project to d_model (256), not d_model*2 --
+        # see STGCN_BiLSTM's comment for the full reasoning.
         self.projection = nn.Sequential(
-            nn.Linear(self.feature_dim, d_model * 2),
-            nn.LayerNorm(d_model * 2),
+            nn.Linear(self.feature_dim, d_model),
+            nn.LayerNorm(d_model),
             nn.ReLU(),
             nn.Dropout(dropout)
         )
         self.lstm = nn.LSTM(
-            input_size=d_model * 2,
+            input_size=d_model,
             hidden_size=d_model,
             num_layers=n_layers,
             batch_first=True,

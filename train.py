@@ -182,7 +182,8 @@ def train_model(config):
         model_kwargs["latent_dim"] = config.get("latent_dim", 128)
 
     HAMER_SUPPORTED_MODELS = ["stgcn_mamba", "latent_stgcn_mamba", "ctrgcn_mamba", "infogcn_mamba",
-                               "shiftgcn_mamba", "spatial_transformer_mamba", "hdgcn_mamba", "hypersign_mamba"]
+                               "shiftgcn_mamba", "spatial_transformer_mamba", "hdgcn_mamba", "hypersign_mamba",
+                               "stgcn_bilstm", "stgcn_transformer"]
     if USE_HAMER_FEATURES:
         if MODEL_NAME not in HAMER_SUPPORTED_MODELS:
             raise ValueError(
