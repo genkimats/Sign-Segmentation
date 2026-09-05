@@ -30,7 +30,7 @@ MAMBA_DEFAULTS = {
     "tmse_weight": 0.15,            
     "tmse_threshold": 0.1,          
     "base_features": ["x-cord", "y-cord", "z-cord"], 
-    "kinematic_features": ["spatial_angles"],        
+    "kinematic_features": [],        
     "in_channels": 5, 
     "use_face_keypoints": False,
     "face_dir": "processed_data/face_keypoints_normalized",
@@ -109,14 +109,7 @@ EXPERIMENTS_TO_RUN = [
         "overlap": 0,
         "use_hamer_features": False,
         "description": "overlap ratio (0/64), loss=weighted_ce, no kinetic"
-    },
-    {
-        "basename": "transformer_baseline",
-        "window_size": 64,
-        "overlap": 0,
-        "use_hamer_features": True,
-        "description": "overlap ratio (0/64), loss=weighted_ce, hamer"
-    },
+    }
     {
         "basename": "stgcn_transformer",
         "window_size": 64,
@@ -137,13 +130,6 @@ EXPERIMENTS_TO_RUN = [
         "overlap": 0,
         "use_hamer_features": False,
         "description": "overlap ratio (0/64), loss=weighted_ce, no kinetic"
-    },
-    {
-        "basename": "bilstm_baseline",
-        "window_size": 64,
-        "overlap": 0,
-        "use_hamer_features": True,
-        "description": "overlap ratio (0/64), loss=weighted_ce, hamer"
     },
     {
         "basename": "stgcn_bilstm",
