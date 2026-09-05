@@ -109,7 +109,7 @@ EXPERIMENTS_TO_RUN = [
         "overlap": 0,
         "use_hamer_features": False,
         "description": "overlap ratio (0/64), loss=weighted_ce, no kinetic"
-    }
+    },
     {
         "basename": "stgcn_transformer",
         "window_size": 64,
