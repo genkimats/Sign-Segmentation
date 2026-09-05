@@ -104,7 +104,56 @@ def calculate_num_vertices(config):
 
 EXPERIMENTS_TO_RUN = [
     {
-        "basename": "stgcn_mamba",
+        "basename": "transformer_baseline",
+        "window_size": 64,
+        "overlap": 0,
+        "use_hamer_features": False,
+        "description": "overlap ratio (0/64), loss=weighted_ce, no kinetic"
+    },
+    {
+        "basename": "transformer_baseline",
+        "window_size": 64,
+        "overlap": 0,
+        "use_hamer_features": True,
+        "description": "overlap ratio (0/64), loss=weighted_ce, hamer"
+    },
+    {
+        "basename": "stgcn_transformer",
+        "window_size": 64,
+        "overlap": 0,
+        "use_hamer_features": False,
+        "description": "overlap ratio (0/64), loss=weighted_ce, no kinetic"
+    },
+    {
+        "basename": "stgcn_transformer",
+        "window_size": 64,
+        "overlap": 0,
+        "use_hamer_features": True,
+        "description": "overlap ratio (0/64), loss=weighted_ce, hamer"
+    },
+    {
+        "basename": "bilstm_baseline",
+        "window_size": 64,
+        "overlap": 0,
+        "use_hamer_features": False,
+        "description": "overlap ratio (0/64), loss=weighted_ce, no kinetic"
+    },
+    {
+        "basename": "bilstm_baseline",
+        "window_size": 64,
+        "overlap": 0,
+        "use_hamer_features": True,
+        "description": "overlap ratio (0/64), loss=weighted_ce, hamer"
+    },
+    {
+        "basename": "stgcn_bilstm",
+        "window_size": 64,
+        "overlap": 0,
+        "use_hamer_features": False,
+        "description": "overlap ratio (0/64), loss=weighted_ce, no kinetic"
+    },
+    {
+        "basename": "stgcn_bilstm",
         "window_size": 64,
         "overlap": 0,
         "use_hamer_features": True,
