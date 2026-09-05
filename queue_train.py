@@ -14,7 +14,7 @@ CHOSEN_TYPE = 'mamba'
 # ==============================================================================
 MAMBA_DEFAULTS = {
     "basename": "stgcn_mamba",  
-    "window_size": 64,
+    "window_size": 16,
     "overlap": 0,
     "batch_size": 16,
     "epochs": 50,
@@ -24,7 +24,7 @@ MAMBA_DEFAULTS = {
     "num_vertices": 65,
     "tolerance_window": 5,
     "temporal_downsample_factor": 1, 
-    "loss_function": "weighted_ce",  
+    "loss_function": "standard_ce",  
     "ctc_weight": 0.5,             
     "class_weights": [0.6, 0.8, 1.0], 
     "tmse_weight": 0.15,            
@@ -192,38 +192,53 @@ if __name__ == "__main__":
             print(f"  - {m_name}: {p_list}")
     print()
 
-    # --- PREFIX INPUT PHASE ---
-    while True:
-        try:
-            user_input = input("Enter a starting prefix for this batch [Press Enter to auto-assign per model]: ").strip()
-            
-            if not user_input:
-                base_prefix = None
-                break
-                
-            base_prefix = int(user_input)
-            if base_prefix <= 0:
-                print("⚠️ Prefix must be a positive integer.")
-                continue
-                
-            # Check for collisions with the specific models we are about to queue
-            collision = False
-            for exp in experiments_to_run:
-                m_name = exp.get("basename", defaults.get("basename", "unknown"))
-                if base_prefix in prefixes_data.get(m_name, []):
-                    collision = True
+    # --- PREFIX INPUT PHASE (per model variation) ---
+    # Determine every distinct model basename present in this batch, in the order
+    # they first appear, and ask for a starting prefix separately for EACH one --
+    # useful now that a single queuing session often mixes several architectures
+    # (e.g. stgcn_mamba, stgcn_bilstm, stgcn_transformer) that you may want to
+    # start at different prefix numbers, rather than one shared prompt forcing
+    # the same starting point on all of them.
+    distinct_model_names = []
+    for exp in experiments_to_run:
+        m_name = exp.get("basename", defaults.get("basename", "unknown"))
+        if m_name not in distinct_model_names:
+            distinct_model_names.append(m_name)
+
+    base_prefix_by_model = {}
+
+    for m_name in distinct_model_names:
+        existing = prefixes_data.get(m_name, [])
+        existing_str = f"existing: {existing}" if existing else "no existing prefixes"
+        while True:
+            try:
+                user_input = input(
+                    f"Enter a starting prefix for '{m_name}' ({existing_str}) "
+                    f"[Press Enter to auto-assign]: "
+                ).strip()
+
+                if not user_input:
+                    base_prefix_by_model[m_name] = None
                     break
-                    
-            if collision:
-                print(f"⚠️ Warning: Prefix {base_prefix} is already tracked for one of the models in this batch!")
-                override = input("Do you want to override and use it anyway? (y/N): ").strip().lower()
-                if override == 'y':
-                    break
-            else:
+
+                candidate = int(user_input)
+                if candidate <= 0:
+                    print("⚠️ Prefix must be a positive integer.")
+                    continue
+
+                if candidate in existing:
+                    print(f"⚠️ Warning: Prefix {candidate} is already tracked for '{m_name}'!")
+                    override = input("Do you want to override and use it anyway? (y/N): ").strip().lower()
+                    if override != 'y':
+                        continue
+
+                base_prefix_by_model[m_name] = candidate
                 break
-                
-        except ValueError:
-            print("⚠️ Please enter a valid number.")
+
+            except ValueError:
+                print("⚠️ Please enter a valid number.")
+
+    print()
 
     current_model_prefix = {}
     count = 0
@@ -236,8 +251,9 @@ if __name__ == "__main__":
         
         # 1. Determine the exact prefix for this specific architecture
         if m_name not in current_model_prefix:
-            if base_prefix is not None:
-                current_model_prefix[m_name] = base_prefix
+            chosen_base = base_prefix_by_model.get(m_name)
+            if chosen_base is not None:
+                current_model_prefix[m_name] = chosen_base
             else:
                 existing = prefixes_data.get(m_name, [])
                 current_model_prefix[m_name] = max(existing) + 1 if existing else 1
