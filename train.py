@@ -82,20 +82,20 @@ def set_seed(seed):
     the model partway through, that re-init still consumes the SAME seeded RNG
     stream deterministically, rather than needing to be reseeded itself.
 
-    Honest caveat: torch.backends.cudnn.deterministic=True gets you close to
-    bit-exact reproducibility for standard PyTorch ops, but Mamba's custom CUDA
-    kernel (selective_scan_cuda) isn't written with determinism guarantees in
-    mind, so don't expect two runs with the SAME seed to be bit-identical on
-    Mamba models specifically -- they'll be very close, which is what actually
-    matters for "3 genuinely different, reproducibly-labeled seeds."
+    Deliberately does NOT set torch.backends.cudnn.deterministic=True. That
+    trades real training speed for bit-exact reproducibility, which isn't
+    what's needed here (you need 3 DIFFERENT, recorded seeds for variance
+    estimation, not "rerun must produce identical numbers") -- and it would
+    make every future seeded run slower than your past unseeded ones, muddying
+    the epoch-timing comparisons you've been tracking carefully. Mamba's custom
+    CUDA kernel (selective_scan_cuda) isn't written with determinism guarantees
+    in mind either way, so that guarantee would be partial at best.
     """
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
 
 
 def train_model(config):

@@ -102,6 +102,91 @@ def calculate_num_vertices(config):
     return total
 #endregion
 
+def with_seeds(exp, seeds=(42, 123, 2024)):
+    """
+    Expands one experiment dict into len(seeds) copies, identical except for a
+    "seed" field and a description suffix noting which seed it is -- for
+    running the same config multiple times with different (recorded,
+    reproducible) random seeds, matching the 2023 paper's practice of
+    repeating each final config 3x and reporting mean +/- std.
+
+    You normally don't need to call this yourself -- define EXPERIMENTS_TO_RUN
+    as plain experiment dicts, and select_seed_experiments()/
+    expand_experiments_with_seeds() below apply this automatically based on
+    what you choose interactively when the script runs.
+    """
+    variants = []
+    for seed in seeds:
+        variant = dict(exp)
+        variant["seed"] = seed
+        variant["description"] = f"{exp.get('description', '')} [seed={seed}]".strip()
+        variants.append(variant)
+    return variants
+
+
+def select_seed_experiments(experiments):
+    """
+    Dequeue_train.py-style selection: prints EXPERIMENTS_TO_RUN as a numbered
+    list, then asks which ones should run with 3 seeds instead of 1.
+
+      - comma-separated indices (e.g. "0, 2")             -> only those get 3 seeds
+      - "all"                                              -> every experiment gets 3 seeds
+      - empty input                                        -> none do; everything runs with 1 seed
+
+    Returns a set of indices (into `experiments`) selected for 3 seeds.
+    """
+    print(f"\n{'='*75}")
+    print("📋 EXPERIMENTS DEFINED IN EXPERIMENTS_TO_RUN")
+    print(f"{'='*75}")
+    for i, exp in enumerate(experiments):
+        basename = exp.get("basename", "unknown")
+        desc = exp.get("description", "No description provided")
+        print(f"[ID: {i}] {basename}")
+        print(f"        └─ 📝 {desc}\n")
+    print(f"{'='*75}")
+
+    user_input = input(
+        "🎲 Enter IDs to run with 3 seeds (comma-separated, e.g. 0, 2), "
+        "'all' for all of them, or press Enter for none (1 seed each): "
+    ).strip()
+
+    if not user_input:
+        return set()
+
+    if user_input.lower() == 'all':
+        return set(range(len(experiments)))
+
+    try:
+        ids = [int(x.strip()) for x in user_input.split(',')]
+    except ValueError:
+        print("⚠️ Invalid input. Please enter numbers separated by commas, 'all', or leave blank. "
+              "Defaulting to 1 seed for every experiment.")
+        return set()
+
+    valid_ids = set(i for i in ids if 0 <= i < len(experiments))
+    invalid_ids = set(ids) - valid_ids
+    if invalid_ids:
+        print(f"⚠️ Ignoring out-of-range ID(s): {sorted(invalid_ids)}")
+
+    return valid_ids
+
+
+def expand_experiments_with_seeds(experiments, seed_indices, seeds=(42, 123, 2024)):
+    """
+    Builds the final experiment list in original order: experiments at
+    seed_indices get expanded into len(seeds) seeded copies (via with_seeds);
+    everything else passes through unchanged (1 seed -- whatever "seed" it
+    already has, or train.py's config.get("seed", 42) default).
+    """
+    final = []
+    for i, exp in enumerate(experiments):
+        if i in seed_indices:
+            final.extend(with_seeds(exp, seeds=seeds))
+        else:
+            final.append(exp)
+    return final
+
+
 EXPERIMENTS_TO_RUN = [
     {
         "basename": "transformer_baseline",
@@ -225,6 +310,15 @@ if __name__ == "__main__":
     else:
         for m_name, p_list in prefixes_data.items():
             print(f"  - {m_name}: {p_list}")
+    print()
+
+    # --- SEED SELECTION PHASE ---
+    # Choose which experiments run with 3 seeds vs 1, THEN expand the list --
+    # everything below this point (prefix assignment, channel/vertex calculation,
+    # queueing) operates on the already-expanded list, so a 3-seed selection
+    # correctly becomes 3 separate, sequentially-prefixed queue entries.
+    seed_indices = select_seed_experiments(experiments_to_run)
+    experiments_to_run = expand_experiments_with_seeds(experiments_to_run, seed_indices)
     print()
 
     # --- PREFIX INPUT PHASE (per model variation) ---
