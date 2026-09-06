@@ -3,6 +3,7 @@ import json
 import csv
 import os
 import socket
+import random
 import torch
 import numpy as np
 import torch.optim as optim
@@ -71,9 +72,38 @@ def get_next_job():
         
     return next_job
 
+
+def set_seed(seed):
+    """
+    Seeds every source of randomness that affects a run: model weight init,
+    DataLoader shuffling order, dropout masks. Called ONCE at the very start of
+    train_model(), before anything randomness-dependent happens (including the
+    first model construction) -- so if a NaN-triggered restart re-initializes
+    the model partway through, that re-init still consumes the SAME seeded RNG
+    stream deterministically, rather than needing to be reseeded itself.
+
+    Honest caveat: torch.backends.cudnn.deterministic=True gets you close to
+    bit-exact reproducibility for standard PyTorch ops, but Mamba's custom CUDA
+    kernel (selective_scan_cuda) isn't written with determinism guarantees in
+    mind, so don't expect two runs with the SAME seed to be bit-identical on
+    Mamba models specifically -- they'll be very close, which is what actually
+    matters for "3 genuinely different, reproducibly-labeled seeds."
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+
 def train_model(config):
     print(f"\n{'='*60}\n🚀 STARTING QUEUED JOB\n{'='*60}")
     print(json.dumps(config, indent=4))
+
+    SEED = config.get("seed", 42)
+    set_seed(SEED)
     
     BATCH_SIZE = config["batch_size"]
     EPOCHS = config["epochs"]
@@ -491,6 +521,7 @@ def train_model(config):
     gpu_name = torch.cuda.get_device_name(device) if torch.cuda.is_available() else "CPU"
     
     hardware_summary = {
+        "seed": SEED,
         "machine_hostname": hostname,
         "gpu_name": gpu_name,
         "total_training_time": f"{int(total_minutes)}m {int(total_seconds)}s",
