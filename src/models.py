@@ -14,7 +14,7 @@ class STGCN_MLP_Mamba(nn.Module):
     Expands the flattened spatial graph using a Multi-Layer Perceptron (MLP) 
     before compressing it down to d_model for the Mamba sequence parser.
     """
-    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3, mlp_expansion_factor=4, dropout=0.2):
+    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3, mlp_expansion_factor=4, dropout=0.2, hamer_dim=None, hamer_proj_dim=64):
         super().__init__()
         graph = SkeletonGraph(num_vertices=num_vertices)
         A = graph.A
@@ -25,6 +25,18 @@ class STGCN_MLP_Mamba(nn.Module):
         
         self.bridge_dim = num_vertices * stgcn_channels
         hidden_dim = d_model * mlp_expansion_factor
+
+        # Optional separate HaMeR branch -- see STGCN_Mamba's comment for why this is
+        # fused here (before the MLP bridge) rather than folded into the graph.
+        self.hamer_dim = hamer_dim
+        if hamer_dim is not None:
+            self.hamer_encoder = nn.Sequential(
+                nn.Linear(hamer_dim, hamer_proj_dim),
+                nn.LayerNorm(hamer_proj_dim),
+                nn.GELU(),
+                nn.Dropout(dropout)
+            )
+            self.bridge_dim += hamer_proj_dim
         
         # --- NEW: MLP Bridge ---
         self.feature_proj = nn.Sequential(
@@ -41,11 +53,18 @@ class STGCN_MLP_Mamba(nn.Module):
         ])
         self.classifier = nn.Linear(d_model, num_classes)
 
-    def forward(self, x):
+    def forward(self, x, hamer=None):
         B, C, T, V = x.shape
         x = self.stgcn_blocks(x) 
         x = x.permute(0, 2, 3, 1).contiguous()
         x = x.view(B, T, -1) 
+
+        if self.hamer_dim is not None:
+            if hamer is None:
+                raise ValueError("This model was built with hamer_dim set, but forward() "
+                                  "was called without a `hamer` tensor.")
+            hamer_feat = self.hamer_encoder(hamer.permute(0, 2, 1))  # (B, T, hamer_proj_dim)
+            x = torch.cat([x, hamer_feat], dim=-1)
         
         x = self.feature_proj(x + 1e-5) 
         
@@ -268,13 +287,26 @@ class STGCN_Mamba(nn.Module):
 
 
 class Decoupled_STGCN_Mamba(nn.Module):
-    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3):
+    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3, hamer_dim=None, hamer_proj_dim=64):
         super().__init__()
         self.stgcn_blocks = nn.Sequential(
             DecoupledSTGCNBlock(in_channels, stgcn_channels, num_vertices=num_vertices),
             DecoupledSTGCNBlock(stgcn_channels, stgcn_channels, num_vertices=num_vertices)
         )
         self.bridge_dim = num_vertices * stgcn_channels
+
+        # Optional separate HaMeR branch -- see STGCN_Mamba's comment for why this is
+        # fused here (before feature_proj) rather than folded into the graph.
+        self.hamer_dim = hamer_dim
+        if hamer_dim is not None:
+            self.hamer_encoder = nn.Sequential(
+                nn.Linear(hamer_dim, hamer_proj_dim),
+                nn.LayerNorm(hamer_proj_dim),
+                nn.GELU(),
+                nn.Dropout(0.1)
+            )
+            self.bridge_dim += hamer_proj_dim
+
         self.feature_proj = nn.Sequential(
             nn.Linear(self.bridge_dim, d_model),
             nn.LayerNorm(d_model), 
@@ -286,10 +318,18 @@ class Decoupled_STGCN_Mamba(nn.Module):
         ])
         self.classifier = nn.Linear(d_model, num_classes)
 
-    def forward(self, x):
+    def forward(self, x, hamer=None):
         x = self.stgcn_blocks(x) 
         x = x.permute(0, 2, 3, 1).contiguous()
         x = x.view(x.size(0), x.size(1), -1) 
+
+        if self.hamer_dim is not None:
+            if hamer is None:
+                raise ValueError("This model was built with hamer_dim set, but forward() "
+                                  "was called without a `hamer` tensor.")
+            hamer_feat = self.hamer_encoder(hamer.permute(0, 2, 1))  # (B, T, hamer_proj_dim)
+            x = torch.cat([x, hamer_feat], dim=-1)
+
         x = self.feature_proj(x + 1e-5)
         
         embeddings = x
@@ -301,7 +341,7 @@ class Decoupled_STGCN_Mamba(nn.Module):
 
 
 class STGCN_BiMamba(nn.Module):
-    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3):
+    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3, hamer_dim=None, hamer_proj_dim=64):
         super().__init__()
         graph = SkeletonGraph(num_vertices=num_vertices)
         A = graph.A
@@ -310,6 +350,19 @@ class STGCN_BiMamba(nn.Module):
             STGCNBlock(stgcn_channels, stgcn_channels, A)
         )
         self.bridge_dim = num_vertices * stgcn_channels
+
+        # Optional separate HaMeR branch -- see STGCN_Mamba's comment for why this is
+        # fused here (before feature_proj) rather than folded into the graph.
+        self.hamer_dim = hamer_dim
+        if hamer_dim is not None:
+            self.hamer_encoder = nn.Sequential(
+                nn.Linear(hamer_dim, hamer_proj_dim),
+                nn.LayerNorm(hamer_proj_dim),
+                nn.GELU(),
+                nn.Dropout(0.1)
+            )
+            self.bridge_dim += hamer_proj_dim
+
         self.feature_proj = nn.Sequential(
             nn.Linear(self.bridge_dim, d_model),
             nn.LayerNorm(d_model),
@@ -324,10 +377,18 @@ class STGCN_BiMamba(nn.Module):
         ])
         self.classifier = nn.Linear(d_model * 2, num_classes)
 
-    def forward(self, x):
+    def forward(self, x, hamer=None):
         x = self.stgcn_blocks(x) 
         x = x.permute(0, 2, 3, 1).contiguous()
         x = x.view(x.size(0), x.size(1), -1) 
+
+        if self.hamer_dim is not None:
+            if hamer is None:
+                raise ValueError("This model was built with hamer_dim set, but forward() "
+                                  "was called without a `hamer` tensor.")
+            hamer_feat = self.hamer_encoder(hamer.permute(0, 2, 1))  # (B, T, hamer_proj_dim)
+            x = torch.cat([x, hamer_feat], dim=-1)
+
         x = self.feature_proj(x + 1e-5)
         
         fwd_emb = x

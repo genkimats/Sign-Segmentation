@@ -213,7 +213,8 @@ def train_model(config):
 
     HAMER_SUPPORTED_MODELS = ["stgcn_mamba", "latent_stgcn_mamba", "ctrgcn_mamba", "infogcn_mamba",
                                "shiftgcn_mamba", "spatial_transformer_mamba", "hdgcn_mamba", "hypersign_mamba",
-                               "stgcn_bilstm", "stgcn_transformer"]
+                               "stgcn_bilstm", "stgcn_transformer",
+                               "stgcn_mlp_mamba", "stgcn_bimamba", "decoupled_stgcn_mamba"]
     if USE_HAMER_FEATURES:
         if MODEL_NAME not in HAMER_SUPPORTED_MODELS:
             raise ValueError(
