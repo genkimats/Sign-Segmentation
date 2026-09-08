@@ -190,45 +190,87 @@ def expand_experiments_with_seeds(experiments, seed_indices, seeds=(42, 123, 202
 EXPERIMENTS_TO_RUN = [
     {
         "basename": "stgcn_transformer",
-        "window_size": 256,
+        "window_size": 512,
         "overlap": 0,
         "use_hamer_features": False,
-        "description": "overlap ratio (0/256), loss=weighted_ce, no kinetic"
+        "description": "overlap ratio (0/512), loss=weighted_ce, no kinetic"
     },
     {
         "basename": "stgcn_transformer",
-        "window_size": 256,
+        "window_size": 512,
         "overlap": 0,
         "use_hamer_features": True,
-        "description": "overlap ratio (0/256), loss=weighted_ce, hamer"
+        "description": "overlap ratio (0/512), loss=weighted_ce, hamer"
     },
     {
         "basename": "stgcn_bilstm",
-        "window_size": 256,
+        "window_size": 512,
         "overlap": 0,
         "use_hamer_features": False,
-        "description": "3 SEEDS: overlap ratio (0/256), loss=weighted_ce, no kinetic"
+        "description": "3 SEEDS: overlap ratio (0/512), loss=weighted_ce, no kinetic"
     },
     {
         "basename": "stgcn_bilstm",
-        "window_size": 256,
+        "window_size": 512,
         "overlap": 0,
         "use_hamer_features": True,
-        "description": "overlap ratio (0/256), loss=weighted_ce, hamer"
+        "description": "overlap ratio (0/512), loss=weighted_ce, hamer"
     },
     {
         "basename": "stgcn_bimamba",
-        "window_size": 256,
+        "window_size": 512,
         "overlap": 0,
         "use_hamer_features": False,
-        "description": "overlap ratio (0/256), loss=weighted_ce, no kinetic"
+        "description": "overlap ratio (0/512), loss=weighted_ce, no kinetic"
     },
     {
         "basename": "stgcn_bimamba",
-        "window_size": 256,
+        "window_size": 512,
         "overlap": 0,
         "use_hamer_features": True,
-        "description": "overlap ratio (0/256), loss=weighted_ce, hamer"
+        "description": "overlap ratio (0/512), loss=weighted_ce, hamer"
+    },
+    {
+        "basename": "stgcn_transformer",
+        "window_size": 1024,
+        "overlap": 0,
+        "use_hamer_features": False,
+        "description": "overlap ratio (0/1024), loss=weighted_ce, no kinetic"
+    },
+    {
+        "basename": "stgcn_transformer",
+        "window_size": 1024,
+        "overlap": 0,
+        "use_hamer_features": True,
+        "description": "overlap ratio (0/1024), loss=weighted_ce, hamer"
+    },
+    {
+        "basename": "stgcn_bilstm",
+        "window_size": 1024,
+        "overlap": 0,
+        "use_hamer_features": False,
+        "description": "3 SEEDS: overlap ratio (0/1024), loss=weighted_ce, no kinetic"
+    },
+    {
+        "basename": "stgcn_bilstm",
+        "window_size": 1024,
+        "overlap": 0,
+        "use_hamer_features": True,
+        "description": "overlap ratio (0/1024), loss=weighted_ce, hamer"
+    },
+    {
+        "basename": "stgcn_bimamba",
+        "window_size": 1024,
+        "overlap": 0,
+        "use_hamer_features": False,
+        "description": "overlap ratio (0/1024), loss=weighted_ce, no kinetic"
+    },
+    {
+        "basename": "stgcn_bimamba",
+        "window_size": 1024,
+        "overlap": 0,
+        "use_hamer_features": True,
+        "description": "overlap ratio (0/1024), loss=weighted_ce, hamer"
     }
 ]
 
