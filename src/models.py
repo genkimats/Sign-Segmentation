@@ -14,7 +14,7 @@ class STGCN_MLP_Mamba(nn.Module):
     Expands the flattened spatial graph using a Multi-Layer Perceptron (MLP) 
     before compressing it down to d_model for the Mamba sequence parser.
     """
-    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3, mlp_expansion_factor=4, dropout=0.2, hamer_dim=None, hamer_proj_dim=64):
+    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3, mlp_expansion_factor=4, dropout=0.2, hamer_dim=None, hamer_proj_dim=64, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
         super().__init__()
         graph = SkeletonGraph(num_vertices=num_vertices)
         A = graph.A
@@ -49,7 +49,7 @@ class STGCN_MLP_Mamba(nn.Module):
         )
         
         self.mamba_layers = nn.ModuleList([
-            Mamba(d_model=d_model, d_state=16, d_conv=4, expand=2) for _ in range(n_layers)
+            Mamba(d_model=d_model, d_state=mamba_d_state, d_conv=mamba_d_conv, expand=mamba_expand) for _ in range(n_layers)
         ])
         self.classifier = nn.Linear(d_model, num_classes)
 
@@ -226,7 +226,7 @@ class STGCN_Transformer(nn.Module):
 
 
 class STGCN_Mamba(nn.Module):
-    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3, hamer_dim=None, hamer_proj_dim=64):
+    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3, hamer_dim=None, hamer_proj_dim=64, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
         super().__init__()
         graph = SkeletonGraph(num_vertices=num_vertices)
         A = graph.A
@@ -257,7 +257,7 @@ class STGCN_Mamba(nn.Module):
             nn.Dropout(0.1) 
         )
         self.mamba_layers = nn.ModuleList([
-            Mamba(d_model=d_model, d_state=16, d_conv=4, expand=2) for _ in range(n_layers)
+            Mamba(d_model=d_model, d_state=mamba_d_state, d_conv=mamba_d_conv, expand=mamba_expand) for _ in range(n_layers)
         ])
         self.classifier = nn.Linear(d_model, num_classes)
 
@@ -287,7 +287,7 @@ class STGCN_Mamba(nn.Module):
 
 
 class Decoupled_STGCN_Mamba(nn.Module):
-    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3, hamer_dim=None, hamer_proj_dim=64):
+    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3, hamer_dim=None, hamer_proj_dim=64, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
         super().__init__()
         self.stgcn_blocks = nn.Sequential(
             DecoupledSTGCNBlock(in_channels, stgcn_channels, num_vertices=num_vertices),
@@ -314,7 +314,7 @@ class Decoupled_STGCN_Mamba(nn.Module):
             nn.Dropout(0.1)
         )
         self.mamba_layers = nn.ModuleList([
-            Mamba(d_model=d_model, d_state=16, d_conv=4, expand=2) for _ in range(n_layers)
+            Mamba(d_model=d_model, d_state=mamba_d_state, d_conv=mamba_d_conv, expand=mamba_expand) for _ in range(n_layers)
         ])
         self.classifier = nn.Linear(d_model, num_classes)
 
@@ -341,7 +341,7 @@ class Decoupled_STGCN_Mamba(nn.Module):
 
 
 class STGCN_BiMamba(nn.Module):
-    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3, hamer_dim=None, hamer_proj_dim=64):
+    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3, hamer_dim=None, hamer_proj_dim=64, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
         super().__init__()
         graph = SkeletonGraph(num_vertices=num_vertices)
         A = graph.A
@@ -370,10 +370,10 @@ class STGCN_BiMamba(nn.Module):
             nn.Dropout(0.1)
         )
         self.mamba_fwd = nn.ModuleList([
-            Mamba(d_model=d_model, d_state=16, d_conv=4, expand=2) for _ in range(n_layers)
+            Mamba(d_model=d_model, d_state=mamba_d_state, d_conv=mamba_d_conv, expand=mamba_expand) for _ in range(n_layers)
         ])
         self.mamba_bwd = nn.ModuleList([
-            Mamba(d_model=d_model, d_state=16, d_conv=4, expand=2) for _ in range(n_layers)
+            Mamba(d_model=d_model, d_state=mamba_d_state, d_conv=mamba_d_conv, expand=mamba_expand) for _ in range(n_layers)
         ])
         self.classifier = nn.Linear(d_model * 2, num_classes)
 
@@ -500,7 +500,7 @@ class BiLSTM_Baseline(nn.Module):
 
 
 class PureMambaBaseline(nn.Module):
-    def __init__(self, in_channels, num_vertices, num_classes=3, d_model=256, n_layers=4, dropout=0.2):
+    def __init__(self, in_channels, num_vertices, num_classes=3, d_model=256, n_layers=4, dropout=0.2, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
         super().__init__()
         self.feature_dim = in_channels * num_vertices
         self.projection = nn.Sequential(
@@ -510,7 +510,7 @@ class PureMambaBaseline(nn.Module):
             nn.Dropout(dropout)
         )
         self.mamba_layers = nn.ModuleList([
-            Mamba(d_model=d_model, d_state=16, d_conv=4, expand=2) for _ in range(n_layers)
+            Mamba(d_model=d_model, d_state=mamba_d_state, d_conv=mamba_d_conv, expand=mamba_expand) for _ in range(n_layers)
         ])
         self.classifier = nn.Linear(d_model, num_classes)
 
@@ -528,7 +528,7 @@ class PureMambaBaseline(nn.Module):
 
 
 class BiMambaBaseline(nn.Module):
-    def __init__(self, in_channels, num_vertices, num_classes=3, d_model=256, n_layers=4, dropout=0.2):
+    def __init__(self, in_channels, num_vertices, num_classes=3, d_model=256, n_layers=4, dropout=0.2, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
         super().__init__()
         self.feature_dim = in_channels * num_vertices
         self.projection = nn.Sequential(
@@ -538,10 +538,10 @@ class BiMambaBaseline(nn.Module):
             nn.Dropout(dropout)
         )
         self.fwd_mamba = nn.ModuleList([
-            Mamba(d_model=d_model, d_state=16, d_conv=4, expand=2) for _ in range(n_layers)
+            Mamba(d_model=d_model, d_state=mamba_d_state, d_conv=mamba_d_conv, expand=mamba_expand) for _ in range(n_layers)
         ])
         self.bwd_mamba = nn.ModuleList([
-            Mamba(d_model=d_model, d_state=16, d_conv=4, expand=2) for _ in range(n_layers)
+            Mamba(d_model=d_model, d_state=mamba_d_state, d_conv=mamba_d_conv, expand=mamba_expand) for _ in range(n_layers)
         ])
         self.fusion = nn.Linear(d_model * 2, d_model)
         self.classifier = nn.Linear(d_model, num_classes)
@@ -573,7 +573,7 @@ class Latent_STGCN_Mamba(nn.Module):
     uses a dedicated Mamba block to extract temporal latent dynamics, 
     then up-projects to the main sequence modeler.
     """
-    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hamer_dim=None, hamer_proj_dim=64):
+    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hamer_dim=None, hamer_proj_dim=64, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
         super().__init__()
         # 1. Spatial Graph Encoder
         graph = SkeletonGraph(num_vertices=num_vertices)
@@ -606,7 +606,7 @@ class Latent_STGCN_Mamba(nn.Module):
         )
         
         # 3. Latent Mamba Extractor (Smooths the latent space dynamically)
-        self.latent_mamba = Mamba(d_model=latent_dim, d_state=16, d_conv=4, expand=2)
+        self.latent_mamba = Mamba(d_model=latent_dim, d_state=mamba_d_state, d_conv=mamba_d_conv, expand=mamba_expand)
         
         # 4. Up-Projection to Main Sequence Dimension
         self.latent_to_main = nn.Sequential(
@@ -617,10 +617,10 @@ class Latent_STGCN_Mamba(nn.Module):
         
         # 5. Main Temporal Sequence Modeler (BiMamba Backend)
         self.fwd_mamba = nn.ModuleList([
-            Mamba(d_model=d_model, d_state=16, d_conv=4, expand=2) for _ in range(n_layers)
+            Mamba(d_model=d_model, d_state=mamba_d_state, d_conv=mamba_d_conv, expand=mamba_expand) for _ in range(n_layers)
         ])
         self.bwd_mamba = nn.ModuleList([
-            Mamba(d_model=d_model, d_state=16, d_conv=4, expand=2) for _ in range(n_layers)
+            Mamba(d_model=d_model, d_state=mamba_d_state, d_conv=mamba_d_conv, expand=mamba_expand) for _ in range(n_layers)
         ])
         
         self.fusion = nn.Linear(d_model * 2, d_model)
@@ -777,7 +777,7 @@ class Base_Latent_Mamba_Wrapper(nn.Module):
     """
     Base shell for all the models to compress the spatial topology into Mamba.
     """
-    def __init__(self, num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout, hamer_dim=None, hamer_proj_dim=64):
+    def __init__(self, num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout, hamer_dim=None, hamer_proj_dim=64, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
         super().__init__()
         flat_dim = stgcn_channels * num_vertices
 
@@ -799,14 +799,14 @@ class Base_Latent_Mamba_Wrapper(nn.Module):
             nn.GELU(),
             nn.Dropout(dropout)
         )
-        self.latent_mamba = Mamba(d_model=latent_dim, d_state=16, d_conv=4, expand=2)
+        self.latent_mamba = Mamba(d_model=latent_dim, d_state=mamba_d_state, d_conv=mamba_d_conv, expand=mamba_expand)
         self.latent_to_main = nn.Sequential(
             nn.Linear(latent_dim, d_model),
             nn.LayerNorm(d_model),
             nn.GELU()
         )
-        self.fwd_mamba = nn.ModuleList([Mamba(d_model=d_model, d_state=16, d_conv=4, expand=2) for _ in range(n_layers)])
-        self.bwd_mamba = nn.ModuleList([Mamba(d_model=d_model, d_state=16, d_conv=4, expand=2) for _ in range(n_layers)])
+        self.fwd_mamba = nn.ModuleList([Mamba(d_model=d_model, d_state=mamba_d_state, d_conv=mamba_d_conv, expand=mamba_expand) for _ in range(n_layers)])
+        self.bwd_mamba = nn.ModuleList([Mamba(d_model=d_model, d_state=mamba_d_state, d_conv=mamba_d_conv, expand=mamba_expand) for _ in range(n_layers)])
         self.fusion = nn.Linear(d_model * 2, d_model)
         self.classifier = nn.Linear(d_model, num_classes)
 
@@ -840,8 +840,8 @@ class Base_Latent_Mamba_Wrapper(nn.Module):
 
 
 class CTRGCN_Mamba(Base_Latent_Mamba_Wrapper):
-    def __init__(self, num_vertices=65, in_channels=5, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hamer_dim=None, hamer_proj_dim=64):
-        super().__init__(num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout, hamer_dim, hamer_proj_dim)
+    def __init__(self, num_vertices=65, in_channels=5, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hamer_dim=None, hamer_proj_dim=64, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
+        super().__init__(num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout, hamer_dim, hamer_proj_dim, mamba_d_state, mamba_d_conv, mamba_expand)
         A = SkeletonGraph(num_vertices=num_vertices).A
         self.spatial_blocks = nn.Sequential(
             CTRGCNBlock(in_channels, stgcn_channels, A),
@@ -849,8 +849,8 @@ class CTRGCN_Mamba(Base_Latent_Mamba_Wrapper):
         )
 
 class InfoGCN_Mamba(Base_Latent_Mamba_Wrapper):
-    def __init__(self, num_vertices=65, in_channels=5, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hamer_dim=None, hamer_proj_dim=64):
-        super().__init__(num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout, hamer_dim, hamer_proj_dim)
+    def __init__(self, num_vertices=65, in_channels=5, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hamer_dim=None, hamer_proj_dim=64, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
+        super().__init__(num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout, hamer_dim, hamer_proj_dim, mamba_d_state, mamba_d_conv, mamba_expand)
         A = SkeletonGraph(num_vertices=num_vertices).A
         self.spatial_blocks = nn.Sequential(
             InfoGCNBlock(in_channels, stgcn_channels, A),
@@ -858,16 +858,16 @@ class InfoGCN_Mamba(Base_Latent_Mamba_Wrapper):
         )
 
 class ShiftGCN_Mamba(Base_Latent_Mamba_Wrapper):
-    def __init__(self, num_vertices=65, in_channels=5, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hamer_dim=None, hamer_proj_dim=64):
-        super().__init__(num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout, hamer_dim, hamer_proj_dim)
+    def __init__(self, num_vertices=65, in_channels=5, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hamer_dim=None, hamer_proj_dim=64, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
+        super().__init__(num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout, hamer_dim, hamer_proj_dim, mamba_d_state, mamba_d_conv, mamba_expand)
         self.spatial_blocks = nn.Sequential(
             ShiftGCNBlock(in_channels, stgcn_channels, num_vertices),
             ShiftGCNBlock(stgcn_channels, stgcn_channels, num_vertices)
         )
 
 class SpatialTransformer_Mamba(Base_Latent_Mamba_Wrapper):
-    def __init__(self, num_vertices=65, in_channels=5, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hamer_dim=None, hamer_proj_dim=64):
-        super().__init__(num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout, hamer_dim, hamer_proj_dim)
+    def __init__(self, num_vertices=65, in_channels=5, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hamer_dim=None, hamer_proj_dim=64, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
+        super().__init__(num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout, hamer_dim, hamer_proj_dim, mamba_d_state, mamba_d_conv, mamba_expand)
         self.spatial_blocks = nn.Sequential(
             SpatialTransformerBlock(in_channels, stgcn_channels, num_vertices),
             SpatialTransformerBlock(stgcn_channels, stgcn_channels, num_vertices)
@@ -933,8 +933,8 @@ class HDGCNBlock(nn.Module):
 
 
 class HDGCN_Mamba(Base_Latent_Mamba_Wrapper):
-    def __init__(self, num_vertices=65, in_channels=5, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hd_max_hop=3, hamer_dim=None, hamer_proj_dim=64):
-        super().__init__(num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout, hamer_dim, hamer_proj_dim)
+    def __init__(self, num_vertices=65, in_channels=5, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hd_max_hop=3, hamer_dim=None, hamer_proj_dim=64, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
+        super().__init__(num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout, hamer_dim, hamer_proj_dim, mamba_d_state, mamba_d_conv, mamba_expand)
         graph = SkeletonGraph(num_vertices=num_vertices)
         self.spatial_blocks = nn.Sequential(
             HDGCNBlock(in_channels, stgcn_channels, graph.get_hop_adjacencies(max_hop=hd_max_hop)),
@@ -1030,8 +1030,8 @@ class HyperSignBlock(nn.Module):
 
 
 class HyperSign_Mamba(Base_Latent_Mamba_Wrapper):
-    def __init__(self, num_vertices=65, in_channels=5, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, num_soft_hyperedges=8, hamer_dim=None, hamer_proj_dim=64):
-        super().__init__(num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout, hamer_dim, hamer_proj_dim)
+    def __init__(self, num_vertices=65, in_channels=5, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, num_soft_hyperedges=8, hamer_dim=None, hamer_proj_dim=64, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
+        super().__init__(num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout, hamer_dim, hamer_proj_dim, mamba_d_state, mamba_d_conv, mamba_expand)
         graph = SkeletonGraph(num_vertices=num_vertices)
         A = graph.A
         hyperedges = graph.get_anatomical_hyperedges()

@@ -211,6 +211,14 @@ def train_model(config):
     if MODEL_NAME in ["latent_stgcn_mamba", "ctrgcn_mamba", "infogcn_mamba", "shiftgcn_mamba", "spatial_transformer_mamba", "hdgcn_mamba", "hypersign_mamba"]:
         model_kwargs["latent_dim"] = config.get("latent_dim", 128)
 
+    MAMBA_BASED_MODELS = ["pure_mamba", "bi_mamba", "stgcn_mamba", "stgcn_mlp_mamba", "stgcn_bimamba",
+                          "decoupled_stgcn_mamba", "latent_stgcn_mamba", "ctrgcn_mamba", "infogcn_mamba",
+                          "shiftgcn_mamba", "spatial_transformer_mamba", "hdgcn_mamba", "hypersign_mamba"]
+    if MODEL_NAME in MAMBA_BASED_MODELS:
+        model_kwargs["mamba_d_state"] = config.get("mamba_d_state", 16)
+        model_kwargs["mamba_d_conv"] = config.get("mamba_d_conv", 4)
+        model_kwargs["mamba_expand"] = config.get("mamba_expand", 2)
+
     HAMER_SUPPORTED_MODELS = ["stgcn_mamba", "latent_stgcn_mamba", "ctrgcn_mamba", "infogcn_mamba",
                                "shiftgcn_mamba", "spatial_transformer_mamba", "hdgcn_mamba", "hypersign_mamba",
                                "stgcn_bilstm", "stgcn_transformer",
