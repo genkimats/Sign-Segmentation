@@ -193,10 +193,31 @@ def expand_experiments_with_seeds(experiments, seed_indices, seeds=(42, 123, 202
 EXPERIMENTS_TO_RUN = [
     {
         "basename": "stgcn_mamba",
+        "window_size": 64,
+        "overlap": 0,
+        "mamba_d_state": 32,
+        "description": "overlap ratio (0/64), d_state=32, spatial_angles"
+    },
+    {
+        "basename": "stgcn_mamba",
+        "window_size": 64,
+        "overlap": 0,
+        "mamba_d_state": 64,
+        "description": "overlap ratio (0/64), d_state=64, spatial_angles"
+    },
+    {
+        "basename": "stgcn_mamba",
         "window_size": 256,
-        "overlap": 64,
-        "loss_function": "weighted_ce",
-        "description": "overlap ratio (64/256), loss=weighted_ce, spatial_angles"
+        "overlap": 0,
+        "mamba_d_state": 32,
+        "description": "overlap ratio (0/256), d_state=32, spatial_angles"
+    },
+    {
+        "basename": "stgcn_mamba",
+        "window_size": 256,
+        "overlap": 0,
+        "mamba_d_state": 64,
+        "description": "overlap ratio (0/256), d_state=64, spatial_angles"
     },
 ]
 
