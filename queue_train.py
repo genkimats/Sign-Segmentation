@@ -195,29 +195,33 @@ EXPERIMENTS_TO_RUN = [
         "basename": "stgcn_bimamba",
         "window_size": 64,
         "overlap": 0,
-        "mamba_expand": 1,
-        "description": "overlap ratio (0/64), expand=1, spatial_angles"
+        "mamba_d_state": 32,
+        "use_hamer_features": True,
+        "description": "overlap ratio (0/64), d_state=32, hamer"
     },
     {
         "basename": "stgcn_bimamba",
         "window_size": 64,
         "overlap": 0,
-        "mamba_expand": 3,
-        "description": "overlap ratio (0/64), expand=3, spatial_angles"
+        "mamba_d_state": 64,
+        "use_hamer_features": True,
+        "description": "overlap ratio (0/64), d_state=64, hamer"
     },
     {
         "basename": "stgcn_bimamba",
         "window_size": 256,
         "overlap": 0,
-        "mamba_expand": 1,
-        "description": "overlap ratio (0/256), expand=1, spatial_angles"
+        "mamba_d_state": 32,
+        "use_hamer_features": True,
+        "description": "overlap ratio (0/256), d_state=32, hamer"
     },
     {
         "basename": "stgcn_bimamba",
         "window_size": 256,
         "overlap": 0,
-        "mamba_expand": 3,
-        "description": "overlap ratio (0/256), expand=3, spatial_angles"
+        "mamba_d_state": 64,
+        "use_hamer_features": True,
+        "description": "overlap ratio (0/256), d_state=64, hamer"
     },
 ]
 
