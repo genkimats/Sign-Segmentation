@@ -46,7 +46,7 @@ from tqdm import tqdm
 # ==============================================================================
 # CONFIGURATION
 # ==============================================================================
-INPUT_VIDEO_DIR = os.path.expanduser("~/Genki_GR/Sign-Segmentation/raw_data/videos")
+INPUT_VIDEO_DIR = os.path.expanduser("./raw_data/videos")
 INPUT_BOX_DIR = "processed_data/hand_boxes"
 OUTPUT_FEATURE_DIR = "processed_data/dinov2_features"
 os.makedirs(OUTPUT_FEATURE_DIR, exist_ok=True)
