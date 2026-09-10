@@ -14,7 +14,7 @@ class STGCN_MLP_Mamba(nn.Module):
     Expands the flattened spatial graph using a Multi-Layer Perceptron (MLP) 
     before compressing it down to d_model for the Mamba sequence parser.
     """
-    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3, mlp_expansion_factor=4, dropout=0.2, hamer_dim=None, hamer_proj_dim=64, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
+    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3, mlp_expansion_factor=4, dropout=0.2, hamer_dim=None, hamer_proj_dim=64, dinov2_dim=None, dinov2_proj_dim=128, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
         super().__init__()
         graph = SkeletonGraph(num_vertices=num_vertices)
         A = graph.A
@@ -37,6 +37,21 @@ class STGCN_MLP_Mamba(nn.Module):
                 nn.Dropout(dropout)
             )
             self.bridge_dim += hamer_proj_dim
+
+        # Optional separate DINOv2 branch: a self-supervised ViT embedding of the
+        # hand crop itself (SHuBERT/SignMusketeers-style) -- an APPEARANCE feature,
+        # not a geometric/kinematic one, so it's fused the same way as HaMeR (own
+        # MLP branch, concatenated before the temporal backbone) but is a genuinely
+        # different information source, combinable independently with HaMeR.
+        self.dinov2_dim = dinov2_dim
+        if dinov2_dim is not None:
+            self.dinov2_encoder = nn.Sequential(
+                nn.Linear(dinov2_dim, dinov2_proj_dim),
+                nn.LayerNorm(dinov2_proj_dim),
+                nn.GELU(),
+                nn.Dropout(dropout)
+            )
+            self.bridge_dim += dinov2_proj_dim
         
         # --- NEW: MLP Bridge ---
         self.feature_proj = nn.Sequential(
@@ -53,7 +68,7 @@ class STGCN_MLP_Mamba(nn.Module):
         ])
         self.classifier = nn.Linear(d_model, num_classes)
 
-    def forward(self, x, hamer=None):
+    def forward(self, x, hamer=None, dinov2=None):
         B, C, T, V = x.shape
         x = self.stgcn_blocks(x) 
         x = x.permute(0, 2, 3, 1).contiguous()
@@ -65,6 +80,13 @@ class STGCN_MLP_Mamba(nn.Module):
                                   "was called without a `hamer` tensor.")
             hamer_feat = self.hamer_encoder(hamer.permute(0, 2, 1))  # (B, T, hamer_proj_dim)
             x = torch.cat([x, hamer_feat], dim=-1)
+
+        if self.dinov2_dim is not None:
+            if dinov2 is None:
+                raise ValueError("This model was built with dinov2_dim set, but forward() "
+                                  "was called without a `dinov2` tensor.")
+            dinov2_feat = self.dinov2_encoder(dinov2.permute(0, 2, 1))  # (B, T, dinov2_proj_dim)
+            x = torch.cat([x, dinov2_feat], dim=-1)
         
         x = self.feature_proj(x + 1e-5) 
         
@@ -156,7 +178,7 @@ class STGCN_Transformer(nn.Module):
     Extracts isolated spatial kinetics using a Graph Convolutional Network, 
     then applies global temporal attention using a Transformer Encoder.
     """
-    def __init__(self, in_channels, num_vertices, num_classes=3, stgcn_channels=64, d_model=256, n_layers=4, nhead=8, dim_feedforward=1024, dropout=0.2, hamer_dim=None, hamer_proj_dim=64):
+    def __init__(self, in_channels, num_vertices, num_classes=3, stgcn_channels=64, d_model=256, n_layers=4, nhead=8, dim_feedforward=1024, dropout=0.2, hamer_dim=None, hamer_proj_dim=64, dinov2_dim=None, dinov2_proj_dim=128):
         super().__init__()
         
         graph = SkeletonGraph(num_vertices=num_vertices)
@@ -180,6 +202,21 @@ class STGCN_Transformer(nn.Module):
             )
             self.bridge_dim += hamer_proj_dim
 
+        # Optional separate DINOv2 branch: a self-supervised ViT embedding of the
+        # hand crop itself (SHuBERT/SignMusketeers-style) -- an APPEARANCE feature,
+        # not a geometric/kinematic one, so it's fused the same way as HaMeR (own
+        # MLP branch, concatenated before the temporal backbone) but is a genuinely
+        # different information source, combinable independently with HaMeR.
+        self.dinov2_dim = dinov2_dim
+        if dinov2_dim is not None:
+            self.dinov2_encoder = nn.Sequential(
+                nn.Linear(dinov2_dim, dinov2_proj_dim),
+                nn.LayerNorm(dinov2_proj_dim),
+                nn.GELU(),
+                nn.Dropout(dropout)
+            )
+            self.bridge_dim += dinov2_proj_dim
+
         self.feature_proj = nn.Sequential(
             nn.Linear(self.bridge_dim, d_model),
             nn.LayerNorm(d_model),
@@ -200,7 +237,7 @@ class STGCN_Transformer(nn.Module):
         
         self.classifier = nn.Linear(d_model, num_classes)
 
-    def forward(self, x, hamer=None):
+    def forward(self, x, hamer=None, dinov2=None):
         B, C, T, V = x.shape
         
         x = self.stgcn_blocks(x) 
@@ -214,6 +251,13 @@ class STGCN_Transformer(nn.Module):
             hamer_feat = self.hamer_encoder(hamer.permute(0, 2, 1))  # (B, T, hamer_proj_dim)
             x = torch.cat([x, hamer_feat], dim=-1)
 
+        if self.dinov2_dim is not None:
+            if dinov2 is None:
+                raise ValueError("This model was built with dinov2_dim set, but forward() "
+                                  "was called without a `dinov2` tensor.")
+            dinov2_feat = self.dinov2_encoder(dinov2.permute(0, 2, 1))  # (B, T, dinov2_proj_dim)
+            x = torch.cat([x, dinov2_feat], dim=-1)
+
         features = self.feature_proj(x + 1e-5) 
         
         features = self.pos_encoder(features)
@@ -226,7 +270,7 @@ class STGCN_Transformer(nn.Module):
 
 
 class STGCN_Mamba(nn.Module):
-    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3, hamer_dim=None, hamer_proj_dim=64, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
+    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3, hamer_dim=None, hamer_proj_dim=64, dinov2_dim=None, dinov2_proj_dim=128, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
         super().__init__()
         graph = SkeletonGraph(num_vertices=num_vertices)
         A = graph.A
@@ -250,6 +294,21 @@ class STGCN_Mamba(nn.Module):
             )
             self.bridge_dim += hamer_proj_dim
 
+        # Optional separate DINOv2 branch: a self-supervised ViT embedding of the
+        # hand crop itself (SHuBERT/SignMusketeers-style) -- an APPEARANCE feature,
+        # not a geometric/kinematic one, so it's fused the same way as HaMeR (own
+        # MLP branch, concatenated before the temporal backbone) but is a genuinely
+        # different information source, combinable independently with HaMeR.
+        self.dinov2_dim = dinov2_dim
+        if dinov2_dim is not None:
+            self.dinov2_encoder = nn.Sequential(
+                nn.Linear(dinov2_dim, dinov2_proj_dim),
+                nn.LayerNorm(dinov2_proj_dim),
+                nn.GELU(),
+                nn.Dropout(0.1)
+            )
+            self.bridge_dim += dinov2_proj_dim
+
         self.feature_proj = nn.Sequential(
             nn.Linear(self.bridge_dim, d_model),
             nn.LayerNorm(d_model),
@@ -261,7 +320,7 @@ class STGCN_Mamba(nn.Module):
         ])
         self.classifier = nn.Linear(d_model, num_classes)
 
-    def forward(self, x, hamer=None):
+    def forward(self, x, hamer=None, dinov2=None):
         B, C, T, V = x.shape
         x = self.stgcn_blocks(x) 
         x = x.permute(0, 2, 3, 1).contiguous()
@@ -273,6 +332,13 @@ class STGCN_Mamba(nn.Module):
                                   "was called without a `hamer` tensor.")
             hamer_feat = self.hamer_encoder(hamer.permute(0, 2, 1))  # (B, T, hamer_proj_dim)
             x = torch.cat([x, hamer_feat], dim=-1)
+
+        if self.dinov2_dim is not None:
+            if dinov2 is None:
+                raise ValueError("This model was built with dinov2_dim set, but forward() "
+                                  "was called without a `dinov2` tensor.")
+            dinov2_feat = self.dinov2_encoder(dinov2.permute(0, 2, 1))  # (B, T, dinov2_proj_dim)
+            x = torch.cat([x, dinov2_feat], dim=-1)
 
         x = self.feature_proj(x + 1e-5) 
         
@@ -287,7 +353,7 @@ class STGCN_Mamba(nn.Module):
 
 
 class Decoupled_STGCN_Mamba(nn.Module):
-    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3, hamer_dim=None, hamer_proj_dim=64, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
+    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3, hamer_dim=None, hamer_proj_dim=64, dinov2_dim=None, dinov2_proj_dim=128, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
         super().__init__()
         self.stgcn_blocks = nn.Sequential(
             DecoupledSTGCNBlock(in_channels, stgcn_channels, num_vertices=num_vertices),
@@ -307,6 +373,21 @@ class Decoupled_STGCN_Mamba(nn.Module):
             )
             self.bridge_dim += hamer_proj_dim
 
+        # Optional separate DINOv2 branch: a self-supervised ViT embedding of the
+        # hand crop itself (SHuBERT/SignMusketeers-style) -- an APPEARANCE feature,
+        # not a geometric/kinematic one, so it's fused the same way as HaMeR (own
+        # MLP branch, concatenated before the temporal backbone) but is a genuinely
+        # different information source, combinable independently with HaMeR.
+        self.dinov2_dim = dinov2_dim
+        if dinov2_dim is not None:
+            self.dinov2_encoder = nn.Sequential(
+                nn.Linear(dinov2_dim, dinov2_proj_dim),
+                nn.LayerNorm(dinov2_proj_dim),
+                nn.GELU(),
+                nn.Dropout(0.1)
+            )
+            self.bridge_dim += dinov2_proj_dim
+
         self.feature_proj = nn.Sequential(
             nn.Linear(self.bridge_dim, d_model),
             nn.LayerNorm(d_model), 
@@ -318,7 +399,7 @@ class Decoupled_STGCN_Mamba(nn.Module):
         ])
         self.classifier = nn.Linear(d_model, num_classes)
 
-    def forward(self, x, hamer=None):
+    def forward(self, x, hamer=None, dinov2=None):
         x = self.stgcn_blocks(x) 
         x = x.permute(0, 2, 3, 1).contiguous()
         x = x.view(x.size(0), x.size(1), -1) 
@@ -329,6 +410,13 @@ class Decoupled_STGCN_Mamba(nn.Module):
                                   "was called without a `hamer` tensor.")
             hamer_feat = self.hamer_encoder(hamer.permute(0, 2, 1))  # (B, T, hamer_proj_dim)
             x = torch.cat([x, hamer_feat], dim=-1)
+
+        if self.dinov2_dim is not None:
+            if dinov2 is None:
+                raise ValueError("This model was built with dinov2_dim set, but forward() "
+                                  "was called without a `dinov2` tensor.")
+            dinov2_feat = self.dinov2_encoder(dinov2.permute(0, 2, 1))  # (B, T, dinov2_proj_dim)
+            x = torch.cat([x, dinov2_feat], dim=-1)
 
         x = self.feature_proj(x + 1e-5)
         
@@ -341,7 +429,7 @@ class Decoupled_STGCN_Mamba(nn.Module):
 
 
 class STGCN_BiMamba(nn.Module):
-    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3, hamer_dim=None, hamer_proj_dim=64, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
+    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3, hamer_dim=None, hamer_proj_dim=64, dinov2_dim=None, dinov2_proj_dim=128, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
         super().__init__()
         graph = SkeletonGraph(num_vertices=num_vertices)
         A = graph.A
@@ -363,6 +451,21 @@ class STGCN_BiMamba(nn.Module):
             )
             self.bridge_dim += hamer_proj_dim
 
+        # Optional separate DINOv2 branch: a self-supervised ViT embedding of the
+        # hand crop itself (SHuBERT/SignMusketeers-style) -- an APPEARANCE feature,
+        # not a geometric/kinematic one, so it's fused the same way as HaMeR (own
+        # MLP branch, concatenated before the temporal backbone) but is a genuinely
+        # different information source, combinable independently with HaMeR.
+        self.dinov2_dim = dinov2_dim
+        if dinov2_dim is not None:
+            self.dinov2_encoder = nn.Sequential(
+                nn.Linear(dinov2_dim, dinov2_proj_dim),
+                nn.LayerNorm(dinov2_proj_dim),
+                nn.GELU(),
+                nn.Dropout(0.1)
+            )
+            self.bridge_dim += dinov2_proj_dim
+
         self.feature_proj = nn.Sequential(
             nn.Linear(self.bridge_dim, d_model),
             nn.LayerNorm(d_model),
@@ -377,7 +480,7 @@ class STGCN_BiMamba(nn.Module):
         ])
         self.classifier = nn.Linear(d_model * 2, num_classes)
 
-    def forward(self, x, hamer=None):
+    def forward(self, x, hamer=None, dinov2=None):
         x = self.stgcn_blocks(x) 
         x = x.permute(0, 2, 3, 1).contiguous()
         x = x.view(x.size(0), x.size(1), -1) 
@@ -388,6 +491,13 @@ class STGCN_BiMamba(nn.Module):
                                   "was called without a `hamer` tensor.")
             hamer_feat = self.hamer_encoder(hamer.permute(0, 2, 1))  # (B, T, hamer_proj_dim)
             x = torch.cat([x, hamer_feat], dim=-1)
+
+        if self.dinov2_dim is not None:
+            if dinov2 is None:
+                raise ValueError("This model was built with dinov2_dim set, but forward() "
+                                  "was called without a `dinov2` tensor.")
+            dinov2_feat = self.dinov2_encoder(dinov2.permute(0, 2, 1))  # (B, T, dinov2_proj_dim)
+            x = torch.cat([x, dinov2_feat], dim=-1)
 
         x = self.feature_proj(x + 1e-5)
         
@@ -406,7 +516,7 @@ class STGCN_BiMamba(nn.Module):
 
 
 class STGCN_BiLSTM(nn.Module):
-    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hamer_dim=None, hamer_proj_dim=64):
+    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hamer_dim=None, hamer_proj_dim=64, dinov2_dim=None, dinov2_proj_dim=128):
         super(STGCN_BiLSTM, self).__init__()
         graph = SkeletonGraph(num_vertices=num_vertices)
         A = graph.A
@@ -427,6 +537,21 @@ class STGCN_BiLSTM(nn.Module):
                 nn.Dropout(dropout)
             )
             self.bridge_dim += hamer_proj_dim
+
+        # Optional separate DINOv2 branch: a self-supervised ViT embedding of the
+        # hand crop itself (SHuBERT/SignMusketeers-style) -- an APPEARANCE feature,
+        # not a geometric/kinematic one, so it's fused the same way as HaMeR (own
+        # MLP branch, concatenated before the temporal backbone) but is a genuinely
+        # different information source, combinable independently with HaMeR.
+        self.dinov2_dim = dinov2_dim
+        if dinov2_dim is not None:
+            self.dinov2_encoder = nn.Sequential(
+                nn.Linear(dinov2_dim, dinov2_proj_dim),
+                nn.LayerNorm(dinov2_proj_dim),
+                nn.GELU(),
+                nn.Dropout(dropout)
+            )
+            self.bridge_dim += dinov2_proj_dim
 
         # Matches the 2023 paper's exact spec: "flattened and projected into a
         # standard dimension (256), then fed through an LSTM encoder" -- project
@@ -449,7 +574,7 @@ class STGCN_BiLSTM(nn.Module):
         )
         self.classifier = nn.Linear(d_model * 2, num_classes)
 
-    def forward(self, x, hamer=None):
+    def forward(self, x, hamer=None, dinov2=None):
         B, C, T, V = x.shape
         x = self.stgcn_blocks(x) 
         x = x.permute(0, 2, 3, 1).contiguous() 
@@ -461,6 +586,13 @@ class STGCN_BiLSTM(nn.Module):
                                   "was called without a `hamer` tensor.")
             hamer_feat = self.hamer_encoder(hamer.permute(0, 2, 1))  # (B, T, hamer_proj_dim)
             x = torch.cat([x, hamer_feat], dim=-1)
+
+        if self.dinov2_dim is not None:
+            if dinov2 is None:
+                raise ValueError("This model was built with dinov2_dim set, but forward() "
+                                  "was called without a `dinov2` tensor.")
+            dinov2_feat = self.dinov2_encoder(dinov2.permute(0, 2, 1))  # (B, T, dinov2_proj_dim)
+            x = torch.cat([x, dinov2_feat], dim=-1)
 
         features = self.projection(x + 1e-5)      
         lstm_out, _ = self.lstm(features)      
@@ -573,7 +705,7 @@ class Latent_STGCN_Mamba(nn.Module):
     uses a dedicated Mamba block to extract temporal latent dynamics, 
     then up-projects to the main sequence modeler.
     """
-    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hamer_dim=None, hamer_proj_dim=64, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
+    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hamer_dim=None, hamer_proj_dim=64, dinov2_dim=None, dinov2_proj_dim=128, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
         super().__init__()
         # 1. Spatial Graph Encoder
         graph = SkeletonGraph(num_vertices=num_vertices)
@@ -596,6 +728,21 @@ class Latent_STGCN_Mamba(nn.Module):
                 nn.Dropout(dropout)
             )
             flat_dim += hamer_proj_dim
+
+        # Optional separate DINOv2 branch: a self-supervised ViT embedding of the
+        # hand crop itself (SHuBERT/SignMusketeers-style) -- an APPEARANCE feature,
+        # not a geometric/kinematic one, so it's fused the same way as HaMeR (own
+        # MLP branch, concatenated before the temporal backbone) but is a genuinely
+        # different information source, combinable independently with HaMeR.
+        self.dinov2_dim = dinov2_dim
+        if dinov2_dim is not None:
+            self.dinov2_encoder = nn.Sequential(
+                nn.Linear(dinov2_dim, dinov2_proj_dim),
+                nn.LayerNorm(dinov2_proj_dim),
+                nn.GELU(),
+                nn.Dropout(dropout)
+            )
+            flat_dim += dinov2_proj_dim
         
         # 2. Continuous Latent Space Bottleneck (Encoder)
         self.latent_encoder = nn.Sequential(
@@ -626,7 +773,7 @@ class Latent_STGCN_Mamba(nn.Module):
         self.fusion = nn.Linear(d_model * 2, d_model)
         self.classifier = nn.Linear(d_model, num_classes)
 
-    def forward(self, x, hamer=None):
+    def forward(self, x, hamer=None, dinov2=None):
         B, C, T, V = x.shape
         
         # Spatial Graph Processing
@@ -639,6 +786,13 @@ class Latent_STGCN_Mamba(nn.Module):
                                   "was called without a `hamer` tensor.")
             hamer_feat = self.hamer_encoder(hamer.permute(0, 2, 1))  # (B, T, hamer_proj_dim)
             x = torch.cat([x, hamer_feat], dim=-1)
+
+        if self.dinov2_dim is not None:
+            if dinov2 is None:
+                raise ValueError("This model was built with dinov2_dim set, but forward() "
+                                  "was called without a `dinov2` tensor.")
+            dinov2_feat = self.dinov2_encoder(dinov2.permute(0, 2, 1))  # (B, T, dinov2_proj_dim)
+            x = torch.cat([x, dinov2_feat], dim=-1)
         
         # Transform into Latent Space
         z = self.latent_encoder(x)                 # (B, T, 128)
@@ -777,7 +931,7 @@ class Base_Latent_Mamba_Wrapper(nn.Module):
     """
     Base shell for all the models to compress the spatial topology into Mamba.
     """
-    def __init__(self, num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout, hamer_dim=None, hamer_proj_dim=64, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
+    def __init__(self, num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout, hamer_dim=None, hamer_proj_dim=64, dinov2_dim=None, dinov2_proj_dim=128, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
         super().__init__()
         flat_dim = stgcn_channels * num_vertices
 
@@ -792,6 +946,21 @@ class Base_Latent_Mamba_Wrapper(nn.Module):
                 nn.Dropout(dropout)
             )
             flat_dim += hamer_proj_dim
+
+        # Optional separate DINOv2 branch: a self-supervised ViT embedding of the
+        # hand crop itself (SHuBERT/SignMusketeers-style) -- an APPEARANCE feature,
+        # not a geometric/kinematic one, so it's fused the same way as HaMeR (own
+        # MLP branch, concatenated before the temporal backbone) but is a genuinely
+        # different information source, combinable independently with HaMeR.
+        self.dinov2_dim = dinov2_dim
+        if dinov2_dim is not None:
+            self.dinov2_encoder = nn.Sequential(
+                nn.Linear(dinov2_dim, dinov2_proj_dim),
+                nn.LayerNorm(dinov2_proj_dim),
+                nn.GELU(),
+                nn.Dropout(dropout)
+            )
+            flat_dim += dinov2_proj_dim
 
         self.latent_encoder = nn.Sequential(
             nn.Linear(flat_dim, latent_dim),
@@ -810,7 +979,7 @@ class Base_Latent_Mamba_Wrapper(nn.Module):
         self.fusion = nn.Linear(d_model * 2, d_model)
         self.classifier = nn.Linear(d_model, num_classes)
 
-    def forward(self, x, hamer=None):
+    def forward(self, x, hamer=None, dinov2=None):
         B, C, T, V = x.shape
         # Spatial Processing (To be defined by subclasses)
         x = self.spatial_blocks(x)
@@ -822,6 +991,13 @@ class Base_Latent_Mamba_Wrapper(nn.Module):
                                   "was called without a `hamer` tensor.")
             hamer_feat = self.hamer_encoder(hamer.permute(0, 2, 1))  # (B, T, hamer_proj_dim)
             x = torch.cat([x, hamer_feat], dim=-1)
+
+        if self.dinov2_dim is not None:
+            if dinov2 is None:
+                raise ValueError("This model was built with dinov2_dim set, but forward() "
+                                  "was called without a `dinov2` tensor.")
+            dinov2_feat = self.dinov2_encoder(dinov2.permute(0, 2, 1))  # (B, T, dinov2_proj_dim)
+            x = torch.cat([x, dinov2_feat], dim=-1)
         
         z = self.latent_encoder(x)
         z_smooth = self.latent_mamba(z) + z
@@ -840,8 +1016,8 @@ class Base_Latent_Mamba_Wrapper(nn.Module):
 
 
 class CTRGCN_Mamba(Base_Latent_Mamba_Wrapper):
-    def __init__(self, num_vertices=65, in_channels=5, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hamer_dim=None, hamer_proj_dim=64, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
-        super().__init__(num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout, hamer_dim, hamer_proj_dim, mamba_d_state, mamba_d_conv, mamba_expand)
+    def __init__(self, num_vertices=65, in_channels=5, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hamer_dim=None, hamer_proj_dim=64, dinov2_dim=None, dinov2_proj_dim=128, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
+        super().__init__(num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout, hamer_dim, hamer_proj_dim, dinov2_dim, dinov2_proj_dim, mamba_d_state, mamba_d_conv, mamba_expand)
         A = SkeletonGraph(num_vertices=num_vertices).A
         self.spatial_blocks = nn.Sequential(
             CTRGCNBlock(in_channels, stgcn_channels, A),
@@ -849,8 +1025,8 @@ class CTRGCN_Mamba(Base_Latent_Mamba_Wrapper):
         )
 
 class InfoGCN_Mamba(Base_Latent_Mamba_Wrapper):
-    def __init__(self, num_vertices=65, in_channels=5, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hamer_dim=None, hamer_proj_dim=64, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
-        super().__init__(num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout, hamer_dim, hamer_proj_dim, mamba_d_state, mamba_d_conv, mamba_expand)
+    def __init__(self, num_vertices=65, in_channels=5, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hamer_dim=None, hamer_proj_dim=64, dinov2_dim=None, dinov2_proj_dim=128, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
+        super().__init__(num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout, hamer_dim, hamer_proj_dim, dinov2_dim, dinov2_proj_dim, mamba_d_state, mamba_d_conv, mamba_expand)
         A = SkeletonGraph(num_vertices=num_vertices).A
         self.spatial_blocks = nn.Sequential(
             InfoGCNBlock(in_channels, stgcn_channels, A),
@@ -858,16 +1034,16 @@ class InfoGCN_Mamba(Base_Latent_Mamba_Wrapper):
         )
 
 class ShiftGCN_Mamba(Base_Latent_Mamba_Wrapper):
-    def __init__(self, num_vertices=65, in_channels=5, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hamer_dim=None, hamer_proj_dim=64, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
-        super().__init__(num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout, hamer_dim, hamer_proj_dim, mamba_d_state, mamba_d_conv, mamba_expand)
+    def __init__(self, num_vertices=65, in_channels=5, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hamer_dim=None, hamer_proj_dim=64, dinov2_dim=None, dinov2_proj_dim=128, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
+        super().__init__(num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout, hamer_dim, hamer_proj_dim, dinov2_dim, dinov2_proj_dim, mamba_d_state, mamba_d_conv, mamba_expand)
         self.spatial_blocks = nn.Sequential(
             ShiftGCNBlock(in_channels, stgcn_channels, num_vertices),
             ShiftGCNBlock(stgcn_channels, stgcn_channels, num_vertices)
         )
 
 class SpatialTransformer_Mamba(Base_Latent_Mamba_Wrapper):
-    def __init__(self, num_vertices=65, in_channels=5, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hamer_dim=None, hamer_proj_dim=64, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
-        super().__init__(num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout, hamer_dim, hamer_proj_dim, mamba_d_state, mamba_d_conv, mamba_expand)
+    def __init__(self, num_vertices=65, in_channels=5, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hamer_dim=None, hamer_proj_dim=64, dinov2_dim=None, dinov2_proj_dim=128, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
+        super().__init__(num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout, hamer_dim, hamer_proj_dim, dinov2_dim, dinov2_proj_dim, mamba_d_state, mamba_d_conv, mamba_expand)
         self.spatial_blocks = nn.Sequential(
             SpatialTransformerBlock(in_channels, stgcn_channels, num_vertices),
             SpatialTransformerBlock(stgcn_channels, stgcn_channels, num_vertices)
@@ -933,8 +1109,8 @@ class HDGCNBlock(nn.Module):
 
 
 class HDGCN_Mamba(Base_Latent_Mamba_Wrapper):
-    def __init__(self, num_vertices=65, in_channels=5, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hd_max_hop=3, hamer_dim=None, hamer_proj_dim=64, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
-        super().__init__(num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout, hamer_dim, hamer_proj_dim, mamba_d_state, mamba_d_conv, mamba_expand)
+    def __init__(self, num_vertices=65, in_channels=5, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hd_max_hop=3, hamer_dim=None, hamer_proj_dim=64, dinov2_dim=None, dinov2_proj_dim=128, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
+        super().__init__(num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout, hamer_dim, hamer_proj_dim, dinov2_dim, dinov2_proj_dim, mamba_d_state, mamba_d_conv, mamba_expand)
         graph = SkeletonGraph(num_vertices=num_vertices)
         self.spatial_blocks = nn.Sequential(
             HDGCNBlock(in_channels, stgcn_channels, graph.get_hop_adjacencies(max_hop=hd_max_hop)),
@@ -1030,8 +1206,8 @@ class HyperSignBlock(nn.Module):
 
 
 class HyperSign_Mamba(Base_Latent_Mamba_Wrapper):
-    def __init__(self, num_vertices=65, in_channels=5, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, num_soft_hyperedges=8, hamer_dim=None, hamer_proj_dim=64, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
-        super().__init__(num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout, hamer_dim, hamer_proj_dim, mamba_d_state, mamba_d_conv, mamba_expand)
+    def __init__(self, num_vertices=65, in_channels=5, stgcn_channels=64, latent_dim=128, d_model=256, n_layers=4, num_classes=3, dropout=0.2, num_soft_hyperedges=8, hamer_dim=None, hamer_proj_dim=64, dinov2_dim=None, dinov2_proj_dim=128, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
+        super().__init__(num_vertices, stgcn_channels, latent_dim, d_model, n_layers, num_classes, dropout, hamer_dim, hamer_proj_dim, dinov2_dim, dinov2_proj_dim, mamba_d_state, mamba_d_conv, mamba_expand)
         graph = SkeletonGraph(num_vertices=num_vertices)
         A = graph.A
         hyperedges = graph.get_anatomical_hyperedges()

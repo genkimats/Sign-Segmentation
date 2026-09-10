@@ -126,6 +126,8 @@ def train_model(config):
     FACE_DIR = config.get("face_dir", "processed_data/face_keypoints_normalized")
     USE_HAMER_FEATURES = config.get("use_hamer_features", False)
     HAMER_DIR = config.get("hamer_dir", "processed_data/hamer_features")
+    USE_DINOV2_FEATURES = config.get("use_dinov2_features", False)
+    DINOV2_DIR = config.get("dinov2_dir", "processed_data/dinov2_features")
     D_MODEL = config["d_model"]
     N_LAYERS = config["n_layers"]
     FOCAL_LOSS_GAMMA = config.get("focal_loss_gamma", 2.0)
@@ -161,7 +163,9 @@ def train_model(config):
         use_face_keypoints=USE_FACE_KEYPOINTS,
         face_dir=FACE_DIR,
         use_hamer_features=USE_HAMER_FEATURES,
-        hamer_dir=HAMER_DIR
+        hamer_dir=HAMER_DIR,
+        use_dinov2_features=USE_DINOV2_FEATURES,
+        dinov2_dir=DINOV2_DIR
     )
     
     val_dataset = SignSegmentationDataset(
@@ -179,7 +183,9 @@ def train_model(config):
         use_face_keypoints=USE_FACE_KEYPOINTS,
         face_dir=FACE_DIR,
         use_hamer_features=USE_HAMER_FEATURES,
-        hamer_dir=HAMER_DIR
+        hamer_dir=HAMER_DIR,
+        use_dinov2_features=USE_DINOV2_FEATURES,
+        dinov2_dir=DINOV2_DIR
     )
     
     loader_batch_size = 1 if USE_FULL_LENGTH else BATCH_SIZE
@@ -231,6 +237,19 @@ def train_model(config):
             )
         model_kwargs["hamer_dim"] = 288  # 2 hands x (15x3x3 hand_pose + 1x3x3 global_orient)
 
+    # Same 13 models support a second, independent optional branch for DINOv2 visual
+    # hand-crop embeddings (SHuBERT/SignMusketeers-style) -- combinable with HaMeR.
+    DINOV2_SUPPORTED_MODELS = HAMER_SUPPORTED_MODELS
+    if USE_DINOV2_FEATURES:
+        if MODEL_NAME not in DINOV2_SUPPORTED_MODELS:
+            raise ValueError(
+                f"use_dinov2_features=True but model '{MODEL_NAME}' doesn't have a dinov2_dim "
+                f"argument implemented yet. Supported models: {DINOV2_SUPPORTED_MODELS}."
+            )
+        # 2 hands x DINOV2_FEATURE_DIM -- must match extract_dinov2_features.py's
+        # DINOV2_FEATURE_DIM setting (768 for the default dinov2_vitb14_reg variant).
+        model_kwargs["dinov2_dim"] = config.get("dinov2_dim", 2 * 768)
+
     MAX_REDOS = 5
     redo_count = 0
     total_nan_this_run = 0
@@ -242,12 +261,15 @@ def train_model(config):
         model = model_class(**model_kwargs).to(device)
         weights = torch.tensor(CLASS_WEIGHTS, dtype=torch.float).to(device)
 
-        # Centralizes the "pass hamer or don't" branching in one place instead of
-        # repeating it at every model(...) call site below.
-        def call_model(feats, ham):
+        # Centralizes the "pass hamer/dinov2 or don't" branching in one place instead
+        # of repeating it at every model(...) call site below.
+        def call_model(feats, ham, din):
+            kwargs = {}
             if USE_HAMER_FEATURES:
-                return model(feats, hamer=ham)
-            return model(feats)
+                kwargs["hamer"] = ham
+            if USE_DINOV2_FEATURES:
+                kwargs["dinov2"] = din
+            return model(feats, **kwargs)
         
         if LOSS_FUNCTION == "bcl":
             criterion = CombinedBoundaryLoss(focal_gamma=FOCAL_LOSS_GAMMA, contrastive_weight=config.get("contrastive_weight", 0.15))
@@ -312,13 +334,22 @@ def train_model(config):
             loop = tqdm(train_loader, desc=f"Epoch {epoch}/{EPOCHS} [Train]", leave=False)
             # Add the 3 underscores to absorb the vid, start, and end metadata!
             for batch in loop:
+                # Generic unpacking: features, labels, [hamer], [dinov2], vid, start, end --
+                # optional streams appear in that fixed order only when their flag is set
+                # (matches SignSegmentationDataset.__getitem__'s exact construction), so
+                # popping from the front of the "extras" slice in the same order correctly
+                # recovers each one regardless of which combination is active.
+                features, labels = batch[0], batch[1]
+                extras = list(batch[2:-3])
+                hamer = extras.pop(0) if USE_HAMER_FEATURES else None
+                dinov2 = extras.pop(0) if USE_DINOV2_FEATURES else None
+
                 if USE_HAMER_FEATURES:
-                    features, labels, hamer, _, _, _ = batch
                     hamer = hamer.to(device)
                     hamer = torch.nan_to_num(hamer, nan=0.0, posinf=0.0, neginf=0.0)
-                else:
-                    features, labels, _, _, _ = batch
-                    hamer = None
+                if USE_DINOV2_FEATURES:
+                    dinov2 = dinov2.to(device)
+                    dinov2 = torch.nan_to_num(dinov2, nan=0.0, posinf=0.0, neginf=0.0)
 
                 features = features.to(device)
                 labels = labels.to(device)
@@ -327,15 +358,15 @@ def train_model(config):
                 optimizer.zero_grad()
                 
                 if LOSS_FUNCTION == "bcl":
-                    logits, embeddings = call_model(features, hamer)
+                    logits, embeddings = call_model(features, hamer, dinov2)
                     loss, _, _ = criterion(logits, embeddings, labels)
                 elif LOSS_FUNCTION == "unified_ctc":
-                    logits, _ = call_model(features, hamer)
+                    logits, _ = call_model(features, hamer, dinov2)
                     hard_labels = torch.argmax(labels, dim=1)
                     loss, _, _ = criterion(logits, hard_labels)
                 else:
                     # Depending on the model, it might return (logits, embeddings) or just logits
-                    output = call_model(features, hamer)
+                    output = call_model(features, hamer, dinov2)
                     logits = output[0] if isinstance(output, tuple) else output
                     hard_labels = torch.argmax(labels, dim=1)
                     loss = criterion(logits, hard_labels)
@@ -381,29 +412,33 @@ def train_model(config):
             
             with torch.no_grad():
                 val_loop = tqdm(val_loader, desc=f"Epoch {epoch}/{EPOCHS} [Val]", leave=False)
-                # It should look something like this:
                 for batch in val_loop:
+                    features, labels = batch[0], batch[1]
+                    vids, start_indices, end_indices = batch[-3], batch[-2], batch[-1]
+                    extras = list(batch[2:-3])
+                    hamer = extras.pop(0) if USE_HAMER_FEATURES else None
+                    dinov2 = extras.pop(0) if USE_DINOV2_FEATURES else None
+
                     if USE_HAMER_FEATURES:
-                        features, labels, hamer, vids, start_indices, end_indices = batch
                         hamer = hamer.to(device)
                         hamer = torch.nan_to_num(hamer, nan=0.0, posinf=0.0, neginf=0.0)
-                    else:
-                        features, labels, vids, start_indices, end_indices = batch
-                        hamer = None
+                    if USE_DINOV2_FEATURES:
+                        dinov2 = dinov2.to(device)
+                        dinov2 = torch.nan_to_num(dinov2, nan=0.0, posinf=0.0, neginf=0.0)
 
                     features = features.to(device)
                     labels = labels.to(device)
                     features = torch.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
                     
                     if LOSS_FUNCTION == "bcl":
-                        logits, embeddings = call_model(features, hamer)
+                        logits, embeddings = call_model(features, hamer, dinov2)
                         loss, _, _ = criterion(logits, embeddings, labels)
                     elif LOSS_FUNCTION == "unified_ctc":
-                        logits, _ = call_model(features, hamer)
+                        logits, _ = call_model(features, hamer, dinov2)
                         hard_labels = torch.argmax(labels, dim=1)
                         loss, _, _ = criterion(logits, hard_labels)
                     else:
-                        output = call_model(features, hamer)
+                        output = call_model(features, hamer, dinov2)
                         logits = output[0] if isinstance(output, tuple) else output
                         hard_labels = torch.argmax(labels, dim=1)
                         loss = criterion(logits, hard_labels)

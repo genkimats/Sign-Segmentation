@@ -36,6 +36,8 @@ MAMBA_DEFAULTS = {
     "face_dir": "processed_data/face_keypoints_normalized",
     "use_hamer_features": False,
     "hamer_dir": "processed_data/hamer_features",
+    "use_dinov2_features": False,
+    "dinov2_dir": "processed_data/dinov2_features",
     "d_model": 256,
     "n_layers": 4,     
     "mamba_d_state": 16,
@@ -192,36 +194,11 @@ def expand_experiments_with_seeds(experiments, seed_indices, seeds=(42, 123, 202
 
 EXPERIMENTS_TO_RUN = [
     {
-        "basename": "stgcn_bimamba",
-        "window_size": 64,
-        "overlap": 0,
-        "mamba_d_state": 32,
-        "use_hamer_features": True,
-        "description": "overlap ratio (0/64), d_state=32, hamer"
-    },
-    {
-        "basename": "stgcn_bimamba",
-        "window_size": 64,
-        "overlap": 0,
-        "mamba_d_state": 64,
-        "use_hamer_features": True,
-        "description": "overlap ratio (0/64), d_state=64, hamer"
-    },
-    {
-        "basename": "stgcn_bimamba",
+        "basename": "stgcn_mamba",
         "window_size": 256,
-        "overlap": 0,
-        "mamba_d_state": 32,
-        "use_hamer_features": True,
-        "description": "overlap ratio (0/256), d_state=32, hamer"
-    },
-    {
-        "basename": "stgcn_bimamba",
-        "window_size": 256,
-        "overlap": 0,
-        "mamba_d_state": 64,
-        "use_hamer_features": True,
-        "description": "overlap ratio (0/256), d_state=64, hamer"
+        "overlap": 64,
+        "loss_function": "weighted_ce",
+        "description": "overlap ratio (64/256), loss=weighted_ce, spatial_angles"
     },
 ]
 

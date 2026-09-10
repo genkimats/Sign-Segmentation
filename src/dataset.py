@@ -47,7 +47,7 @@ def apply_label_smoothing(labels_array, window_size=5):
     return soft_labels
 
 class SignSegmentationDataset(Dataset):
-    def __init__(self, keypoints_dir, labels_dir, split_file="dataset_splits.json", split="train", window_size=16, overlap=0, tolerance_window=5, use_full_length=False, base_features=None, kinematic_features=None, temporal_downsample_factor=1, use_face_keypoints=False, face_dir="processed_data/face_keypoints_normalized", use_hamer_features=False, hamer_dir="processed_data/hamer_features"):
+    def __init__(self, keypoints_dir, labels_dir, split_file="dataset_splits.json", split="train", window_size=16, overlap=0, tolerance_window=5, use_full_length=False, base_features=None, kinematic_features=None, temporal_downsample_factor=1, use_face_keypoints=False, face_dir="processed_data/face_keypoints_normalized", use_hamer_features=False, hamer_dir="processed_data/hamer_features", use_dinov2_features=False, dinov2_dir="processed_data/dinov2_features"):
         self.labels_dir = labels_dir
         self.kinetic_dir = "processed_data/kinematic_features" 
         self.split_file = split_file
@@ -61,6 +61,8 @@ class SignSegmentationDataset(Dataset):
         self.face_dir = face_dir
         self.use_hamer_features = use_hamer_features
         self.hamer_dir = hamer_dir
+        self.use_dinov2_features = use_dinov2_features
+        self.dinov2_dir = dinov2_dir
 
         self.feature_map = {
             "x-cord": 0,
@@ -109,6 +111,9 @@ class SignSegmentationDataset(Dataset):
             "missing_hamer": 0,
             "hamer_load_error": 0,
             "hamer_empty": 0,
+            "missing_dinov2": 0,
+            "dinov2_load_error": 0,
+            "dinov2_frame_mismatch": 0,
         }
 
         print(f"[{split.upper()}] Loading {len(self.video_ids)} videos into RAM Cache (Bypassing Disk I/O)...")
@@ -213,9 +218,15 @@ class SignSegmentationDataset(Dataset):
                 # Flatten each hand's (15,3,3) pose + (3,3) orientation into 144 values,
                 # concatenate left+right -> 288 per frame (matches F in R^288 from the
                 # 2025 paper exactly: 2 hands x (15x3x3 + 1x3x3) = 2 x 144 = 288).
-                hand_pose_flat = torch.as_tensor(hand_pose, dtype=torch.float32).reshape(T_ham, 2, 135)
-                global_orient_flat = torch.as_tensor(global_orient, dtype=torch.float32).reshape(T_ham, 2, 9)
-                hamer_flat = torch.cat([hand_pose_flat, global_orient_flat], dim=-1).reshape(T_ham, 288)
+                # Flatten to match the 2025 paper's construction EXACTLY: flatten ALL of H
+                # (both hands, all 15 joints) into H' in R^270 FIRST, then ALL of G (both
+                # hands) into G' in R^18, then concatenate [H' | G'] = F in R^288. NOT
+                # interleaved per-hand (that would give the same 288 numbers in a different
+                # order -- mathematically equivalent once fed into a Linear layer, but not
+                # a literal match to the paper's stated construction).
+                hand_pose_flat = torch.as_tensor(hand_pose, dtype=torch.float32).reshape(T_ham, 270)    # H' in R^270
+                global_orient_flat = torch.as_tensor(global_orient, dtype=torch.float32).reshape(T_ham, 18)  # G' in R^18
+                hamer_flat = torch.cat([hand_pose_flat, global_orient_flat], dim=-1)  # F in R^288, [H' | G']
 
                 # extract_hamer_features.py runs at ham_downsample x the native frame
                 # rate (every Nth frame). Upsample back to num_frames via nearest-
@@ -224,6 +235,35 @@ class SignSegmentationDataset(Dataset):
                 # need to know HaMeR was extracted at a different rate.
                 frame_to_hamer_idx = (torch.arange(num_frames) // ham_downsample).clamp(max=T_ham - 1)
                 hamer_full = hamer_flat[frame_to_hamer_idx].to(torch.float16)  # (num_frames, 288)
+
+            # --- OPTIONAL: DINOV2 VISUAL HAND-CROP FEATURES (from extract_dinov2_features.py) ---
+            # Same treatment as HaMeR -- kept as a SEPARATE (num_frames, 2*D) stream, fused
+            # inside the model via its own MLP branch, not folded into the per-vertex graph
+            # tensor. This is an APPEARANCE feature (comes straight from pixels, no geometric
+            # derivation at all), so it's a genuinely different information source than every
+            # other stream here -- combinable independently with use_hamer_features.
+            dinov2_full = None
+            if self.use_dinov2_features:
+                dinov2_path = os.path.join(self.dinov2_dir, f"{vid}_dinov2.pt")
+                if not os.path.exists(dinov2_path):
+                    skip_counts["missing_dinov2"] += 1
+                    continue
+
+                try:
+                    dinov2_data = torch.load(dinov2_path, weights_only=False)
+                    dinov2_feats = dinov2_data["features"]  # (T_dino, 2, D)
+                except Exception:
+                    skip_counts["dinov2_load_error"] += 1
+                    continue
+
+                if dinov2_feats.shape[0] != num_frames:
+                    skip_counts["dinov2_frame_mismatch"] += 1
+                    continue  # extracted at full frame rate by default -- a mismatch here means
+                              # something upstream (frame count, video decode) doesn't line up;
+                              # skip rather than risk silently misaligning it with labels/body
+
+                D = dinov2_feats.shape[-1]
+                dinov2_full = torch.as_tensor(dinov2_feats, dtype=torch.float32).reshape(num_frames, 2 * D).to(torch.float16)
 
             # Compress to FP16 to keep RAM super low, and save it to the dictionary!
             final_tensor = final_tensor.to(torch.float16)
@@ -234,6 +274,8 @@ class SignSegmentationDataset(Dataset):
             }
             if self.use_hamer_features:
                 self.video_cache[vid]['hamer_features'] = hamer_full
+            if self.use_dinov2_features:
+                self.video_cache[vid]['dinov2_features'] = dinov2_full
             
             # Map out the windows only for videos successfully loaded
             self.samples.append({'video_id': vid, 'start_idx': 0, 'end_idx': num_frames})
@@ -259,11 +301,12 @@ class SignSegmentationDataset(Dataset):
                 f"(0 of {total_attempted} videos were successfully cached) -- this dataset is "
                 f"EMPTY. Skip reasons: {skip_counts}. This fails here, loudly, instead of three "
                 f"layers deep in DataLoader/RandomSampler as a confusing 'num_samples=0' error. "
-                f"If missing_face/missing_hamer is nonzero, check that {self.face_dir!r} / "
-                f"{self.hamer_dir!r} actually contain files named EXACTLY like your split's "
-                f"video ids (e.g. '{self.video_ids[0]}.npy' or '{self.video_ids[0]}_hamer.pt' if "
-                f"that helps) -- a naming-convention mismatch between how a feature stream was "
-                f"extracted and how body/hand keypoints are named is the most common cause."
+                f"If missing_face/missing_hamer/missing_dinov2 is nonzero, check that "
+                f"{self.face_dir!r} / {self.hamer_dir!r} / {self.dinov2_dir!r} actually contain "
+                f"files named EXACTLY like your split's video ids (e.g. '{self.video_ids[0]}.npy', "
+                f"'{self.video_ids[0]}_hamer.pt', or '{self.video_ids[0]}_dinov2.pt' if that helps) "
+                f"-- a naming-convention mismatch between how a feature stream was extracted and "
+                f"how body/hand keypoints are named is the most common cause."
             )
 
     def __len__(self):
@@ -294,6 +337,10 @@ class SignSegmentationDataset(Dataset):
         if self.use_hamer_features:
             window_hamer = cached_data['hamer_features'][start_idx:end_idx].to(torch.float32)  # (T_win, 288)
             hamer_tensor = window_hamer.permute(1, 0)  # (288, T_win) -- channel-first, matches final_input_tensor's convention
+
+        if self.use_dinov2_features:
+            window_dinov2 = cached_data['dinov2_features'][start_idx:end_idx].to(torch.float32)  # (T_win, 2*D)
+            dinov2_tensor = window_dinov2.permute(1, 0)  # (2*D, T_win) -- channel-first
         
         # 4. Handle Downsampling & Padding
         if self.temporal_downsample_factor > 1:
@@ -301,6 +348,8 @@ class SignSegmentationDataset(Dataset):
             labels_tensor = labels_tensor[:, ::self.temporal_downsample_factor]
             if self.use_hamer_features:
                 hamer_tensor = hamer_tensor[:, ::self.temporal_downsample_factor]
+            if self.use_dinov2_features:
+                dinov2_tensor = dinov2_tensor[:, ::self.temporal_downsample_factor]
             
         if not self.use_full_length:
             C, T, V = final_input_tensor.shape
@@ -318,10 +367,22 @@ class SignSegmentationDataset(Dataset):
                 if self.use_hamer_features:
                     hamer_pad = torch.zeros(hamer_tensor.shape[0], pad_T, dtype=torch.float32)
                     hamer_tensor = torch.cat([hamer_tensor, hamer_pad], dim=1)
+
+                if self.use_dinov2_features:
+                    dinov2_pad = torch.zeros(dinov2_tensor.shape[0], pad_T, dtype=torch.float32)
+                    dinov2_tensor = torch.cat([dinov2_tensor, dinov2_pad], dim=1)
                 
         start_scaled = start_idx // self.temporal_downsample_factor
         end_scaled = end_idx // self.temporal_downsample_factor
         
+        # Consistent ordering across all 4 combinations: features, labels, [hamer],
+        # [dinov2], vid, start, end -- optional streams appear in this fixed order
+        # whenever enabled, never swapped, so callers can unpack unambiguously based
+        # on which two flags are set.
+        extras = []
         if self.use_hamer_features:
-            return final_input_tensor, labels_tensor, hamer_tensor, vid, start_scaled, end_scaled
-        return final_input_tensor, labels_tensor, vid, start_scaled, end_scaled
+            extras.append(hamer_tensor)
+        if self.use_dinov2_features:
+            extras.append(dinov2_tensor)
+
+        return (final_input_tensor, labels_tensor, *extras, vid, start_scaled, end_scaled)
