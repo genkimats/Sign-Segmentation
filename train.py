@@ -247,8 +247,10 @@ def train_model(config):
                 f"argument implemented yet. Supported models: {DINOV2_SUPPORTED_MODELS}."
             )
         # 2 hands x DINOV2_FEATURE_DIM -- must match extract_dinov2_features.py's
-        # DINOV2_FEATURE_DIM setting (768 for the default dinov2_vitb14_reg variant).
-        model_kwargs["dinov2_dim"] = config.get("dinov2_dim", 2 * 768)
+        # DINOV2_FEATURE_DIM setting (384 for the current default dinov2_vits14_reg
+        # variant; update this default too if you switch extraction back to a
+        # bigger variant).
+        model_kwargs["dinov2_dim"] = config.get("dinov2_dim", 2 * 384)
 
     MAX_REDOS = 5
     redo_count = 0

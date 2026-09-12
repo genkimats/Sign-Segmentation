@@ -46,21 +46,22 @@ from tqdm import tqdm
 # ==============================================================================
 # CONFIGURATION
 # ==============================================================================
-INPUT_VIDEO_DIR = os.path.expanduser("./raw_data/videos")
+INPUT_VIDEO_DIR = os.path.expanduser("~/Genki_GR/Sign-Segmentation/data/raw_videos")
 INPUT_BOX_DIR = "processed_data/hand_boxes"
 OUTPUT_FEATURE_DIR = "processed_data/dinov2_features"
 os.makedirs(OUTPUT_FEATURE_DIR, exist_ok=True)
 
-# DINOv2 model variant. SHuBERT/SignMusketeers use the Small variant (384-dim)
-# specifically for efficiency; since efficiency isn't a priority here, this
-# defaults to the Base variant (768-dim) for richer features instead. The
-# "_reg" suffix uses register tokens (Darcet et al. 2024), which both those
-# papers also used -- generally cleaner attention maps, recommended over the
-# non-reg variants. Change to 'dinov2_vits14_reg' (384-dim, matches the
-# literature exactly) or 'dinov2_vitl14_reg' (1024-dim, heaviest) if you want
-# a different point on that tradeoff -- just update DINOV2_FEATURE_DIM to match.
-DINOV2_MODEL_NAME = "dinov2_vitb14_reg"
-DINOV2_FEATURE_DIM = 768  # vits14=384, vitb14=768, vitl14=1024, vitg14=1536
+# DINOv2 model variant. Uses the Small variant (384-dim) -- matches what
+# SHuBERT/SignMusketeers actually validated in the literature, and keeps
+# storage manageable (the Base variant's full extraction came out to ~100GB,
+# which doesn't fit in typical RAM budgets alongside other feature streams).
+# The "_reg" suffix uses register tokens (Darcet et al. 2024), which both
+# those papers also used -- generally cleaner attention maps, recommended
+# over the non-reg variants. Change to 'dinov2_vitb14_reg' (768-dim) or
+# 'dinov2_vitl14_reg' (1024-dim) for richer-but-heavier features if storage
+# allows -- just update DINOV2_FEATURE_DIM to match.
+DINOV2_MODEL_NAME = "dinov2_vits14_reg"
+DINOV2_FEATURE_DIM = 384  # vits14=384, vitb14=768, vitl14=1024, vitg14=1536
 
 CROP_SIZE = 224  # must be a multiple of 14 (DINOv2's patch size); 224 = 16x16 patches
 BATCH_SIZE = 64  # crops per forward pass -- lower this if you hit GPU OOM
@@ -161,8 +162,13 @@ def process_one_video(model, video_path, box_path, save_path):
     cap.release()
     flush_queue()
 
+    # Cast to float16 for STORAGE only -- accumulation above stays float32 for
+    # numerical safety, matching how the rest of this pipeline handles precision
+    # (e.g. dataset.py's final_tensor.to(torch.float16) right before caching).
+    # Halves storage size with negligible precision loss for a value that's about
+    # to be fed through a Linear layer anyway.
     torch.save({
-        "features": features,  # (T, 2, DINOV2_FEATURE_DIM), zero where a hand wasn't detected
+        "features": features.half(),  # (T, 2, DINOV2_FEATURE_DIM), zero where a hand wasn't detected
         "model_name": DINOV2_MODEL_NAME,
         "temporal_downsample_factor": cached["temporal_downsample_factor"],
     }, save_path)
