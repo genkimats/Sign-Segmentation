@@ -194,12 +194,29 @@ def expand_experiments_with_seeds(experiments, seed_indices, seeds=(42, 123, 202
 
 EXPERIMENTS_TO_RUN = [
     {
-        "basename": "stgcn_mamba",
-        "window_size": 256,
-        "overlap": 64,
+        "basename": "stgcn_bimamba",
+        "window_size": 64,
+        "overlap": 0,
+        "use_dinov2_features": True,
         "loss_function": "weighted_ce",
-        "description": "overlap ratio (64/256), loss=weighted_ce, spatial_angles"
+        "description": "overlap ratio (0/64), dinov2"
     },
+    {
+        "basename": "stgcn_bilstm",
+        "window_size": 64,
+        "overlap": 0,
+        "use_dinov2_features": True,
+        "loss_function": "weighted_ce",
+        "description": "overlap ratio (0/64), dinov2"
+    },
+    {
+        "basename": "stgcn_transformer",
+        "window_size": 64,
+        "overlap": 0,
+        "use_dinov2_features": True,
+        "loss_function": "weighted_ce",
+        "description": "overlap ratio (0/64), dinov2"
+    }
 ]
 
 if CHOSEN_TYPE == 'mamba':

@@ -7,11 +7,11 @@ import os
 # pipeline (processed_data/keypoints, BIO_tags, dataset_splits.json) uses the
 # participant-letter convention ("_A"/"_B") instead. Renaming is pure
 # metadata -- file CONTENT is untouched, nothing needs re-extracting.
-TARGET_DIR = "processed_data/hamer_features"
+TARGET_DIR = "processed_data/dinov2_features"
 
 RENAME_SUFFIXES = [
-    ("_1a1_hamer.pt", "_A_hamer.pt"),
-    ("_1b1_hamer.pt", "_B_hamer.pt"),
+    ("_1a1_dinov2.pt", "_A_dinov2.pt"),
+    ("_1b1_dinov2.pt", "_B_dinov2.pt"),
 ]
 
 # Defaults to a dry run (prints what WOULD be renamed, renames nothing).
