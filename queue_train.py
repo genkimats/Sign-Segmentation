@@ -199,7 +199,7 @@ EXPERIMENTS_TO_RUN = [
         "overlap": 0,
         "use_dinov2_features": True,
         "loss_function": "weighted_ce",
-        "description": "overlap ratio (0/64), dinov2 (100GB)"
+        "description": "overlap ratio (0/64), dinov2"
     },
     {
         "basename": "stgcn_bilstm",
@@ -207,7 +207,7 @@ EXPERIMENTS_TO_RUN = [
         "overlap": 0,
         "use_dinov2_features": True,
         "loss_function": "weighted_ce",
-        "description": "overlap ratio (0/64), dinov2 (100GB)"
+        "description": "overlap ratio (0/64), dinov2"
     },
     {
         "basename": "stgcn_transformer",
@@ -215,7 +215,7 @@ EXPERIMENTS_TO_RUN = [
         "overlap": 0,
         "use_dinov2_features": True,
         "loss_function": "weighted_ce",
-        "description": "overlap ratio (0/64), dinov2 (100GB)"
+        "description": "overlap ratio (0/64), dinov2"
     }
 ]
 
