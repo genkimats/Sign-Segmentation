@@ -41,7 +41,7 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 # variance -- the script reports actual variance retained at the end so you can
 # judge whether this target is a good tradeoff for your data before committing
 # to it in a real experiment.
-TARGET_DIM = 340
+TARGET_DIM = 300
 
 # How many frame-embeddings to sample (across all videos, both hands) to FIT
 # the PCA. This is NOT how much data gets reduced -- every frame of every video
