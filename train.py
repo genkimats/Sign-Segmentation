@@ -127,7 +127,7 @@ def train_model(config):
     USE_HAMER_FEATURES = config.get("use_hamer_features", False)
     HAMER_DIR = config.get("hamer_dir", "processed_data/hamer_features")
     USE_DINOV2_FEATURES = config.get("use_dinov2_features", False)
-    DINOV2_DIR = config.get("dinov2_dir", "processed_data/dinov2_features")
+    DINOV2_DIR = config.get("dinov2_dir", "processed_data/dinov2_features_reduced")
     D_MODEL = config["d_model"]
     N_LAYERS = config["n_layers"]
     FOCAL_LOSS_GAMMA = config.get("focal_loss_gamma", 2.0)
@@ -250,7 +250,7 @@ def train_model(config):
         # DINOV2_FEATURE_DIM setting (384 for the current default dinov2_vits14_reg
         # variant; update this default too if you switch extraction back to a
         # bigger variant).
-        model_kwargs["dinov2_dim"] = config.get("dinov2_dim", 2 * 384)
+        model_kwargs["dinov2_dim"] = config.get("dinov2_dim", 2 * 340)
 
     MAX_REDOS = 5
     redo_count = 0
