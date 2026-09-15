@@ -37,7 +37,7 @@ MAMBA_DEFAULTS = {
     "use_hamer_features": False,
     "hamer_dir": "processed_data/hamer_features",
     "use_dinov2_features": False,
-    "dinov2_dir": "processed_data/dinov2_features",
+    "dinov2_dir": "processed_data/dinov2_features_reduced",
     "d_model": 256,
     "n_layers": 4,     
     "mamba_d_state": 16,
