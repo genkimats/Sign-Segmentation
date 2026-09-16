@@ -214,24 +214,24 @@ EXPERIMENTS_TO_RUN = [
         "use_hamer_features": True,
         "description": "overlap ratio (768/1024), hamer"
     },
-    {
-        "basename": "stgcn_bimamba",
-        "epochs": 450,
-        "patience": 50,
-        "window_size": 1024,
-        "overlap": 0,
-        "use_hamer_features": True,
-        "description": "overlap ratio (0/1024), epoch=450, patience=50, hamer"
-    },
-    {
-        "basename": "stgcn_bimamba",
-        "epochs": 250,
-        "patience": 40,
-        "window_size": 512,
-        "overlap": 0,
-        "use_hamer_features": True,
-        "description": "overlap ratio (0/512), epoch=250, patience=40, hamer"
-    }
+    # {
+    #     "basename": "stgcn_bimamba",
+    #     "epochs": 450,
+    #     "patience": 50,
+    #     "window_size": 1024,
+    #     "overlap": 0,
+    #     "use_hamer_features": True,
+    #     "description": "overlap ratio (0/1024), epoch=450, patience=50, hamer"
+    # },
+    # {
+    #     "basename": "stgcn_bimamba",
+    #     "epochs": 250,
+    #     "patience": 40,
+    #     "window_size": 512,
+    #     "overlap": 0,
+    #     "use_hamer_features": True,
+    #     "description": "overlap ratio (0/512), epoch=250, patience=40, hamer"
+    # }
 ]
 
 if CHOSEN_TYPE == 'mamba':
