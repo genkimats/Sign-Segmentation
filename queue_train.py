@@ -193,45 +193,45 @@ def expand_experiments_with_seeds(experiments, seed_indices, seeds=(42, 123, 202
 
 
 EXPERIMENTS_TO_RUN = [
-    # {
-    #     "basename": "stgcn_bimamba",
-    #     "window_size": 256,
-    #     "overlap": 128,
-    #     "use_hamer_features": True,
-    #     "description": "overlap ratio (128/356), hamer"
-    # },
-    # {
-    #     "basename": "stgcn_bimamba",
-    #     "window_size": 512,
-    #     "overlap": 384,
-    #     "use_hamer_features": True,
-    #     "description": "overlap ratio (384/512), hamer"
-    # },
-    # {
-    #     "basename": "stgcn_bimamba",
-    #     "window_size": 1024,
-    #     "overlap": 768,
-    #     "use_hamer_features": True,
-    #     "description": "overlap ratio (768/1024), hamer"
-    # },
     {
         "basename": "stgcn_bimamba",
-        "epochs": 450,
-        "patience": 50,
-        "window_size": 1024,
-        "overlap": 0,
+        "window_size": 256,
+        "overlap": 128,
         "use_hamer_features": True,
-        "description": "overlap ratio (0/1024), epoch=450, patience=50, hamer"
+        "description": "overlap ratio (128/356), hamer"
     },
     {
         "basename": "stgcn_bimamba",
-        "epochs": 250,
-        "patience": 40,
         "window_size": 512,
-        "overlap": 0,
+        "overlap": 384,
         "use_hamer_features": True,
-        "description": "overlap ratio (0/512), epoch=250, patience=40, hamer"
-    }
+        "description": "overlap ratio (384/512), hamer"
+    },
+    {
+        "basename": "stgcn_bimamba",
+        "window_size": 1024,
+        "overlap": 768,
+        "use_hamer_features": True,
+        "description": "overlap ratio (768/1024), hamer"
+    },
+    # {
+    #     "basename": "stgcn_bimamba",
+    #     "epochs": 450,
+    #     "patience": 50,
+    #     "window_size": 1024,
+    #     "overlap": 0,
+    #     "use_hamer_features": True,
+    #     "description": "overlap ratio (0/1024), epoch=450, patience=50, hamer"
+    # },
+    # {
+    #     "basename": "stgcn_bimamba",
+    #     "epochs": 250,
+    #     "patience": 40,
+    #     "window_size": 512,
+    #     "overlap": 0,
+    #     "use_hamer_features": True,
+    #     "description": "overlap ratio (0/512), epoch=250, patience=40, hamer"
+    # }
 ]
 
 if CHOSEN_TYPE == 'mamba':
