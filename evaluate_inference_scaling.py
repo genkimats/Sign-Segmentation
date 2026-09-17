@@ -59,11 +59,15 @@ CHECKPOINTS = {
     "stgcn_mamba":       {"path": "saved_models/stgcn_mamba-292.pth",       "class": STGCN_Mamba,       "kwargs": {}},
     "stgcn_bimamba":     {"path": "saved_models/stgcn_bimamba-12.pth",     "class": STGCN_BiMamba,     "kwargs": {}},
     "stgcn_bilstm":      {"path": "saved_models/stgcn_bilstm-15.pth",      "class": STGCN_BiLSTM,      "kwargs": {}},
-    "stgcn_transformer": {"path": "saved_models/stgcn_transformer-09.pth", "class": STGCN_Transformer, "kwargs": {"nhead": 8}},
+    "stgcn_transformer": {"path": "saved_models/stgcn_transformer-XXX.pth", "class": STGCN_Transformer, "kwargs": {"nhead": 8}},
 }
 
 TRAINED_WINDOW_SIZE = 64  # the window size these checkpoints were actually trained at
-IN_CHANNELS = 3           # coords-only (x,y,z) -- update if your checkpoints used spatial_angles etc.
+# in_channels is no longer configured here -- it's auto-detected per checkpoint,
+# from the checkpoint's own first-layer weight shape (see detect_in_channels()
+# below). This avoids exactly the failure mode you'd hit from a stale/incorrect
+# assumption here: a hardcoded number that has to be kept in sync by hand with
+# whatever config each checkpoint actually used.
 NUM_VERTICES = 65
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -84,10 +88,35 @@ OUTPUT_DIR = "experiments/inference_scaling"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 
-def load_model(name, num_vertices, in_channels):
+def detect_in_channels(state_dict):
+    """
+    Infers in_channels directly from the checkpoint's own first-layer weight
+    shape, instead of relying on a hardcoded IN_CHANNELS constant that has to
+    be manually kept in sync with whatever config a given run actually used --
+    the same class of bug that hit dinov2_dim/hamer_dim earlier. All four
+    architectures here (STGCN_Mamba, STGCN_BiMamba, STGCN_BiLSTM,
+    STGCN_Transformer) share the identical stgcn_blocks.0.gcn.conv naming,
+    since they're all built on the same STGCNBlock as their first spatial
+    layer, so this one key works for all of them.
+    """
+    key = "stgcn_blocks.0.gcn.conv.weight"
+    if key not in state_dict:
+        raise KeyError(f"Expected key {key!r} not found in checkpoint -- this architecture's "
+                        f"first layer isn't named the way this detector assumes. Available "
+                        f"keys (first 5): {list(state_dict.keys())[:5]}")
+    return state_dict[key].shape[1]
+
+
+def load_model(name, num_vertices):
     cfg = CHECKPOINTS[name]
-    model = cfg["class"](num_vertices=num_vertices, in_channels=in_channels, **cfg["kwargs"]).to(DEVICE)
     state_dict = torch.load(cfg["path"], map_location=DEVICE, weights_only=False)
+
+    detected_in_channels = detect_in_channels(state_dict)
+    print(f"  [{name}] detected in_channels={detected_in_channels} from checkpoint "
+          f"(expected 3 for a coords-only run -- double check the checkpoint path if this "
+          f"looks wrong for what you meant to test)")
+
+    model = cfg["class"](num_vertices=num_vertices, in_channels=detected_in_channels, **cfg["kwargs"]).to(DEVICE)
     model.load_state_dict(state_dict)
     model.eval()
     return model
@@ -189,7 +218,7 @@ def run_real_video_experiment():
 
         for model_name in CHECKPOINTS:
             print(f"\n--- {model_name} ({split} split) ---")
-            model = load_model(model_name, NUM_VERTICES, IN_CHANNELS)
+            model = load_model(model_name, NUM_VERTICES)
 
             for idx in range(len(dataset)):
                 features, labels, vid, _, _ = dataset[idx]
@@ -258,7 +287,7 @@ def run_synthetic_length_sweep():
     results = []
     for model_name in CHECKPOINTS:
         print(f"\n--- {model_name} ---")
-        model = load_model(model_name, NUM_VERTICES, IN_CHANNELS)
+        model = load_model(model_name, NUM_VERTICES)
 
         for target_length in SYNTHETIC_LENGTHS:
             sequence = build_synthetic_sequence(base_features, target_length).unsqueeze(0).to(DEVICE)
