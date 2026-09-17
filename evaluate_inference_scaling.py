@@ -50,7 +50,7 @@ import torch
 import numpy as np
 
 from src.dataset import SignSegmentationDataset
-from src.models import STGCN_Mamba, STGCN_BiMamba, STGCN_BiLSTM, STGCN_Transformer
+from src.models import STGCN_Mamba, STGCN_BiMamba, STGCN_BiLSTM, STGCN_Transformer, PositionalEncoding
 
 # ==============================================================================
 # CONFIGURATION -- fill in your actual best window=64, coords-only checkpoints
@@ -63,11 +63,16 @@ CHECKPOINTS = {
 }
 
 TRAINED_WINDOW_SIZE = 64  # the window size these checkpoints were actually trained at
-# in_channels is no longer configured here -- it's auto-detected per checkpoint,
-# from the checkpoint's own first-layer weight shape (see detect_in_channels()
-# below). This avoids exactly the failure mode you'd hit from a stale/incorrect
-# assumption here: a hardcoded number that has to be kept in sync by hand with
-# whatever config each checkpoint actually used.
+# Trained checkpoints' Transformer positional encoding was built with max_len=5000
+# (see models.py's PositionalEncoding default) -- fine during training (windows
+# never exceeded a few hundred frames), but a hard crash on any real video or
+# synthetic length beyond it (your test set includes at least one 24,068-frame
+# video). Since the encoding is a pure deterministic function of position with NO
+# learned parameters, it's safe to swap in a longer one AFTER loading the
+# checkpoint -- this changes nothing about what the model learned, it just
+# extends how far it CAN be evaluated. Must exceed your longest real video AND
+# your longest synthetic sweep length.
+TRANSFORMER_MAX_LEN = 50000
 NUM_VERTICES = 65
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -118,6 +123,15 @@ def load_model(name, num_vertices):
 
     model = cfg["class"](num_vertices=num_vertices, in_channels=detected_in_channels, **cfg["kwargs"]).to(DEVICE)
     model.load_state_dict(state_dict)
+
+    if hasattr(model, "pos_encoder"):
+        d_model = model.pos_encoder.pe.shape[-1]
+        dropout_p = model.pos_encoder.dropout.p
+        model.pos_encoder = PositionalEncoding(d_model, dropout=dropout_p, max_len=TRANSFORMER_MAX_LEN).to(DEVICE)
+        print(f"  [{name}] extended positional encoding max_len to {TRANSFORMER_MAX_LEN} "
+              f"(checkpoint was trained with max_len=5000 -- swapped post-load since this "
+              f"buffer has no learned parameters)")
+
     model.eval()
     return model
 
@@ -239,6 +253,15 @@ def run_real_video_experiment():
                     except torch.cuda.OutOfMemoryError:
                         elapsed, f1, mem, status = float("nan"), float("nan"), float("nan"), "OOM"
                         reset_memory_stats()
+                    except RuntimeError as e:
+                        # Catches real, informative architectural failures too, not just OOM --
+                        # e.g. Transformer exceeding its positional encoding's max_len before
+                        # the fix above, or any other unexpected shape/runtime failure. Records
+                        # the reason and moves on instead of losing every result collected so
+                        # far in this run.
+                        elapsed, f1, mem = float("nan"), float("nan"), float("nan")
+                        status = f"error: {str(e)[:150]}"
+                        reset_memory_stats()
 
                     results.append({
                         "split": split, "model": model_name, "video_id": vid,
@@ -304,6 +327,10 @@ def run_synthetic_length_sweep():
                 except torch.cuda.OutOfMemoryError:
                     elapsed, mem, status = float("nan"), float("nan"), "OOM"
                     reset_memory_stats()
+                except RuntimeError as e:
+                    elapsed, mem = float("nan"), float("nan")
+                    status = f"error: {str(e)[:150]}"
+                    reset_memory_stats()
 
                 results.append({
                     "model": model_name, "length_frames": target_length, "mode": mode,
@@ -311,9 +338,10 @@ def run_synthetic_length_sweep():
                 })
                 print(f"  T={target_length} [{mode}]: time={elapsed:.4f}s, mem={mem:.3f}GB, status={status}")
 
-                if status == "OOM":
-                    # No point testing longer lengths in this mode once we've OOM'd --
-                    # it will only get worse. Still test the OTHER mode / other lengths.
+                if status != "ok":
+                    # No point testing longer lengths in this mode once it's failed -- it
+                    # will only get worse (OOM) or fail the same way (other errors). Still
+                    # tests the OTHER mode / other lengths.
                     break
 
         del model
