@@ -59,7 +59,7 @@ CHECKPOINTS = {
     "stgcn_mamba":       {"path": "saved_models/stgcn_mamba-292.pth",       "class": STGCN_Mamba,       "kwargs": {}},
     "stgcn_bimamba":     {"path": "saved_models/stgcn_bimamba-12.pth",     "class": STGCN_BiMamba,     "kwargs": {}},
     "stgcn_bilstm":      {"path": "saved_models/stgcn_bilstm-15.pth",      "class": STGCN_BiLSTM,      "kwargs": {}},
-    "stgcn_transformer": {"path": "saved_models/stgcn_transformer-XXX.pth", "class": STGCN_Transformer, "kwargs": {"nhead": 8}},
+    "stgcn_transformer": {"path": "saved_models/stgcn_transformer-09.pth", "class": STGCN_Transformer, "kwargs": {"nhead": 8}},
 }
 
 TRAINED_WINDOW_SIZE = 64  # the window size these checkpoints were actually trained at
