@@ -89,7 +89,7 @@ SPLITS_TO_PROFILE = ["test", "val"]
 # only show up beyond that range.
 SYNTHETIC_LENGTHS = [1024, 2048, 4096, 8192, 16384]
 
-OUTPUT_DIR = "experiments/inference_scaling"
+OUTPUT_DIR = "./inference_scaling"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 
