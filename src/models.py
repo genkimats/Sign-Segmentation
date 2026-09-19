@@ -1215,3 +1215,286 @@ class HyperSign_Mamba(Base_Latent_Mamba_Wrapper):
             HyperSignBlock(in_channels, stgcn_channels, A, hyperedges, num_vertices, num_soft_hyperedges),
             HyperSignBlock(stgcn_channels, stgcn_channels, A, hyperedges, num_vertices, num_soft_hyperedges)
         )
+
+# ==============================================================================
+# 🆕 Mamba-Transformer hybrids
+# ==============================================================================
+class HybridInterleavedBlock(nn.Module):
+    """
+    One 'hybrid block': a BIDIRECTIONAL Mamba sub-layer (long-range context,
+    linear cost) followed by a self-attention sub-layer (precise pairwise
+    comparison), each with a pre-norm residual connection -- Jamba/Zamba-style
+    interleaving, but Mamba-THEN-attention specifically: attention refines an
+    ALREADY-CONTEXTUALIZED representation rather than raw input. Motivated by
+    this task's structure: "is this frame a boundary" is fundamentally a
+    pairwise question (attention-favorable), evaluated against "what sign is
+    currently in progress" (a long-range question, recurrence-favorable) --
+    so Mamba builds context first, attention sharpens boundaries using it.
+    Stays bidirectional throughout, matching STGCN_BiMamba's proven edge over
+    unidirectional Mamba on this task.
+    """
+    def __init__(self, d_model, mamba_d_state, mamba_d_conv, mamba_expand, nhead, dim_feedforward, dropout):
+        super().__init__()
+        self.mamba_fwd = Mamba(d_model=d_model, d_state=mamba_d_state, d_conv=mamba_d_conv, expand=mamba_expand)
+        self.mamba_bwd = Mamba(d_model=d_model, d_state=mamba_d_state, d_conv=mamba_d_conv, expand=mamba_expand)
+        self.mamba_fuse = nn.Linear(d_model * 2, d_model)
+        self.norm1 = nn.LayerNorm(d_model)
+
+        self.attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout, batch_first=True)
+        self.norm2 = nn.LayerNorm(d_model)
+
+        self.ffn = nn.Sequential(
+            nn.Linear(d_model, dim_feedforward),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(dim_feedforward, d_model),
+        )
+        self.norm3 = nn.LayerNorm(d_model)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x):
+        # Pre-norm residual bidirectional Mamba sub-layer
+        residual = x
+        x_norm = self.norm1(x)
+        fwd = self.mamba_fwd(x_norm)
+        bwd = torch.flip(self.mamba_bwd(torch.flip(x_norm, dims=[1])), dims=[1])
+        x = residual + self.dropout(self.mamba_fuse(torch.cat([fwd, bwd], dim=-1)))
+
+        # Pre-norm residual self-attention sub-layer
+        residual = x
+        x_norm = self.norm2(x)
+        attn_out, _ = self.attn(x_norm, x_norm, x_norm, need_weights=False)
+        x = residual + self.dropout(attn_out)
+
+        # Pre-norm residual feedforward sub-layer
+        residual = x
+        x_norm = self.norm3(x)
+        x = residual + self.dropout(self.ffn(x_norm))
+
+        return x
+
+
+class ParallelHybridBlock(nn.Module):
+    """
+    Runs bidirectional Mamba and self-attention as TWO PARALLEL branches over
+    the SAME input, fused via a LEARNED, PER-TIMESTEP sigmoid gate -- not
+    fixed concatenation. This lets the network decide, frame by frame, how
+    much to rely on Mamba's compressed long-range context versus attention's
+    precise pairwise comparison, rather than assuming a fixed sequential
+    order is right for every moment. A bigger bet than the interleaved
+    variant (more parameters, less production precedent), but it directly
+    encodes "different frames need different mechanisms" instead of assuming
+    Mamba-then-attention is universally the right order.
+    """
+    def __init__(self, d_model, mamba_d_state, mamba_d_conv, mamba_expand, nhead, dim_feedforward, dropout):
+        super().__init__()
+        self.mamba_fwd = Mamba(d_model=d_model, d_state=mamba_d_state, d_conv=mamba_d_conv, expand=mamba_expand)
+        self.mamba_bwd = Mamba(d_model=d_model, d_state=mamba_d_state, d_conv=mamba_d_conv, expand=mamba_expand)
+        self.mamba_fuse = nn.Linear(d_model * 2, d_model)
+
+        self.attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout, batch_first=True)
+
+        self.norm_in = nn.LayerNorm(d_model)
+        # Per-timestep, per-channel gate in [0,1]: 1 -> fully Mamba, 0 -> fully attention.
+        self.gate = nn.Sequential(
+            nn.Linear(d_model * 2, d_model),
+            nn.Sigmoid()
+        )
+        self.norm_out = nn.LayerNorm(d_model)
+
+        self.ffn = nn.Sequential(
+            nn.Linear(d_model, dim_feedforward),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(dim_feedforward, d_model),
+        )
+        self.norm_ffn = nn.LayerNorm(d_model)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x):
+        residual = x
+        x_norm = self.norm_in(x)
+
+        fwd = self.mamba_fwd(x_norm)
+        bwd = torch.flip(self.mamba_bwd(torch.flip(x_norm, dims=[1])), dims=[1])
+        mamba_out = self.mamba_fuse(torch.cat([fwd, bwd], dim=-1))
+
+        attn_out, _ = self.attn(x_norm, x_norm, x_norm, need_weights=False)
+
+        g = self.gate(torch.cat([mamba_out, attn_out], dim=-1))
+        fused = g * mamba_out + (1 - g) * attn_out
+
+        x = residual + self.dropout(fused)
+        x = self.norm_out(x)
+
+        residual = x
+        x = residual + self.dropout(self.ffn(x))
+        x = self.norm_ffn(x)
+
+        return x
+
+
+class STGCN_HybridSequential(nn.Module):
+    """
+    Interleaved Mamba+Attention hybrid (Jamba/Zamba-style). See
+    HybridInterleavedBlock for the full reasoning.
+    """
+    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4,
+                 num_classes=3, nhead=8, dim_feedforward=1024, dropout=0.2,
+                 hamer_dim=None, hamer_proj_dim=64, dinov2_dim=None, dinov2_proj_dim=128,
+                 mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
+        super().__init__()
+        graph = SkeletonGraph(num_vertices=num_vertices)
+        A = graph.A
+        self.stgcn_blocks = nn.Sequential(
+            STGCNBlock(in_channels, stgcn_channels, A),
+            STGCNBlock(stgcn_channels, stgcn_channels, A)
+        )
+        self.bridge_dim = num_vertices * stgcn_channels
+
+        self.hamer_dim = hamer_dim
+        if hamer_dim is not None:
+            self.hamer_encoder = nn.Sequential(
+                nn.Linear(hamer_dim, hamer_proj_dim),
+                nn.LayerNorm(hamer_proj_dim),
+                nn.GELU(),
+                nn.Dropout(dropout)
+            )
+            self.bridge_dim += hamer_proj_dim
+
+        self.dinov2_dim = dinov2_dim
+        if dinov2_dim is not None:
+            self.dinov2_encoder = nn.Sequential(
+                nn.Linear(dinov2_dim, dinov2_proj_dim),
+                nn.LayerNorm(dinov2_proj_dim),
+                nn.GELU(),
+                nn.Dropout(dropout)
+            )
+            self.bridge_dim += dinov2_proj_dim
+
+        self.feature_proj = nn.Sequential(
+            nn.Linear(self.bridge_dim, d_model),
+            nn.LayerNorm(d_model),
+            nn.GELU(),
+            nn.Dropout(dropout)
+        )
+
+        self.hybrid_blocks = nn.ModuleList([
+            HybridInterleavedBlock(d_model, mamba_d_state, mamba_d_conv, mamba_expand,
+                                    nhead, dim_feedforward, dropout)
+            for _ in range(n_layers)
+        ])
+
+        self.classifier = nn.Linear(d_model, num_classes)
+
+    def forward(self, x, hamer=None, dinov2=None):
+        B, C, T, V = x.shape
+        x = self.stgcn_blocks(x)
+        x = x.permute(0, 2, 3, 1).contiguous()
+        x = x.view(B, T, -1)
+
+        if self.hamer_dim is not None:
+            if hamer is None:
+                raise ValueError("This model was built with hamer_dim set, but forward() "
+                                  "was called without a `hamer` tensor.")
+            hamer_feat = self.hamer_encoder(hamer.permute(0, 2, 1))
+            x = torch.cat([x, hamer_feat], dim=-1)
+
+        if self.dinov2_dim is not None:
+            if dinov2 is None:
+                raise ValueError("This model was built with dinov2_dim set, but forward() "
+                                  "was called without a `dinov2` tensor.")
+            dinov2_feat = self.dinov2_encoder(dinov2.permute(0, 2, 1))
+            x = torch.cat([x, dinov2_feat], dim=-1)
+
+        x = self.feature_proj(x + 1e-5)
+
+        for block in self.hybrid_blocks:
+            x = block(x)
+
+        embeddings = x
+        logits = self.classifier(x)
+        return logits.permute(0, 2, 1), embeddings.permute(0, 2, 1)
+
+
+class STGCN_HybridParallel(nn.Module):
+    """
+    Parallel Mamba+Attention hybrid with a learned per-timestep gate. See
+    ParallelHybridBlock for the full reasoning.
+    """
+    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4,
+                 num_classes=3, nhead=8, dim_feedforward=1024, dropout=0.2,
+                 hamer_dim=None, hamer_proj_dim=64, dinov2_dim=None, dinov2_proj_dim=128,
+                 mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
+        super().__init__()
+        graph = SkeletonGraph(num_vertices=num_vertices)
+        A = graph.A
+        self.stgcn_blocks = nn.Sequential(
+            STGCNBlock(in_channels, stgcn_channels, A),
+            STGCNBlock(stgcn_channels, stgcn_channels, A)
+        )
+        self.bridge_dim = num_vertices * stgcn_channels
+
+        self.hamer_dim = hamer_dim
+        if hamer_dim is not None:
+            self.hamer_encoder = nn.Sequential(
+                nn.Linear(hamer_dim, hamer_proj_dim),
+                nn.LayerNorm(hamer_proj_dim),
+                nn.GELU(),
+                nn.Dropout(dropout)
+            )
+            self.bridge_dim += hamer_proj_dim
+
+        self.dinov2_dim = dinov2_dim
+        if dinov2_dim is not None:
+            self.dinov2_encoder = nn.Sequential(
+                nn.Linear(dinov2_dim, dinov2_proj_dim),
+                nn.LayerNorm(dinov2_proj_dim),
+                nn.GELU(),
+                nn.Dropout(dropout)
+            )
+            self.bridge_dim += dinov2_proj_dim
+
+        self.feature_proj = nn.Sequential(
+            nn.Linear(self.bridge_dim, d_model),
+            nn.LayerNorm(d_model),
+            nn.GELU(),
+            nn.Dropout(dropout)
+        )
+
+        self.hybrid_blocks = nn.ModuleList([
+            ParallelHybridBlock(d_model, mamba_d_state, mamba_d_conv, mamba_expand,
+                                 nhead, dim_feedforward, dropout)
+            for _ in range(n_layers)
+        ])
+
+        self.classifier = nn.Linear(d_model, num_classes)
+
+    def forward(self, x, hamer=None, dinov2=None):
+        B, C, T, V = x.shape
+        x = self.stgcn_blocks(x)
+        x = x.permute(0, 2, 3, 1).contiguous()
+        x = x.view(B, T, -1)
+
+        if self.hamer_dim is not None:
+            if hamer is None:
+                raise ValueError("This model was built with hamer_dim set, but forward() "
+                                  "was called without a `hamer` tensor.")
+            hamer_feat = self.hamer_encoder(hamer.permute(0, 2, 1))
+            x = torch.cat([x, hamer_feat], dim=-1)
+
+        if self.dinov2_dim is not None:
+            if dinov2 is None:
+                raise ValueError("This model was built with dinov2_dim set, but forward() "
+                                  "was called without a `dinov2` tensor.")
+            dinov2_feat = self.dinov2_encoder(dinov2.permute(0, 2, 1))
+            x = torch.cat([x, dinov2_feat], dim=-1)
+
+        x = self.feature_proj(x + 1e-5)
+
+        for block in self.hybrid_blocks:
+            x = block(x)
+
+        embeddings = x
+        logits = self.classifier(x)
+        return logits.permute(0, 2, 1), embeddings.permute(0, 2, 1)

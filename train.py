@@ -22,7 +22,7 @@ from src.models import (PureMambaBaseline, BiMambaBaseline, STGCN_Mamba, STGCN_M
                         STGCN_BiMamba, Decoupled_STGCN_Mamba, BiLSTM_Baseline, STGCN_BiLSTM, 
                         TransformerBaseline, STGCN_Transformer, Latent_STGCN_Mamba,
                         CTRGCN_Mamba, InfoGCN_Mamba, ShiftGCN_Mamba, SpatialTransformer_Mamba,
-                        HDGCN_Mamba, HyperSign_Mamba)
+                        HDGCN_Mamba, HyperSign_Mamba, STGCN_HybridSequential, STGCN_HybridParallel)
 from src.metrics import evaluate_batch
 from src.loss import CombinedBoundaryLoss, FocalLoss, StandardCrossEntropyLoss, WeightedCrossEntropyLoss, UnifiedCTCLoss, WeightedCE_TMSE_Loss, WeightedNLLLoss
 # (Removed decoder import since we no longer use it in training/validation)
@@ -49,7 +49,9 @@ MODEL_REGISTRY = {
     "shiftgcn_mamba": ShiftGCN_Mamba,
     "spatial_transformer_mamba": SpatialTransformer_Mamba,
     "hdgcn_mamba": HDGCN_Mamba,
-    "hypersign_mamba": HyperSign_Mamba
+    "hypersign_mamba": HyperSign_Mamba,
+    "stgcn_hybrid_seq": STGCN_HybridSequential,
+    "stgcn_hybrid_parallel": STGCN_HybridParallel
 }
 
 def get_next_job():
@@ -127,7 +129,7 @@ def train_model(config):
     USE_HAMER_FEATURES = config.get("use_hamer_features", False)
     HAMER_DIR = config.get("hamer_dir", "processed_data/hamer_features")
     USE_DINOV2_FEATURES = config.get("use_dinov2_features", False)
-    DINOV2_DIR = config.get("dinov2_dir", "processed_data/dinov2_features_reduced")
+    DINOV2_DIR = config.get("dinov2_dir", "processed_data/dinov2_features")
     D_MODEL = config["d_model"]
     N_LAYERS = config["n_layers"]
     FOCAL_LOSS_GAMMA = config.get("focal_loss_gamma", 2.0)
@@ -219,7 +221,8 @@ def train_model(config):
 
     MAMBA_BASED_MODELS = ["pure_mamba", "bi_mamba", "stgcn_mamba", "stgcn_mlp_mamba", "stgcn_bimamba",
                           "decoupled_stgcn_mamba", "latent_stgcn_mamba", "ctrgcn_mamba", "infogcn_mamba",
-                          "shiftgcn_mamba", "spatial_transformer_mamba", "hdgcn_mamba", "hypersign_mamba"]
+                          "shiftgcn_mamba", "spatial_transformer_mamba", "hdgcn_mamba", "hypersign_mamba",
+                          "stgcn_hybrid_seq", "stgcn_hybrid_parallel"]
     if MODEL_NAME in MAMBA_BASED_MODELS:
         model_kwargs["mamba_d_state"] = config.get("mamba_d_state", 16)
         model_kwargs["mamba_d_conv"] = config.get("mamba_d_conv", 4)
@@ -228,14 +231,25 @@ def train_model(config):
     HAMER_SUPPORTED_MODELS = ["stgcn_mamba", "latent_stgcn_mamba", "ctrgcn_mamba", "infogcn_mamba",
                                "shiftgcn_mamba", "spatial_transformer_mamba", "hdgcn_mamba", "hypersign_mamba",
                                "stgcn_bilstm", "stgcn_transformer",
-                               "stgcn_mlp_mamba", "stgcn_bimamba", "decoupled_stgcn_mamba"]
+                               "stgcn_mlp_mamba", "stgcn_bimamba", "decoupled_stgcn_mamba",
+                               "stgcn_hybrid_seq", "stgcn_hybrid_parallel"]
     if USE_HAMER_FEATURES:
         if MODEL_NAME not in HAMER_SUPPORTED_MODELS:
             raise ValueError(
                 f"use_hamer_features=True but model '{MODEL_NAME}' doesn't have a hamer_dim "
                 f"argument implemented yet. Supported models: {HAMER_SUPPORTED_MODELS}."
             )
-        model_kwargs["hamer_dim"] = 288  # 2 hands x (15x3x3 hand_pose + 1x3x3 global_orient)
+        # Read the ACTUAL dimension observed in the data (set by SignSegmentationDataset
+        # while caching train_dataset) rather than hardcoding a guess -- hamer's dimension
+        # is fixed by construction (2 hands x (15x3x3 hand_pose + 1x3x3 global_orient) =
+        # 288) so this should never actually differ, but detecting it from the data is
+        # free insurance and keeps hamer/dinov2 handled the same way. An explicit
+        # "hamer_dim" in config still overrides, if you ever have a real reason to.
+        if train_dataset.detected_hamer_dim is None:
+            raise RuntimeError("use_hamer_features=True but no video's hamer_dim was detected "
+                                "during caching -- this shouldn't be possible if train_dataset "
+                                "is non-empty; investigate before proceeding.")
+        model_kwargs["hamer_dim"] = config.get("hamer_dim", train_dataset.detected_hamer_dim)
 
     # Same 13 models support a second, independent optional branch for DINOv2 visual
     # hand-crop embeddings (SHuBERT/SignMusketeers-style) -- combinable with HaMeR.
@@ -246,11 +260,17 @@ def train_model(config):
                 f"use_dinov2_features=True but model '{MODEL_NAME}' doesn't have a dinov2_dim "
                 f"argument implemented yet. Supported models: {DINOV2_SUPPORTED_MODELS}."
             )
-        # 2 hands x DINOV2_FEATURE_DIM -- must match extract_dinov2_features.py's
-        # DINOV2_FEATURE_DIM setting (384 for the current default dinov2_vits14_reg
-        # variant; update this default too if you switch extraction back to a
-        # bigger variant).
-        model_kwargs["dinov2_dim"] = config.get("dinov2_dim", 2 * 300)
+        # Read the ACTUAL dimension observed in the data, rather than hardcoding a guess
+        # matched to whatever extraction settings happened to be current when this line
+        # was written. This is the fix for exactly the kind of bug a hardcoded default
+        # invites: it can silently drift out of sync the moment you change the DINOv2
+        # model variant, run PCA reduction, or point dinov2_dir at a different folder --
+        # this way the model ALWAYS matches whatever's actually on disk.
+        if train_dataset.detected_dinov2_dim is None:
+            raise RuntimeError("use_dinov2_features=True but no video's dinov2_dim was detected "
+                                "during caching -- this shouldn't be possible if train_dataset "
+                                "is non-empty; investigate before proceeding.")
+        model_kwargs["dinov2_dim"] = config.get("dinov2_dim", train_dataset.detected_dinov2_dim)
 
     MAX_REDOS = 5
     redo_count = 0

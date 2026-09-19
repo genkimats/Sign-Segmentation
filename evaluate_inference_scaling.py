@@ -55,6 +55,16 @@ from src.models import STGCN_Mamba, STGCN_BiMamba, STGCN_BiLSTM, STGCN_Transform
 # ==============================================================================
 # CONFIGURATION -- fill in your actual best window=64, coords-only checkpoints
 # ==============================================================================
+
+# hamer
+CHECKPOINTS = {
+    "stgcn_mamba":       {"path": "saved_models/stgcn_mamba-292.pth",       "class": STGCN_Mamba,       "kwargs": {}},
+    "stgcn_bimamba":     {"path": "saved_models/stgcn_bimamba-12.pth",     "class": STGCN_BiMamba,     "kwargs": {}},
+    "stgcn_bilstm":      {"path": "saved_models/stgcn_bilstm-15.pth",      "class": STGCN_BiLSTM,      "kwargs": {}},
+    "stgcn_transformer": {"path": "saved_models/stgcn_transformer-09.pth", "class": STGCN_Transformer, "kwargs": {"nhead": 8}},
+}
+
+# keypoints only
 CHECKPOINTS = {
     "stgcn_mamba":       {"path": "saved_models/stgcn_mamba-292.pth",       "class": STGCN_Mamba,       "kwargs": {}},
     "stgcn_bimamba":     {"path": "saved_models/stgcn_bimamba-12.pth",     "class": STGCN_BiMamba,     "kwargs": {}},

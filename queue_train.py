@@ -194,25 +194,18 @@ def expand_experiments_with_seeds(experiments, seed_indices, seeds=(42, 123, 202
 
 EXPERIMENTS_TO_RUN = [
     {
-        "basename": "stgcn_bimamba",
-        "window_size": 256,
-        "overlap": 128,
+        "basename": "stgcn_hybrid_seq",
+        "window_size": 64,
+        "overlap": 0,
         "use_hamer_features": True,
-        "description": "overlap ratio (128/356), hamer"
+        "description": "overlap ratio (0/64), hamer"
     },
     {
-        "basename": "stgcn_bimamba",
-        "window_size": 512,
-        "overlap": 384,
+        "basename": "stgcn_hybrid_parallel",
+        "window_size": 64,
+        "overlap": 0,
         "use_hamer_features": True,
-        "description": "overlap ratio (384/512), hamer"
-    },
-    {
-        "basename": "stgcn_bimamba",
-        "window_size": 1024,
-        "overlap": 768,
-        "use_hamer_features": True,
-        "description": "overlap ratio (768/1024), hamer"
+        "description": "overlap ratio (0/64), hamer"
     },
     # {
     #     "basename": "stgcn_bimamba",
