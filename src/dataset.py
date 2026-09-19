@@ -100,6 +100,13 @@ class SignSegmentationDataset(Dataset):
         # --- THE RAM CACHE ---
         self.video_cache = {}
 
+        # Populated from the actual data during caching below (see the hamer/dinov2
+        # loading blocks) -- train.py should read these to build the model, instead
+        # of guessing a hardcoded dimension that can silently drift out of sync with
+        # whatever's actually been extracted.
+        self.detected_hamer_dim = None
+        self.detected_dinov2_dim = None
+
         # Tracks WHY a video got skipped, so an empty/near-empty dataset fails loudly
         # with an actionable reason instead of surfacing as a cryptic
         # "num_samples=0" error three layers deep in the DataLoader/RandomSampler.
@@ -235,6 +242,8 @@ class SignSegmentationDataset(Dataset):
                 # need to know HaMeR was extracted at a different rate.
                 frame_to_hamer_idx = (torch.arange(num_frames) // ham_downsample).clamp(max=T_ham - 1)
                 hamer_full = hamer_flat[frame_to_hamer_idx].to(torch.float16)  # (num_frames, 288)
+                if self.detected_hamer_dim is None:
+                    self.detected_hamer_dim = hamer_full.shape[-1]
 
             # --- OPTIONAL: DINOV2 VISUAL HAND-CROP FEATURES (from extract_dinov2_features.py) ---
             # Same treatment as HaMeR -- kept as a SEPARATE (num_frames, 2*D) stream, fused
@@ -264,6 +273,24 @@ class SignSegmentationDataset(Dataset):
 
                 D = dinov2_feats.shape[-1]
                 dinov2_full = torch.as_tensor(dinov2_feats, dtype=torch.float32).reshape(num_frames, 2 * D).to(torch.float16)
+                # Record the ACTUAL dimension found in the data, the first time we see it --
+                # this is what train.py should build the model with, not a hardcoded guess.
+                # A hardcoded default is exactly what broke when the extraction script's
+                # model variant changed (768-dim -> 384-dim) and this number had to be
+                # remembered and updated in a second, unrelated file -- self-detecting from
+                # the data makes that whole bug class impossible going forward, regardless
+                # of what extraction settings or PCA reduction you use.
+                if self.detected_dinov2_dim is None:
+                    self.detected_dinov2_dim = 2 * D
+                elif self.detected_dinov2_dim != 2 * D:
+                    raise RuntimeError(
+                        f"{vid}: dinov2 feature dim ({2 * D}) doesn't match the dimension "
+                        f"detected from an earlier video in this split ({self.detected_dinov2_dim}). "
+                        f"This means {self.dinov2_dir!r} contains files extracted with DIFFERENT "
+                        f"settings (e.g. some with the old model variant, some with the new one, "
+                        f"or a mix of raw and PCA-reduced files) -- re-extract consistently or "
+                        f"separate them into different directories before training."
+                    )
 
             # Compress to FP16 to keep RAM super low, and save it to the dictionary!
             final_tensor = final_tensor.to(torch.float16)
