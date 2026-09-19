@@ -194,7 +194,7 @@ def expand_experiments_with_seeds(experiments, seed_indices, seeds=(42, 123, 202
 
 EXPERIMENTS_TO_RUN = [
     {
-        "basename": "stgcn_transformer",
+        "basename": "stgcn_bilstm",
         "window_size": 64,
         "overlap": 0,
         "use_hamer_features": True,
@@ -202,7 +202,7 @@ EXPERIMENTS_TO_RUN = [
         "description": "overlap ratio (0/64), d_model=64, hamer"
     },
     {
-        "basename": "stgcn_transformer",
+        "basename": "stgcn_bilstm",
         "window_size": 64,
         "overlap": 0,
         "use_hamer_features": True,
@@ -210,7 +210,7 @@ EXPERIMENTS_TO_RUN = [
         "description": "overlap ratio (0/64), d_model=128, hamer"
     },
     {
-        "basename": "stgcn_transformer",
+        "basename": "stgcn_bilstm",
         "window_size": 64,
         "overlap": 0,
         "use_hamer_features": True,
@@ -218,7 +218,7 @@ EXPERIMENTS_TO_RUN = [
         "description": "overlap ratio (0/64), d_model=256, hamer"
     },
     {
-        "basename": "stgcn_transformer",
+        "basename": "stgcn_bilstm",
         "window_size": 64,
         "overlap": 0,
         "use_hamer_features": True,
@@ -226,7 +226,7 @@ EXPERIMENTS_TO_RUN = [
         "description": "overlap ratio (0/64), d_model=512, hamer"
     },
     {
-        "basename": "stgcn_transformer",
+        "basename": "stgcn_bilstm",
         "window_size": 64,
         "overlap": 0,
         "use_hamer_features": True,
