@@ -199,7 +199,8 @@ EXPERIMENTS_TO_RUN = [
         "overlap": 0,
         "use_hamer_features": True,
         "d_model": 64,
-        "description": "overlap ratio (0/64), d_model=64, hamer"
+        "temporal_downsample_factor": 2,
+        "description": "overlap ratio (0/64), d_model=64, downsample=2, hamer"
     },
     {
         "basename": "stgcn_bilstm",
@@ -207,7 +208,8 @@ EXPERIMENTS_TO_RUN = [
         "overlap": 0,
         "use_hamer_features": True,
         "d_model": 128,
-        "description": "overlap ratio (0/64), d_model=128, hamer"
+        "temporal_downsample_factor": 2,
+        "description": "overlap ratio (0/64), d_model=128, downsample=2, hamer"
     },
     {
         "basename": "stgcn_bilstm",
@@ -215,7 +217,8 @@ EXPERIMENTS_TO_RUN = [
         "overlap": 0,
         "use_hamer_features": True,
         "d_model": 256,
-        "description": "overlap ratio (0/64), d_model=256, hamer"
+        "temporal_downsample_factor": 2,
+        "description": "overlap ratio (0/64), d_model=256, downsample=2, hamer"
     },
     {
         "basename": "stgcn_bilstm",
@@ -223,7 +226,8 @@ EXPERIMENTS_TO_RUN = [
         "overlap": 0,
         "use_hamer_features": True,
         "d_model": 512,
-        "description": "overlap ratio (0/64), d_model=512, hamer"
+        "temporal_downsample_factor": 2,
+        "description": "overlap ratio (0/64), d_model=512, downsample=2, hamer"
     },
     {
         "basename": "stgcn_bilstm",
@@ -231,7 +235,8 @@ EXPERIMENTS_TO_RUN = [
         "overlap": 0,
         "use_hamer_features": True,
         "d_model": 1024,
-        "description": "overlap ratio (0/64), d_model=1024, hamer"
+        "temporal_downsample_factor": 2,
+        "description": "overlap ratio (0/64), d_model=1024, downsample=2, hamer"
     },
     # {
     #     "basename": "stgcn_bimamba",
