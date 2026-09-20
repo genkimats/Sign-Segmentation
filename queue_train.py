@@ -194,7 +194,7 @@ def expand_experiments_with_seeds(experiments, seed_indices, seeds=(42, 123, 202
 
 EXPERIMENTS_TO_RUN = [
     {
-        "basename": "stgcn_bilstm",
+        "basename": "stgcn_transformer",
         "window_size": 64,
         "overlap": 0,
         "use_hamer_features": True,
