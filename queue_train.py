@@ -198,9 +198,16 @@ EXPERIMENTS_TO_RUN = [
         "window_size": 64,
         "overlap": 0,
         "use_hamer_features": True,
+        "n_layers": 2,
+        "description": "overlap ratio (0/64), n_layers=2, hamer"
+    },
+    {
+        "basename": "stgcn_transformer",
+        "window_size": 64,
+        "overlap": 0,
+        "use_hamer_features": True,
         "n_layers": 6,
-        "temporal_downsample_factor": 2,
-        "description": "overlap ratio (0/64), n_layers=6, downsample=2, hamer"
+        "description": "overlap ratio (0/64), n_layers=6, hamer"
     },
     {
         "basename": "stgcn_transformer",
@@ -208,8 +215,7 @@ EXPERIMENTS_TO_RUN = [
         "overlap": 0,
         "use_hamer_features": True,
         "n_layers": 8,
-        "temporal_downsample_factor": 2,
-        "description": "overlap ratio (0/64), n_layers=8, downsample=2, hamer"
+        "description": "overlap ratio (0/64), n_layers=8, hamer"
     },
     {
         "basename": "stgcn_transformer",
@@ -217,44 +223,71 @@ EXPERIMENTS_TO_RUN = [
         "overlap": 0,
         "use_hamer_features": True,
         "n_layers": 10,
-        "temporal_downsample_factor": 2,
-        "description": "overlap ratio (0/64), n_layers=10, downsample=2, hamer"
+        "description": "overlap ratio (0/64), n_layers=10, hamer"
     },
     {
-        "basename": "stgcn_transformer",
+        "basename": "stgcn_bimamba",
         "window_size": 64,
         "overlap": 0,
         "use_hamer_features": True,
-        "d_model": 512,
-        "temporal_downsample_factor": 2,
-        "description": "overlap ratio (0/64), d_model=512, downsample=2, hamer"
+        "n_layers": 2,
+        "description": "overlap ratio (0/64), n_layers=2, hamer"
     },
     {
-        "basename": "stgcn_transformer",
+        "basename": "stgcn_bimamba",
         "window_size": 64,
         "overlap": 0,
         "use_hamer_features": True,
-        "d_model": 1024,
-        "temporal_downsample_factor": 2,
-        "description": "overlap ratio (0/64), d_model=1024, downsample=2, hamer"
+        "n_layers": 6,
+        "description": "overlap ratio (0/64), n_layers=6, hamer"
+    },
+    {
+        "basename": "stgcn_bimamba",
+        "window_size": 64,
+        "overlap": 0,
+        "use_hamer_features": True,
+        "n_layers": 8,
+        "description": "overlap ratio (0/64), n_layers=8, hamer"
+    },
+    {
+        "basename": "stgcn_bimamba",
+        "window_size": 64,
+        "overlap": 0,
+        "use_hamer_features": True,
+        "n_layers": 10,
+        "description": "overlap ratio (0/64), n_layers=10, hamer"
     },
     # {
-    #     "basename": "stgcn_bimamba",
-    #     "epochs": 450,
-    #     "patience": 50,
-    #     "window_size": 1024,
+    #     "basename": "stgcn_bilstm",
+    #     "window_size": 64,
     #     "overlap": 0,
     #     "use_hamer_features": True,
-    #     "description": "overlap ratio (0/1024), epoch=450, patience=50, hamer"
+    #     "n_layers": 2,
+    #     "description": "overlap ratio (0/64), n_layers=2, hamer"
     # },
     # {
-    #     "basename": "stgcn_bimamba",
-    #     "epochs": 250,
-    #     "patience": 40,
-    #     "window_size": 512,
+    #     "basename": "stgcn_bilstm",
+    #     "window_size": 64,
     #     "overlap": 0,
     #     "use_hamer_features": True,
-    #     "description": "overlap ratio (0/512), epoch=250, patience=40, hamer"
+    #     "n_layers": 6,
+    #     "description": "overlap ratio (0/64), n_layers=6, hamer"
+    # },
+    # {
+    #     "basename": "stgcn_bilstm",
+    #     "window_size": 64,
+    #     "overlap": 0,
+    #     "use_hamer_features": True,
+    #     "n_layers": 8,
+    #     "description": "overlap ratio (0/64), n_layers=8, hamer"
+    # },
+    # {
+    #     "basename": "stgcn_bilstm",
+    #     "window_size": 64,
+    #     "overlap": 0,
+    #     "use_hamer_features": True,
+    #     "n_layers": 10,
+    #     "description": "overlap ratio (0/64), n_layers=10, hamer"
     # }
 ]
 
