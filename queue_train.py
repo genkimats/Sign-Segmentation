@@ -198,27 +198,27 @@ EXPERIMENTS_TO_RUN = [
         "window_size": 64,
         "overlap": 0,
         "use_hamer_features": True,
-        "d_model": 64,
+        "n_layers": 6,
         "temporal_downsample_factor": 2,
-        "description": "overlap ratio (0/64), d_model=64, downsample=2, hamer"
+        "description": "overlap ratio (0/64), n_layers=6, downsample=2, hamer"
     },
     {
         "basename": "stgcn_transformer",
         "window_size": 64,
         "overlap": 0,
         "use_hamer_features": True,
-        "d_model": 128,
+        "n_layers": 8,
         "temporal_downsample_factor": 2,
-        "description": "overlap ratio (0/64), d_model=128, downsample=2, hamer"
+        "description": "overlap ratio (0/64), n_layers=8, downsample=2, hamer"
     },
     {
         "basename": "stgcn_transformer",
         "window_size": 64,
         "overlap": 0,
         "use_hamer_features": True,
-        "d_model": 256,
+        "n_layers": 10,
         "temporal_downsample_factor": 2,
-        "description": "overlap ratio (0/64), d_model=256, downsample=2, hamer"
+        "description": "overlap ratio (0/64), n_layers=10, downsample=2, hamer"
     },
     {
         "basename": "stgcn_transformer",

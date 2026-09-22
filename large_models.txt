@@ -1,0 +1,4 @@
+remote: error: File saved_models/stgcn_transformer-35.pth is 228.70 MB; this exceeds GitHub's file size limit of 100.00 MB
+remote: error: File saved_models/stgcn_transformer-30.pth is 228.70 MB; this exceeds GitHub's file size limit of 100.00 MB
+370M    saved_models/stgcn_bilstm-36.pth
+221M    saved_models/stgcn_bimamba-46.pth
