@@ -200,7 +200,7 @@ EXPERIMENTS_TO_RUN = [
         "overlap": 0,
         "use_hamer_features": True,
         "n_layers": 2,
-        "description": "overlap ratio (0/64), n_layers=2, hamer"
+        "description": "COMPUTATIONAL COMPARISON: overlap ratio (0/64), n_layers=2, hamer"
     },
     # {
     #     "basename": "stgcn_transformer",
