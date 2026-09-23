@@ -1,0 +1,385 @@
+#region
+import json
+import os
+
+QUEUE_FILE = "train_queue_phrase.json"
+
+# ==============================================================================
+# 🚦 MODEL TYPE SELECTOR
+# ==============================================================================
+CHOSEN_TYPE = 'mamba'
+
+# ==============================================================================
+# 🐍 MAMBA-BASED DEFAULT HYPERPARAMETERS
+# ==============================================================================
+MAMBA_DEFAULTS = {
+    "basename": "stgcn_mamba",  
+    "window_size": 256,
+    "overlap": 0,
+    "batch_size": 16,
+    "epochs": 100,
+    "early_stopping": True,
+    "patience": 10,
+    "learning_rate": 0.0001,
+    "num_vertices": 65,
+    "tolerance_window": 5,
+    "temporal_downsample_factor": 1, 
+    "loss_function": "weighted_ce",  
+    "ctc_weight": 0.5,             
+    "class_weights": [0.6, 0.8, 1.0], 
+    "tmse_weight": 0.15,            
+    "tmse_threshold": 0.1,          
+    "base_features": ["x-cord", "y-cord", "z-cord"], 
+    "kinematic_features": [],        
+    "in_channels": 5, 
+    "use_face_keypoints": False,
+    "face_dir": "processed_data/face_keypoints_normalized",
+    "use_hamer_features": False,
+    "hamer_dir": "processed_data/hamer_features",
+    "use_dinov2_features": False,
+    "dinov2_dir": "processed_data/dinov2_features",
+    "d_model": 256,
+    "n_layers": 4,     
+    "mamba_d_state": 16,
+    "mamba_d_conv": 4,
+    "mamba_expand": 2,
+    "optimizer": "AdamW",
+    "scheduler": "CosineAnnealingLR"
+}
+
+# ==============================================================================
+# 🚦 DYNAMIC IN_CHANNELS CALCULATOR
+# ==============================================================================
+def calculate_in_channels(config):
+    base_features = config.get("base_features", [])
+    kinematic_features = config.get("kinematic_features", [])
+    
+    # --- PURE HAMER CALCULATION ---
+    if "pure_hamer" in base_features:
+        total = config.get("hamer_dim", 288) 
+        
+        for feat in kinematic_features:
+            if feat in ["velocity", "acceleration", "jerk"]:
+                total += (65 * 3) # 195
+            elif feat in ["velocity-mag"]:
+                total += (65 * 1) # 65
+            elif feat in ["angular-vel"]:
+                total += (65 * 1) # 65
+            elif feat in ["spatial_angles", "temporal_angles"]:
+                total += (65 * 2) # 130
+        return total
+    
+    # --- STANDARD / HYBRID CALCULATION ---
+    valid_base_cords = [f for f in base_features if f in ["x-cord", "y-cord", "z-cord"]]
+    total_channels = len(valid_base_cords)
+    deriv_channels = len(valid_base_cords) if valid_base_cords else 3
+    
+    for feat in kinematic_features:
+        if feat in ["velocity", "acceleration", "jerk"]:
+            total_channels += deriv_channels
+        elif feat in ["velocity-mag", "angular-vel"]:
+            total_channels += 1
+        elif feat in ["spatial_angles", "temporal_angles"]:
+            total_channels += 2 
+            
+    return total_channels
+
+# ==============================================================================
+# 🚦 DYNAMIC NUM_VERTICES CALCULATOR
+# ==============================================================================
+# Must match len(SELECTED_INDICES) in extract_face_keypoints.py -- update both
+# together if that index list ever changes.
+NUM_FACE_VERTICES = 83
+BASE_BODY_HAND_VERTICES = 65
+
+def calculate_num_vertices(config):
+    base_features = config.get("base_features", [])
+
+    if "pure_hamer" in base_features:
+        # pure_hamer mode is a flat per-frame feature vector (not a per-vertex point
+        # cloud), so num_vertices isn't meaningful the same way here -- leave whatever
+        # the config already specifies untouched rather than guessing.
+        return config.get("num_vertices", BASE_BODY_HAND_VERTICES)
+
+    total = BASE_BODY_HAND_VERTICES
+    if config.get("use_face_keypoints", False):
+        total += NUM_FACE_VERTICES
+    return total
+#endregion
+
+def with_seeds(exp, seeds=(42, 123, 2024)):
+    """
+    Expands one experiment dict into len(seeds) copies, identical except for a
+    "seed" field and a description suffix noting which seed it is -- for
+    running the same config multiple times with different (recorded,
+    reproducible) random seeds, matching the 2023 paper's practice of
+    repeating each final config 3x and reporting mean +/- std.
+
+    You normally don't need to call this yourself -- define EXPERIMENTS_TO_RUN
+    as plain experiment dicts, and select_seed_experiments()/
+    expand_experiments_with_seeds() below apply this automatically based on
+    what you choose interactively when the script runs.
+    """
+    variants = []
+    for seed in seeds:
+        variant = dict(exp)
+        variant["seed"] = seed
+        variant["description"] = f"{exp.get('description', '')} [seed={seed}]".strip()
+        variants.append(variant)
+    return variants
+
+
+def select_seed_experiments(experiments):
+    """
+    Dequeue_train.py-style selection: prints EXPERIMENTS_TO_RUN as a numbered
+    list, then asks which ones should run with 3 seeds instead of 1.
+
+      - comma-separated indices (e.g. "0, 2")             -> only those get 3 seeds
+      - "all"                                              -> every experiment gets 3 seeds
+      - empty input                                        -> none do; everything runs with 1 seed
+
+    Returns a set of indices (into `experiments`) selected for 3 seeds.
+    """
+    print(f"\n{'='*75}")
+    print("📋 EXPERIMENTS DEFINED IN EXPERIMENTS_TO_RUN")
+    print(f"{'='*75}")
+    for i, exp in enumerate(experiments):
+        basename = exp.get("basename", "unknown")
+        desc = exp.get("description", "No description provided")
+        print(f"[ID: {i}] {basename}")
+        print(f"        └─ 📝 {desc}\n")
+    print(f"{'='*75}")
+
+    user_input = input(
+        "🎲 Enter IDs to run with 3 seeds (comma-separated, e.g. 0, 2), "
+        "'all' for all of them, or press Enter for none (1 seed each): "
+    ).strip()
+
+    if not user_input:
+        return set()
+
+    if user_input.lower() == 'all':
+        return set(range(len(experiments)))
+
+    try:
+        ids = [int(x.strip()) for x in user_input.split(',')]
+    except ValueError:
+        print("⚠️ Invalid input. Please enter numbers separated by commas, 'all', or leave blank. "
+              "Defaulting to 1 seed for every experiment.")
+        return set()
+
+    valid_ids = set(i for i in ids if 0 <= i < len(experiments))
+    invalid_ids = set(ids) - valid_ids
+    if invalid_ids:
+        print(f"⚠️ Ignoring out-of-range ID(s): {sorted(invalid_ids)}")
+
+    return valid_ids
+
+
+def expand_experiments_with_seeds(experiments, seed_indices, seeds=(42, 123, 2024)):
+    """
+    Builds the final experiment list in original order: experiments at
+    seed_indices get expanded into len(seeds) seeded copies (via with_seeds);
+    everything else passes through unchanged (1 seed -- whatever "seed" it
+    already has, or train.py's config.get("seed", 42) default).
+    """
+    final = []
+    for i, exp in enumerate(experiments):
+        if i in seed_indices:
+            final.extend(with_seeds(exp, seeds=seeds))
+        else:
+            final.append(exp)
+    return final
+
+
+EXPERIMENTS_TO_RUN = [
+    {
+        "basename": "stgcn_bimamba",
+        "window_size": 128,
+        "overlap": 0,
+        "loss_function": "weighted_ce",
+        "use_hamer_features": True,
+        "description": "overlap ratio (0/128), loss=weighted_ce, hamer"
+    },
+    {
+        "basename": "stgcn_bimamba",
+        "window_size": 256,
+        "overlap": 0,
+        "loss_function": "weighted_ce",
+        "use_hamer_features": True,
+        "description": "overlap ratio (0/256), loss=weighted_ce, hamer"
+    },
+    {
+        "basename": "stgcn_bimamba",
+        "window_size": 512,
+        "overlap": 0,
+        "loss_function": "weighted_ce",
+        "use_hamer_features": True,
+        "description": "overlap ratio (0/512), loss=weighted_ce, hamer"
+    },
+    {
+        "basename": "stgcn_transformer",
+        "window_size": 128,
+        "overlap": 0,
+        "loss_function": "weighted_ce",
+        "use_hamer_features": True,
+        "description": "overlap ratio (0/128), loss=weighted_ce, hamer"
+    },
+    {
+        "basename": "stgcn_transformer",
+        "window_size": 256,
+        "overlap": 0,
+        "loss_function": "weighted_ce",
+        "use_hamer_features": True,
+        "description": "overlap ratio (0/256), loss=weighted_ce, hamer"
+    },
+    {
+        "basename": "stgcn_transformer",
+        "window_size": 512,
+        "overlap": 0,
+        "loss_function": "weighted_ce",
+        "use_hamer_features": True,
+        "description": "overlap ratio (0/512), loss=weighted_ce, hamer"
+    },
+]
+
+if CHOSEN_TYPE == 'mamba':
+    defaults = MAMBA_DEFAULTS
+    experiments_to_run = EXPERIMENTS_TO_RUN
+else:
+    raise ValueError(f"Unknown CHOSEN_TYPE: {CHOSEN_TYPE}")
+
+
+if __name__ == "__main__":
+    # ==============================================================================
+    # 📝 BUILD QUEUE
+    # ==============================================================================
+    if os.path.exists(QUEUE_FILE):
+        with open(QUEUE_FILE, "r") as f:
+            queue = json.load(f)
+    else:
+        queue = [{"prefixes": {}}]
+        
+    # --- MIGRATION: Convert old flat list to dict format ---
+    prefixes_data = queue[0].get("prefixes", {})
+    if isinstance(prefixes_data, list):
+        prefixes_data = {"legacy_models": prefixes_data}
+        queue[0]["prefixes"] = prefixes_data
+
+    print("Current tracked prefixes by model in train_queue_phrase.json:")
+    if not prefixes_data:
+        print("  (None)")
+    else:
+        for m_name, p_list in prefixes_data.items():
+            print(f"  - {m_name}: {p_list}")
+    print()
+
+    # --- SEED SELECTION PHASE ---
+    # Choose which experiments run with 3 seeds vs 1, THEN expand the list --
+    # everything below this point (prefix assignment, channel/vertex calculation,
+    # queueing) operates on the already-expanded list, so a 3-seed selection
+    # correctly becomes 3 separate, sequentially-prefixed queue entries.
+    seed_indices = select_seed_experiments(experiments_to_run)
+    experiments_to_run = expand_experiments_with_seeds(experiments_to_run, seed_indices)
+    print()
+
+    # --- PREFIX INPUT PHASE (per model variation) ---
+    # Determine every distinct model basename present in this batch, in the order
+    # they first appear, and ask for a starting prefix separately for EACH one --
+    # useful now that a single queuing session often mixes several architectures
+    # (e.g. stgcn_mamba, stgcn_bilstm, stgcn_transformer) that you may want to
+    # start at different prefix numbers, rather than one shared prompt forcing
+    # the same starting point on all of them.
+    distinct_model_names = []
+    for exp in experiments_to_run:
+        m_name = exp.get("basename", defaults.get("basename", "unknown"))
+        if m_name not in distinct_model_names:
+            distinct_model_names.append(m_name)
+
+    base_prefix_by_model = {}
+
+    for m_name in distinct_model_names:
+        existing = prefixes_data.get(m_name, [])
+        existing_str = f"existing: {existing}" if existing else "no existing prefixes"
+        while True:
+            try:
+                user_input = input(
+                    f"Enter a starting prefix for '{m_name}' ({existing_str}) "
+                    f"[Press Enter to auto-assign]: "
+                ).strip()
+
+                if not user_input:
+                    base_prefix_by_model[m_name] = None
+                    break
+
+                candidate = int(user_input)
+                if candidate <= 0:
+                    print("⚠️ Prefix must be a positive integer.")
+                    continue
+
+                if candidate in existing:
+                    print(f"⚠️ Warning: Prefix {candidate} is already tracked for '{m_name}'!")
+                    override = input("Do you want to override and use it anyway? (y/N): ").strip().lower()
+                    if override != 'y':
+                        continue
+
+                base_prefix_by_model[m_name] = candidate
+                break
+
+            except ValueError:
+                print("⚠️ Please enter a valid number.")
+
+    print()
+
+    current_model_prefix = {}
+    count = 0
+    
+    for exp in experiments_to_run:
+        full_config = defaults.copy()
+        full_config.update(exp)
+        
+        m_name = full_config.get("basename", "unknown")
+        
+        # 1. Determine the exact prefix for this specific architecture
+        if m_name not in current_model_prefix:
+            chosen_base = base_prefix_by_model.get(m_name)
+            if chosen_base is not None:
+                current_model_prefix[m_name] = chosen_base
+            else:
+                existing = prefixes_data.get(m_name, [])
+                current_model_prefix[m_name] = max(existing) + 1 if existing else 1
+                
+        assigned_prefix = current_model_prefix[m_name]
+        
+        # Increment just in case you queue two of the EXACT SAME model in one batch
+        current_model_prefix[m_name] += 1 
+        
+        # 2. Calculate Input Channels & Num Vertices dynamically
+        calculated_channels = calculate_in_channels(full_config)
+        full_config["in_channels"] = calculated_channels
+
+        calculated_vertices = calculate_num_vertices(full_config)
+        full_config["num_vertices"] = calculated_vertices
+        
+        prefix_str = f"{assigned_prefix:02d}"
+        full_config["prefix"] = prefix_str
+        
+        # 3. Add to Queue Array
+        queue.append(full_config)
+        
+        # 4. Save to Tracker Dictionary
+        if m_name not in queue[0]["prefixes"]:
+            queue[0]["prefixes"][m_name] = []
+            
+        if assigned_prefix not in queue[0]["prefixes"][m_name]:
+            queue[0]["prefixes"][m_name].append(assigned_prefix)
+        
+        print(f"Added to queue ({m_name}-{prefix_str} | Channels: {calculated_channels} | "
+              f"Vertices: {calculated_vertices}): {full_config['description']}")
+        count += 1
+        
+    with open(QUEUE_FILE, "w") as f:
+        json.dump(queue, f, indent=4)
+        
+    print(f"\n✅ Successfully added {count} {CHOSEN_TYPE.upper()} experiments to the queue.")
+    print(f"▶️  Run 'python train.py' to start processing.")
