@@ -55,7 +55,7 @@ except ImportError as e:
         "and update the import above if the path has changed."
     ) from e
 
-PARENT_DIR = os.path.dirname(os.path.abspath(__file__))
+PARENT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ANNOTATIONS_DIR = os.path.join(PARENT_DIR, "raw_data", "annotations")
 VIDEOS_DIR = os.path.join(PARENT_DIR, "raw_data", "videos")
 GLOSS_LABELS_DIR = "processed_data/BIO_tags"          # existing, already-verified sign-level labels
