@@ -193,103 +193,62 @@ def expand_experiments_with_seeds(experiments, seed_indices, seeds=(42, 123, 202
 
 
 EXPERIMENTS_TO_RUN = [
-    
     {
-        "basename": "stgcn_transformer",
+        "basename": "mlpaux_mamba",
         "window_size": 64,
         "overlap": 0,
         "use_hamer_features": True,
-        "n_layers": 2,
-        "description": "COMPUTATIONAL COMPARISON: overlap ratio (0/64), n_layers=2, hamer"
-    },
-    # {
-    #     "basename": "stgcn_transformer",
-    #     "window_size": 64,
-    #     "overlap": 0,
-    #     "use_hamer_features": True,
-    #     "n_layers": 6,
-    #     "description": "overlap ratio (0/64), n_layers=6, hamer"
-    # },
-    # {
-    #     "basename": "stgcn_transformer",
-    #     "window_size": 64,
-    #     "overlap": 0,
-    #     "use_hamer_features": True,
-    #     "n_layers": 8,
-    #     "description": "overlap ratio (0/64), n_layers=8, hamer"
-    # },
-    # {
-    #     "basename": "stgcn_transformer",
-    #     "window_size": 64,
-    #     "overlap": 0,
-    #     "use_hamer_features": True,
-    #     "n_layers": 10,
-    #     "description": "overlap ratio (0/64), n_layers=10, hamer"
-    # },
-    # {
-    #     "basename": "stgcn_bimamba",
-    #     "window_size": 64,
-    #     "overlap": 0,
-    #     "use_hamer_features": True,
-    #     "n_layers": 2,
-    #     "description": "overlap ratio (0/64), n_layers=2, hamer"
-    # },
-    # {
-    #     "basename": "stgcn_bimamba",
-    #     "window_size": 64,
-    #     "overlap": 0,
-    #     "use_hamer_features": True,
-    #     "n_layers": 6,
-    #     "description": "overlap ratio (0/64), n_layers=6, hamer"
-    # },
-    # {
-    #     "basename": "stgcn_bimamba",
-    #     "window_size": 64,
-    #     "overlap": 0,
-    #     "use_hamer_features": True,
-    #     "n_layers": 8,
-    #     "description": "overlap ratio (0/64), n_layers=8, hamer"
-    # },
-    # {
-    #     "basename": "stgcn_bimamba",
-    #     "window_size": 64,
-    #     "overlap": 0,
-    #     "use_hamer_features": True,
-    #     "n_layers": 10,
-    #     "description": "overlap ratio (0/64), n_layers=10, hamer"
-    # },
-    {
-        "basename": "stgcn_bilstm",
-        "window_size": 64,
-        "overlap": 0,
-        "use_hamer_features": True,
-        "n_layers": 2,
-        "description": "overlap ratio (0/64), n_layers=2, hamer"
+        "description": "overlap ratio (0/64), hamer"
     },
     {
-        "basename": "stgcn_bilstm",
-        "window_size": 64,
+        "basename": "mlpaux_mamba",
+        "window_size": 128,
         "overlap": 0,
         "use_hamer_features": True,
-        "n_layers": 6,
-        "description": "overlap ratio (0/64), n_layers=6, hamer"
+        "description": "overlap ratio (0/128), hamer"
     },
     {
-        "basename": "stgcn_bilstm",
+        "basename": "mlpaux_bimamba",
         "window_size": 64,
         "overlap": 0,
         "use_hamer_features": True,
-        "n_layers": 8,
-        "description": "overlap ratio (0/64), n_layers=8, hamer"
+        "description": "overlap ratio (0/64), hamer"
     },
     {
-        "basename": "stgcn_bilstm",
+        "basename": "mlpaux_bimamba",
+        "window_size": 128,
+        "overlap": 0,
+        "use_hamer_features": True,
+        "description": "overlap ratio (0/128), hamer"
+    },
+    {
+        "basename": "mlpaux_bilstm",
         "window_size": 64,
         "overlap": 0,
         "use_hamer_features": True,
-        "n_layers": 10,
-        "description": "overlap ratio (0/64), n_layers=10, hamer"
-    }
+        "description": "overlap ratio (0/64), hamer"
+    },
+    {
+        "basename": "mlpaux_bilstm",
+        "window_size": 128,
+        "overlap": 0,
+        "use_hamer_features": True,
+        "description": "overlap ratio (0/128), hamer"
+    },
+    {
+        "basename": "mlpaux_transformer",
+        "window_size": 64,
+        "overlap": 0,
+        "use_hamer_features": True,
+        "description": "overlap ratio (0/64), hamer"
+    },
+    {
+        "basename": "mlpaux_transformer",
+        "window_size": 128,
+        "overlap": 0,
+        "use_hamer_features": True,
+        "description": "overlap ratio (0/128), hamer"
+    },
 ]
 
 if CHOSEN_TYPE == 'mamba':
