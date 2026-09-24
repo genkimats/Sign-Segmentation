@@ -22,7 +22,8 @@ from src.models import (PureMambaBaseline, BiMambaBaseline, STGCN_Mamba, STGCN_M
                         STGCN_BiMamba, Decoupled_STGCN_Mamba, BiLSTM_Baseline, STGCN_BiLSTM, 
                         TransformerBaseline, STGCN_Transformer, Latent_STGCN_Mamba,
                         CTRGCN_Mamba, InfoGCN_Mamba, ShiftGCN_Mamba, SpatialTransformer_Mamba,
-                        HDGCN_Mamba, HyperSign_Mamba, STGCN_HybridSequential, STGCN_HybridParallel)
+                        HDGCN_Mamba, HyperSign_Mamba, STGCN_HybridSequential, STGCN_HybridParallel,
+                        MLPAux_Mamba, MLPAux_BiMamba, MLPAux_BiLSTM, MLPAux_Transformer)
 from src.metrics import evaluate_batch
 from src.loss import CombinedBoundaryLoss, FocalLoss, StandardCrossEntropyLoss, WeightedCrossEntropyLoss, UnifiedCTCLoss, WeightedCE_TMSE_Loss, WeightedNLLLoss
 # (Removed decoder import since we no longer use it in training/validation)
@@ -51,7 +52,11 @@ MODEL_REGISTRY = {
     "hdgcn_mamba": HDGCN_Mamba,
     "hypersign_mamba": HyperSign_Mamba,
     "stgcn_hybrid_seq": STGCN_HybridSequential,
-    "stgcn_hybrid_parallel": STGCN_HybridParallel
+    "stgcn_hybrid_parallel": STGCN_HybridParallel,
+    "mlpaux_mamba": MLPAux_Mamba,
+    "mlpaux_bimamba": MLPAux_BiMamba,
+    "mlpaux_bilstm": MLPAux_BiLSTM,
+    "mlpaux_transformer": MLPAux_Transformer
 }
 
 def get_next_job():
@@ -222,7 +227,7 @@ def train_model(config):
     MAMBA_BASED_MODELS = ["pure_mamba", "bi_mamba", "stgcn_mamba", "stgcn_mlp_mamba", "stgcn_bimamba",
                           "decoupled_stgcn_mamba", "latent_stgcn_mamba", "ctrgcn_mamba", "infogcn_mamba",
                           "shiftgcn_mamba", "spatial_transformer_mamba", "hdgcn_mamba", "hypersign_mamba",
-                          "stgcn_hybrid_seq", "stgcn_hybrid_parallel"]
+                          "stgcn_hybrid_seq", "stgcn_hybrid_parallel", "mlpaux_mamba", "mlpaux_bimamba"]
     if MODEL_NAME in MAMBA_BASED_MODELS:
         model_kwargs["mamba_d_state"] = config.get("mamba_d_state", 16)
         model_kwargs["mamba_d_conv"] = config.get("mamba_d_conv", 4)
@@ -232,7 +237,8 @@ def train_model(config):
                                "shiftgcn_mamba", "spatial_transformer_mamba", "hdgcn_mamba", "hypersign_mamba",
                                "stgcn_bilstm", "stgcn_transformer",
                                "stgcn_mlp_mamba", "stgcn_bimamba", "decoupled_stgcn_mamba",
-                               "stgcn_hybrid_seq", "stgcn_hybrid_parallel"]
+                               "stgcn_hybrid_seq", "stgcn_hybrid_parallel",
+                               "mlpaux_mamba", "mlpaux_bimamba", "mlpaux_bilstm", "mlpaux_transformer"]
     if USE_HAMER_FEATURES:
         if MODEL_NAME not in HAMER_SUPPORTED_MODELS:
             raise ValueError(
@@ -588,6 +594,7 @@ def train_model(config):
     
     hardware_summary = {
         "seed": SEED,
+        "description": config.get("description", ""),
         "machine_hostname": hostname,
         "gpu_name": gpu_name,
         "total_training_time": f"{int(total_minutes)}m {int(total_seconds)}s",
@@ -598,7 +605,12 @@ def train_model(config):
         "max_gpu_memory_used_gb": round(max_mem_gb, 4),
         "average_gpu_utilization_percent": round(avg_gpu_util, 2),
         "total_nan_loss_count_latest_run": total_nan_this_run, 
-        "total_training_restarts": min(redo_count, MAX_REDOS)  
+        "total_training_restarts": min(redo_count, MAX_REDOS),
+        # Full job config, saved verbatim -- lets any future audit (or you, six
+        # months from now) reconstruct exactly what this run was, without needing
+        # to keep the description field perfectly consistent or remember to add a
+        # new field here every time a new sweep parameter gets introduced.
+        "config": config
     }
 
     summary_save_path = os.path.join(exp_dir, "hardware_summary.json")

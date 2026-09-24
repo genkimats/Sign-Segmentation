@@ -119,29 +119,48 @@ class UnifiedCTCLoss(nn.Module):
         self.ctc_weight = ctc_weight
 
     def extract_ctc_targets(self, hard_targets):
+        """
+        Builds CORRECT CTC targets: the per-frame BIO sequence collapsed by
+        removing consecutive duplicate frames (standard CTC target
+        construction -- the same operation CTC decoding itself performs in
+        reverse), then removing the blank class (0=Outside) entirely, since
+        CTC targets must NEVER contain the blank index -- it's implicitly
+        available for the aligner to insert anywhere at near-zero cost, not
+        something to predict explicitly.
+
+        Example: a frame sequence "OOOBIIIOOOBIIIOOO" (O/B/I = 0/1/2)
+        collapses to "OBIOBIO", then drops the O's/blanks, giving the final
+        CTC target "BIBI" == [1,2,1,2] -- preserving the actual B->I
+        structure for each sign. (Previously this discarded the B->I
+        structure entirely and just emitted a run of 1's, one per detected
+        sign -- e.g. [1,1] for two signs, regardless of their actual
+        content. That's a degenerate target that gives CTC almost nothing
+        real to align against, which is the most likely reason CTC hurt
+        results last time, not that CTC itself is a bad fit here.)
+        """
         ctc_targets = []
         target_lengths = []
         B, T = hard_targets.shape
-        
+
         for b in range(B):
             seq = hard_targets[b]
-            gloss_indices = torch.nonzero(seq == 1).squeeze(-1)
-            if gloss_indices.numel() == 0:
-                target_lengths.append(0)
-                continue
-                
-            clean_seq = [1]
-            for i in range(1, len(gloss_indices)):
-                if gloss_indices[i] != gloss_indices[i-1] + 1:
-                    clean_seq.append(1)
-                    
-            ctc_targets.append(torch.tensor(clean_seq, dtype=torch.long, device=hard_targets.device))
-            target_lengths.append(len(clean_seq))
-            
-        if not ctc_targets:
-            return torch.tensor([], dtype=torch.long, device=hard_targets.device), torch.tensor(target_lengths, dtype=torch.long, device=hard_targets.device)
-            
-        return torch.cat(ctc_targets).long(), torch.tensor(target_lengths, dtype=torch.long, device=hard_targets.device)
+
+            change_points = torch.ones_like(seq, dtype=torch.bool)
+            change_points[1:] = seq[1:] != seq[:-1]
+            collapsed = seq[change_points]
+
+            non_blank = collapsed[collapsed != 0]
+
+            ctc_targets.append(non_blank)
+            target_lengths.append(non_blank.numel())
+
+        target_lengths_tensor = torch.tensor(target_lengths, dtype=torch.long, device=hard_targets.device)
+
+        non_empty = [t for t in ctc_targets if t.numel() > 0]
+        if not non_empty:
+            return torch.tensor([], dtype=torch.long, device=hard_targets.device), target_lengths_tensor
+
+        return torch.cat(non_empty).long(), target_lengths_tensor
 
     def forward(self, logits, hard_targets):
         loss_ce = self.ce(logits, hard_targets)
@@ -154,6 +173,17 @@ class UnifiedCTCLoss(nn.Module):
         log_probs = log_probs.permute(2, 0, 1)
         
         T_len, B_size, _ = log_probs.shape
+        # KNOWN REMAINING ISSUE: this assumes every sample in the batch fills the
+        # full window (T_len), which is WRONG for the last (padded) window of any
+        # video shorter than a clean multiple of window_size -- dataset.py pads
+        # incomplete windows with Outside/blank frames, so this counts padding as
+        # real input. Fixing this properly needs the actual per-sample valid
+        # length threaded through from dataset.py's __getitem__ into train.py and
+        # then here -- padding is labeled identically to genuine Outside content,
+        # so it can't be reliably inferred from hard_targets alone at this point.
+        # Left as full-window here (same behavior as before) since fixing it
+        # requires a wider pipeline change; flagging clearly rather than
+        # silently leaving it undocumented.
         input_lengths = torch.full((B_size,), T_len, dtype=torch.long, device=logits.device)
         
         loss_ctc = self.ctc(log_probs, ctc_targets, input_lengths, target_lengths)

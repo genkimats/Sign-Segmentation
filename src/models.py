@@ -1498,3 +1498,361 @@ class STGCN_HybridParallel(nn.Module):
         embeddings = x
         logits = self.classifier(x)
         return logits.permute(0, 2, 1), embeddings.permute(0, 2, 1)
+
+
+# ==============================================================================
+# 🆕 MLP auxiliary-module encoder (2025 Hands-On paper style, no graph)
+# ==============================================================================
+class AuxiliaryMLPEncoder(nn.Module):
+    """
+    Replaces the graph-convolution spatial encoder (STGCNBlock) with a plain
+    3-layer trainable MLP applied to the FLATTENED per-frame input (all
+    vertices x channels concatenated into one vector per frame) -- matching
+    the 2025 Hands-On paper's "auxiliary module" design, which processes
+    each feature stream through a dedicated MLP rather than an explicit
+    skeleton graph.
+
+    This is a genuine ablation of the STGCN-based approach used everywhere
+    else in this codebase: does the explicit graph-topology inductive bias
+    actually help, or does a topology-free MLP do just as well (or better)?
+    Given this project's own earlier finding that the spatial graph mattered
+    more than temporal-backbone choice, this is a real test of that finding,
+    not just a style change.
+    """
+    def __init__(self, input_dim, hidden_dim, output_dim, dropout=0.2):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, output_dim),
+            nn.LayerNorm(output_dim),
+            nn.GELU(),
+            nn.Dropout(dropout),
+        )
+
+    def forward(self, x):
+        # x: (B, C, T, V) -- same input convention as STGCNBlock, for drop-in compatibility
+        B, C, T, V = x.shape
+        x = x.permute(0, 2, 1, 3).reshape(B, T, C * V)  # flatten per-frame: (B, T, C*V)
+        return self.net(x)  # (B, T, output_dim)
+
+
+class MLPAux_Mamba(nn.Module):
+    """
+    Same overall pipeline as STGCN_Mamba, but the graph-convolution spatial
+    encoder is replaced with AuxiliaryMLPEncoder -- see that class's
+    docstring for the full motivation. Identical everything else (HaMeR/
+    DINOv2 fusion, Mamba backbone, classifier); only the spatial-encoding
+    mechanism differs, for a direct, controlled ablation.
+    """
+    def __init__(self, num_vertices=65, in_channels=3, mlp_hidden_dim=512, d_model=256, n_layers=4,
+                 num_classes=3, dropout=0.2, hamer_dim=None, hamer_proj_dim=64,
+                 dinov2_dim=None, dinov2_proj_dim=128,
+                 mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
+        super().__init__()
+        self.spatial_encoder = AuxiliaryMLPEncoder(
+            input_dim=num_vertices * in_channels, hidden_dim=mlp_hidden_dim,
+            output_dim=d_model, dropout=dropout
+        )
+        self.bridge_dim = d_model
+
+        self.hamer_dim = hamer_dim
+        if hamer_dim is not None:
+            self.hamer_encoder = nn.Sequential(
+                nn.Linear(hamer_dim, hamer_proj_dim),
+                nn.LayerNorm(hamer_proj_dim),
+                nn.GELU(),
+                nn.Dropout(dropout)
+            )
+            self.bridge_dim += hamer_proj_dim
+
+        self.dinov2_dim = dinov2_dim
+        if dinov2_dim is not None:
+            self.dinov2_encoder = nn.Sequential(
+                nn.Linear(dinov2_dim, dinov2_proj_dim),
+                nn.LayerNorm(dinov2_proj_dim),
+                nn.GELU(),
+                nn.Dropout(dropout)
+            )
+            self.bridge_dim += dinov2_proj_dim
+
+        # Only need a re-projection if hamer/dinov2 changed bridge_dim away from d_model
+        if self.bridge_dim != d_model:
+            self.feature_proj = nn.Sequential(
+                nn.Linear(self.bridge_dim, d_model),
+                nn.LayerNorm(d_model),
+                nn.GELU(),
+                nn.Dropout(dropout)
+            )
+        else:
+            self.feature_proj = nn.Identity()
+
+        self.mamba_layers = nn.ModuleList([
+            Mamba(d_model=d_model, d_state=mamba_d_state, d_conv=mamba_d_conv, expand=mamba_expand)
+            for _ in range(n_layers)
+        ])
+        self.classifier = nn.Linear(d_model, num_classes)
+
+    def forward(self, x, hamer=None, dinov2=None):
+        x = self.spatial_encoder(x)  # (B, T, d_model)
+
+        if self.hamer_dim is not None:
+            if hamer is None:
+                raise ValueError("This model was built with hamer_dim set, but forward() "
+                                  "was called without a `hamer` tensor.")
+            hamer_feat = self.hamer_encoder(hamer.permute(0, 2, 1))
+            x = torch.cat([x, hamer_feat], dim=-1)
+
+        if self.dinov2_dim is not None:
+            if dinov2 is None:
+                raise ValueError("This model was built with dinov2_dim set, but forward() "
+                                  "was called without a `dinov2` tensor.")
+            dinov2_feat = self.dinov2_encoder(dinov2.permute(0, 2, 1))
+            x = torch.cat([x, dinov2_feat], dim=-1)
+
+        x = self.feature_proj(x + 1e-5)
+
+        for layer in self.mamba_layers:
+            x = layer(x)
+
+        embeddings = x
+        logits = self.classifier(x)
+        return logits.permute(0, 2, 1), embeddings.permute(0, 2, 1)
+
+
+class MLPAux_BiMamba(nn.Module):
+    """Same as MLPAux_Mamba, but with a bidirectional Mamba backbone (matching
+    STGCN_BiMamba's proven edge over unidirectional Mamba on this task)."""
+    def __init__(self, num_vertices=65, in_channels=3, mlp_hidden_dim=512, d_model=256, n_layers=4,
+                 num_classes=3, dropout=0.2, hamer_dim=None, hamer_proj_dim=64,
+                 dinov2_dim=None, dinov2_proj_dim=128,
+                 mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
+        super().__init__()
+        self.spatial_encoder = AuxiliaryMLPEncoder(
+            input_dim=num_vertices * in_channels, hidden_dim=mlp_hidden_dim,
+            output_dim=d_model, dropout=dropout
+        )
+        self.bridge_dim = d_model
+
+        self.hamer_dim = hamer_dim
+        if hamer_dim is not None:
+            self.hamer_encoder = nn.Sequential(
+                nn.Linear(hamer_dim, hamer_proj_dim),
+                nn.LayerNorm(hamer_proj_dim),
+                nn.GELU(),
+                nn.Dropout(dropout)
+            )
+            self.bridge_dim += hamer_proj_dim
+
+        self.dinov2_dim = dinov2_dim
+        if dinov2_dim is not None:
+            self.dinov2_encoder = nn.Sequential(
+                nn.Linear(dinov2_dim, dinov2_proj_dim),
+                nn.LayerNorm(dinov2_proj_dim),
+                nn.GELU(),
+                nn.Dropout(dropout)
+            )
+            self.bridge_dim += dinov2_proj_dim
+
+        if self.bridge_dim != d_model:
+            self.feature_proj = nn.Sequential(
+                nn.Linear(self.bridge_dim, d_model),
+                nn.LayerNorm(d_model),
+                nn.GELU(),
+                nn.Dropout(dropout)
+            )
+        else:
+            self.feature_proj = nn.Identity()
+
+        self.mamba_fwd = nn.ModuleList([
+            Mamba(d_model=d_model, d_state=mamba_d_state, d_conv=mamba_d_conv, expand=mamba_expand)
+            for _ in range(n_layers)
+        ])
+        self.mamba_bwd = nn.ModuleList([
+            Mamba(d_model=d_model, d_state=mamba_d_state, d_conv=mamba_d_conv, expand=mamba_expand)
+            for _ in range(n_layers)
+        ])
+        self.classifier = nn.Linear(d_model * 2, num_classes)
+
+    def forward(self, x, hamer=None, dinov2=None):
+        x = self.spatial_encoder(x)
+
+        if self.hamer_dim is not None:
+            if hamer is None:
+                raise ValueError("This model was built with hamer_dim set, but forward() "
+                                  "was called without a `hamer` tensor.")
+            hamer_feat = self.hamer_encoder(hamer.permute(0, 2, 1))
+            x = torch.cat([x, hamer_feat], dim=-1)
+
+        if self.dinov2_dim is not None:
+            if dinov2 is None:
+                raise ValueError("This model was built with dinov2_dim set, but forward() "
+                                  "was called without a `dinov2` tensor.")
+            dinov2_feat = self.dinov2_encoder(dinov2.permute(0, 2, 1))
+            x = torch.cat([x, dinov2_feat], dim=-1)
+
+        x = self.feature_proj(x + 1e-5)
+
+        fwd_emb = x
+        bwd_emb = torch.flip(x, dims=[1])
+        for fwd_layer, bwd_layer in zip(self.mamba_fwd, self.mamba_bwd):
+            fwd_emb = fwd_layer(fwd_emb)
+            bwd_emb = bwd_layer(bwd_emb)
+        bwd_emb = torch.flip(bwd_emb, dims=[1])
+        embeddings = torch.cat([fwd_emb, bwd_emb], dim=-1)
+
+        logits = self.classifier(embeddings)
+        return logits.permute(0, 2, 1), embeddings.permute(0, 2, 1)
+
+
+class MLPAux_BiLSTM(nn.Module):
+    """Same overall pipeline as STGCN_BiLSTM, but with AuxiliaryMLPEncoder
+    instead of the graph-convolution spatial encoder."""
+    def __init__(self, num_vertices=65, in_channels=3, mlp_hidden_dim=512, d_model=256, n_layers=4,
+                 num_classes=3, dropout=0.2, hamer_dim=None, hamer_proj_dim=64,
+                 dinov2_dim=None, dinov2_proj_dim=128):
+        super().__init__()
+        self.spatial_encoder = AuxiliaryMLPEncoder(
+            input_dim=num_vertices * in_channels, hidden_dim=mlp_hidden_dim,
+            output_dim=d_model, dropout=dropout
+        )
+        self.bridge_dim = d_model
+
+        self.hamer_dim = hamer_dim
+        if hamer_dim is not None:
+            self.hamer_encoder = nn.Sequential(
+                nn.Linear(hamer_dim, hamer_proj_dim),
+                nn.LayerNorm(hamer_proj_dim),
+                nn.GELU(),
+                nn.Dropout(dropout)
+            )
+            self.bridge_dim += hamer_proj_dim
+
+        self.dinov2_dim = dinov2_dim
+        if dinov2_dim is not None:
+            self.dinov2_encoder = nn.Sequential(
+                nn.Linear(dinov2_dim, dinov2_proj_dim),
+                nn.LayerNorm(dinov2_proj_dim),
+                nn.GELU(),
+                nn.Dropout(dropout)
+            )
+            self.bridge_dim += dinov2_proj_dim
+
+        if self.bridge_dim != d_model:
+            self.feature_proj = nn.Sequential(
+                nn.Linear(self.bridge_dim, d_model),
+                nn.LayerNorm(d_model),
+                nn.GELU(),
+                nn.Dropout(dropout)
+            )
+        else:
+            self.feature_proj = nn.Identity()
+
+        self.lstm = nn.LSTM(
+            input_size=d_model, hidden_size=d_model, num_layers=n_layers,
+            batch_first=True, dropout=dropout if n_layers > 1 else 0, bidirectional=True
+        )
+        self.classifier = nn.Linear(d_model * 2, num_classes)
+
+    def forward(self, x, hamer=None, dinov2=None):
+        x = self.spatial_encoder(x)
+
+        if self.hamer_dim is not None:
+            if hamer is None:
+                raise ValueError("This model was built with hamer_dim set, but forward() "
+                                  "was called without a `hamer` tensor.")
+            hamer_feat = self.hamer_encoder(hamer.permute(0, 2, 1))
+            x = torch.cat([x, hamer_feat], dim=-1)
+
+        if self.dinov2_dim is not None:
+            if dinov2 is None:
+                raise ValueError("This model was built with dinov2_dim set, but forward() "
+                                  "was called without a `dinov2` tensor.")
+            dinov2_feat = self.dinov2_encoder(dinov2.permute(0, 2, 1))
+            x = torch.cat([x, dinov2_feat], dim=-1)
+
+        features = self.feature_proj(x + 1e-5)
+        lstm_out, _ = self.lstm(features)
+        logits = self.classifier(lstm_out)
+        return logits.permute(0, 2, 1), lstm_out.permute(0, 2, 1)
+
+
+class MLPAux_Transformer(nn.Module):
+    """Same overall pipeline as STGCN_Transformer, but with AuxiliaryMLPEncoder
+    instead of the graph-convolution spatial encoder."""
+    def __init__(self, num_vertices=65, in_channels=3, mlp_hidden_dim=512, d_model=256, n_layers=4,
+                 num_classes=3, nhead=8, dim_feedforward=1024, dropout=0.2,
+                 hamer_dim=None, hamer_proj_dim=64, dinov2_dim=None, dinov2_proj_dim=128):
+        super().__init__()
+        self.spatial_encoder = AuxiliaryMLPEncoder(
+            input_dim=num_vertices * in_channels, hidden_dim=mlp_hidden_dim,
+            output_dim=d_model, dropout=dropout
+        )
+        self.bridge_dim = d_model
+
+        self.hamer_dim = hamer_dim
+        if hamer_dim is not None:
+            self.hamer_encoder = nn.Sequential(
+                nn.Linear(hamer_dim, hamer_proj_dim),
+                nn.LayerNorm(hamer_proj_dim),
+                nn.GELU(),
+                nn.Dropout(dropout)
+            )
+            self.bridge_dim += hamer_proj_dim
+
+        self.dinov2_dim = dinov2_dim
+        if dinov2_dim is not None:
+            self.dinov2_encoder = nn.Sequential(
+                nn.Linear(dinov2_dim, dinov2_proj_dim),
+                nn.LayerNorm(dinov2_proj_dim),
+                nn.GELU(),
+                nn.Dropout(dropout)
+            )
+            self.bridge_dim += dinov2_proj_dim
+
+        if self.bridge_dim != d_model:
+            self.feature_proj = nn.Sequential(
+                nn.Linear(self.bridge_dim, d_model),
+                nn.LayerNorm(d_model),
+                nn.GELU(),
+                nn.Dropout(dropout)
+            )
+        else:
+            self.feature_proj = nn.Identity()
+
+        self.pos_encoder = PositionalEncoding(d_model, dropout)
+        encoder_layers = nn.TransformerEncoderLayer(
+            d_model=d_model, nhead=nhead, dim_feedforward=dim_feedforward,
+            dropout=dropout, batch_first=True
+        )
+        self.transformer_encoder = nn.TransformerEncoder(encoder_layers, num_layers=n_layers)
+        self.classifier = nn.Linear(d_model, num_classes)
+
+    def forward(self, x, hamer=None, dinov2=None):
+        x = self.spatial_encoder(x)
+
+        if self.hamer_dim is not None:
+            if hamer is None:
+                raise ValueError("This model was built with hamer_dim set, but forward() "
+                                  "was called without a `hamer` tensor.")
+            hamer_feat = self.hamer_encoder(hamer.permute(0, 2, 1))
+            x = torch.cat([x, hamer_feat], dim=-1)
+
+        if self.dinov2_dim is not None:
+            if dinov2 is None:
+                raise ValueError("This model was built with dinov2_dim set, but forward() "
+                                  "was called without a `dinov2` tensor.")
+            dinov2_feat = self.dinov2_encoder(dinov2.permute(0, 2, 1))
+            x = torch.cat([x, dinov2_feat], dim=-1)
+
+        features = self.feature_proj(x + 1e-5)
+        features = self.pos_encoder(features)
+        embeddings = self.transformer_encoder(features)
+        logits = self.classifier(embeddings)
+        return logits.permute(0, 2, 1), embeddings.permute(0, 2, 1)
