@@ -25,7 +25,7 @@ DETR_DEFAULTS = {
     "d_model": 256,
     "num_encoder_layers": 4,
     "num_decoder_layers": 4,
-    "num_queries": 100,
+    "num_queries": 50000,
     "class_weight": 1.0,
     "l1_weight": 5.0,
     "iou_weight": 2.0,
