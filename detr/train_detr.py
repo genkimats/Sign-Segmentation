@@ -28,11 +28,29 @@ import torch
 import torch.optim as optim
 from tqdm import tqdm
 
-from src.dataset_segments import SignSegmentationDatasetDETR
-from src.models_detr import STGCN_DETR
-from src.detr_loss import DETRSegmentLoss
+from dataset_segments import SignSegmentationDatasetDETR
+from models_detr import STGCN_DETR
+from detr_loss import DETRSegmentLoss
 
-QUEUE_FILE = "train_queue_detr.json"
+# This file lives in Sign-Segmentation/detr/. processed_data/ and
+# dataset_splits.json are SHARED, project-wide resources living in
+# Sign-Segmentation/ itself (one level up); train_queue_detr.json,
+# saved_models_detr/, and experiments_detr/ are DETR-specific artifacts kept
+# self-contained inside detr/ alongside this script. Both computed from THIS
+# FILE's own location, not the terminal's current directory, so everything
+# resolves correctly regardless of where train_detr.py is actually run from.
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+_PROJECT_ROOT = os.path.dirname(_SCRIPT_DIR)
+
+DEFAULT_KEYPOINTS_DIR = os.path.join(_PROJECT_ROOT, "processed_data", "keypoints")
+DEFAULT_LABELS_DIR = os.path.join(_PROJECT_ROOT, "processed_data", "BIO_tags")
+DEFAULT_HAMER_DIR = os.path.join(_PROJECT_ROOT, "processed_data", "hamer_features")
+DEFAULT_DINOV2_DIR = os.path.join(_PROJECT_ROOT, "processed_data", "dinov2_features")
+DEFAULT_SPLIT_FILE = os.path.join(_PROJECT_ROOT, "dataset_splits.json")
+
+QUEUE_FILE = os.path.join(_SCRIPT_DIR, "train_queue_detr.json")
+MODEL_DIR = os.path.join(_SCRIPT_DIR, "saved_models_detr")
+EXPERIMENTS_DIR = os.path.join(_SCRIPT_DIR, "experiments_detr")
 
 
 def set_seed(seed):
@@ -110,22 +128,22 @@ def train_model(config):
     KINEMATIC_FEATURES = config.get("kinematic_features", [])
     IN_CHANNELS = config.get("in_channels", 3)
     USE_HAMER_FEATURES = config.get("use_hamer_features", False)
-    HAMER_DIR = config.get("hamer_dir", "processed_data/hamer_features")
+    HAMER_DIR = config.get("hamer_dir", DEFAULT_HAMER_DIR)
     USE_DINOV2_FEATURES = config.get("use_dinov2_features", False)
-    DINOV2_DIR = config.get("dinov2_dir", "processed_data/dinov2_features")
+    DINOV2_DIR = config.get("dinov2_dir", DEFAULT_DINOV2_DIR)
     PATIENCE = config.get("patience", 10)
     EARLY_STOPPING = config.get("early_stopping", True)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     train_dataset = SignSegmentationDatasetDETR(
-        keypoints_dir="processed_data/keypoints", labels_dir="processed_data/BIO_tags",
+        keypoints_dir=DEFAULT_KEYPOINTS_DIR, labels_dir=DEFAULT_LABELS_DIR, split_file=DEFAULT_SPLIT_FILE,
         split="train", base_features=BASE_FEATURES, kinematic_features=KINEMATIC_FEATURES,
         use_hamer_features=USE_HAMER_FEATURES, hamer_dir=HAMER_DIR,
         use_dinov2_features=USE_DINOV2_FEATURES, dinov2_dir=DINOV2_DIR,
     )
     val_dataset = SignSegmentationDatasetDETR(
-        keypoints_dir="processed_data/keypoints", labels_dir="processed_data/BIO_tags",
+        keypoints_dir=DEFAULT_KEYPOINTS_DIR, labels_dir=DEFAULT_LABELS_DIR, split_file=DEFAULT_SPLIT_FILE,
         split="val", base_features=BASE_FEATURES, kinematic_features=KINEMATIC_FEATURES,
         use_hamer_features=USE_HAMER_FEATURES, hamer_dir=HAMER_DIR,
         use_dinov2_features=USE_DINOV2_FEATURES, dinov2_dir=DINOV2_DIR,
@@ -136,7 +154,7 @@ def train_model(config):
     # no matter how well the model trains. Reads label files directly (cheap)
     # rather than calling __getitem__ (which would load the full kinematic/
     # HaMeR/DINOv2 data for every video just to count segments).
-    from src.dataset_segments import bio_to_segments
+    from dataset_segments import bio_to_segments
     max_segments_train = max(
         len(bio_to_segments(np.load(os.path.join(train_dataset.labels_dir, f"{vid}.npy"))))
         for vid in train_dataset.valid_ids
@@ -255,14 +273,14 @@ def train_model(config):
     prefix = config.get("prefix", "01")
     run_name = f"{MODEL_NAME}-{prefix}"
 
-    model_dir = "saved_models_detr"
+    model_dir = MODEL_DIR
     os.makedirs(model_dir, exist_ok=True)
     model_save_path = os.path.join(model_dir, f"{run_name}.pth")
     if best_model_state is not None:
         torch.save(best_model_state, model_save_path)
         print(f"✅ Best model (epoch {best_epoch}, segment F1={best_f1:.4f}) saved to {model_save_path}")
 
-    exp_dir = os.path.join("experiments_detr", run_name)
+    exp_dir = os.path.join(EXPERIMENTS_DIR, run_name)
     os.makedirs(exp_dir, exist_ok=True)
     hostname = socket.gethostname()
     hardware_summary = {
