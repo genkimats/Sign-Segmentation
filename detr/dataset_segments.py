@@ -53,21 +53,25 @@ class SignSegmentationDatasetDETR(Dataset):
                  base_features=None, kinematic_features=None,
                  use_hamer_features=False, hamer_dir=None,
                  use_dinov2_features=False, dinov2_dir=None,
-                 max_reasonable_segments=500):
+                 max_reasonable_segments=4499):
         self.labels_dir = labels_dir
         self.kinetic_dir = os.path.join(_PROJECT_ROOT, "processed_data", "kinematic_features")
         self.use_hamer_features = use_hamer_features
         self.hamer_dir = hamer_dir if hamer_dir is not None else os.path.join(_PROJECT_ROOT, "processed_data", "hamer_features")
         self.use_dinov2_features = use_dinov2_features
         self.dinov2_dir = dinov2_dir if dinov2_dir is not None else os.path.join(_PROJECT_ROOT, "processed_data", "dinov2_features")
-        # Sanity ceiling: a genuine sign-language video shouldn't have anywhere
-        # near this many individual signs/phrases -- an excessive count almost
-        # always means flickering/corrupted BIO labels for that specific video
-        # (rapid B/O alternation producing thousands of spurious 1-frame
-        # "segments"), not a real finding. Excluding these protects num_queries
-        # from being driven to an absurd value by a single bad video -- see
-        # diagnose_segment_counts.py to check your actual distribution before
-        # trusting this default.
+        # Sanity ceiling -- but be careful with this one. This project's real
+        # segment-count distribution turned out to be much higher than
+        # initially assumed (median ~389, max ~4082 across the actual corpus,
+        # confirmed via diagnose_segment_counts.py) -- long, dense continuous
+        # signing videos genuinely have that many real signs. The PRINCIPLED
+        # threshold here isn't "looks high" (that guess is what caused this
+        # filter to wrongly exclude ~40% of real training data once), it's
+        # "exceeds num_queries" -- i.e. the model genuinely cannot represent
+        # a video with more segments than it has query slots for. train_detr.py
+        # passes this explicitly, tied to its own NUM_QUERIES, rather than
+        # relying on this default -- this fallback only matters for standalone
+        # use of this class outside that script.
         self.max_reasonable_segments = max_reasonable_segments
 
         if split_file is None:

@@ -136,17 +136,27 @@ def train_model(config):
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    # The only PRINCIPLED reason to exclude a video for having "too many"
+    # segments is that the model genuinely cannot represent it -- it has more
+    # signs than the model has query slots for. Tying this directly to
+    # NUM_QUERIES (instead of an arbitrary fixed number) means the filter
+    # always reflects actual trainability, not a guess made before the real
+    # segment-count distribution was known.
+    max_reasonable_segments = NUM_QUERIES - 1
+
     train_dataset = SignSegmentationDatasetDETR(
         keypoints_dir=DEFAULT_KEYPOINTS_DIR, labels_dir=DEFAULT_LABELS_DIR, split_file=DEFAULT_SPLIT_FILE,
         split="train", base_features=BASE_FEATURES, kinematic_features=KINEMATIC_FEATURES,
         use_hamer_features=USE_HAMER_FEATURES, hamer_dir=HAMER_DIR,
         use_dinov2_features=USE_DINOV2_FEATURES, dinov2_dir=DINOV2_DIR,
+        max_reasonable_segments=max_reasonable_segments,
     )
     val_dataset = SignSegmentationDatasetDETR(
         keypoints_dir=DEFAULT_KEYPOINTS_DIR, labels_dir=DEFAULT_LABELS_DIR, split_file=DEFAULT_SPLIT_FILE,
         split="val", base_features=BASE_FEATURES, kinematic_features=KINEMATIC_FEATURES,
         use_hamer_features=USE_HAMER_FEATURES, hamer_dir=HAMER_DIR,
         use_dinov2_features=USE_DINOV2_FEATURES, dinov2_dir=DINOV2_DIR,
+        max_reasonable_segments=max_reasonable_segments,
     )
 
     # Setup check: num_queries must comfortably exceed the most segments any
