@@ -118,9 +118,9 @@ def train_model(config):
     MODEL_NAME = config["basename"]
     EPOCHS = config.get("epochs", 100)
     LEARNING_RATE = config.get("learning_rate", 0.0001)
-    NUM_QUERIES = config.get("num_queries", 100)
+    NUM_QUERIES = config.get("num_queries", 4500)
     D_MODEL = config.get("d_model", 256)
-    NUM_ENCODER_LAYERS = config.get("num_encoder_layers", 4)
+    ENCODER_LSTM_LAYERS = config.get("encoder_lstm_layers", 4)
     NUM_DECODER_LAYERS = config.get("num_decoder_layers", 4)
     CONFIDENCE_THRESHOLD = config.get("confidence_threshold", 0.5)
     IOU_MATCH_THRESHOLD = config.get("iou_match_threshold", 0.5)
@@ -159,15 +159,21 @@ def train_model(config):
         len(bio_to_segments(np.load(os.path.join(train_dataset.labels_dir, f"{vid}.npy"))))
         for vid in train_dataset.valid_ids
     )
-    print(f"[SETUP CHECK] Longest segment count in train split: {max_segments_train} "
-          f"(num_queries={NUM_QUERIES}) -- {'OK' if NUM_QUERIES > max_segments_train else '⚠️ TOO LOW, RAISE num_queries'}")
-    if NUM_QUERIES <= max_segments_train:
+    max_segments_val = max(
+        len(bio_to_segments(np.load(os.path.join(val_dataset.labels_dir, f"{vid}.npy"))))
+        for vid in val_dataset.valid_ids
+    )
+    max_segments_overall = max(max_segments_train, max_segments_val)
+    print(f"[SETUP CHECK] Longest segment count -- train: {max_segments_train}, val: {max_segments_val} "
+          f"(num_queries={NUM_QUERIES}) -- "
+          f"{'OK' if NUM_QUERIES > max_segments_overall else '⚠️ TOO LOW, RAISE num_queries'}")
+    if NUM_QUERIES <= max_segments_overall:
         raise ValueError(f"num_queries ({NUM_QUERIES}) must exceed the max segment count "
-                          f"in the training data ({max_segments_train}) -- raise it in your config.")
+                          f"across train AND val ({max_segments_overall}) -- raise it in your config.")
 
     model_kwargs = dict(
         num_vertices=config.get("num_vertices", 65), in_channels=IN_CHANNELS, d_model=D_MODEL,
-        num_encoder_layers=NUM_ENCODER_LAYERS, num_decoder_layers=NUM_DECODER_LAYERS,
+        encoder_lstm_layers=ENCODER_LSTM_LAYERS, num_decoder_layers=NUM_DECODER_LAYERS,
         num_queries=NUM_QUERIES,
     )
     if USE_HAMER_FEATURES:
