@@ -31,16 +31,18 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def bio_to_segments(bio_array):
     """
-    Converts a per-frame BIO array (0=Outside, 1=Begin, 2=Inside) into a list
-    of (start, end) tuples, end EXCLUSIVE -- one per B...I* run. A lone Begin
-    frame with no following Inside frames still produces a valid 1-frame
-    segment (start, start+1).
+    Converts a per-frame BIO array (0=Outside, 1=Inside, 2=Begin -- confirmed
+    against this project's actual processed_data/BIO_tags/ convention, NOT
+    the more common "1=Begin, 2=Inside" assumption this function originally,
+    incorrectly, used) into a list of (start, end) tuples, end EXCLUSIVE --
+    one per B...I* run. A lone Begin frame with no following Inside frames
+    still produces a valid 1-frame segment (start, start+1).
     """
     segments = []
-    begin_positions = np.where(bio_array == 1)[0]
+    begin_positions = np.where(bio_array == 2)[0]
     for start in begin_positions:
         end = int(start) + 1
-        while end < len(bio_array) and bio_array[end] == 2:
+        while end < len(bio_array) and bio_array[end] == 1:
             end += 1
         segments.append((int(start), end))
     return segments
@@ -50,13 +52,23 @@ class SignSegmentationDatasetDETR(Dataset):
     def __init__(self, keypoints_dir, labels_dir, split_file=None, split="train",
                  base_features=None, kinematic_features=None,
                  use_hamer_features=False, hamer_dir=None,
-                 use_dinov2_features=False, dinov2_dir=None):
+                 use_dinov2_features=False, dinov2_dir=None,
+                 max_reasonable_segments=500):
         self.labels_dir = labels_dir
         self.kinetic_dir = os.path.join(_PROJECT_ROOT, "processed_data", "kinematic_features")
         self.use_hamer_features = use_hamer_features
         self.hamer_dir = hamer_dir if hamer_dir is not None else os.path.join(_PROJECT_ROOT, "processed_data", "hamer_features")
         self.use_dinov2_features = use_dinov2_features
         self.dinov2_dir = dinov2_dir if dinov2_dir is not None else os.path.join(_PROJECT_ROOT, "processed_data", "dinov2_features")
+        # Sanity ceiling: a genuine sign-language video shouldn't have anywhere
+        # near this many individual signs/phrases -- an excessive count almost
+        # always means flickering/corrupted BIO labels for that specific video
+        # (rapid B/O alternation producing thousands of spurious 1-frame
+        # "segments"), not a real finding. Excluding these protects num_queries
+        # from being driven to an absurd value by a single bad video -- see
+        # diagnose_segment_counts.py to check your actual distribution before
+        # trusting this default.
+        self.max_reasonable_segments = max_reasonable_segments
 
         if split_file is None:
             split_file = os.path.join(_PROJECT_ROOT, "dataset_splits.json")
@@ -79,6 +91,7 @@ class SignSegmentationDatasetDETR(Dataset):
             "missing_hamer": 0, "hamer_load_error": 0,
             "missing_dinov2": 0, "dinov2_load_error": 0, "dinov2_frame_mismatch": 0,
             "no_segments": 0,
+            "excessive_segments": 0,
         }
 
         self.valid_ids = []
@@ -95,6 +108,13 @@ class SignSegmentationDatasetDETR(Dataset):
             segments = bio_to_segments(labels)
             if len(segments) == 0:
                 skip_counts["no_segments"] += 1
+                continue
+            if len(segments) > self.max_reasonable_segments:
+                skip_counts["excessive_segments"] += 1
+                print(f"  ⚠️ Excluding {vid}: {len(segments)} segments detected (> "
+                      f"max_reasonable_segments={self.max_reasonable_segments}) -- almost "
+                      f"certainly corrupted/flickering labels for this specific video, "
+                      f"not a real finding. Worth inspecting processed_data/BIO_tags/{vid}.npy directly.")
                 continue
 
             if self.use_hamer_features and not os.path.exists(os.path.join(self.hamer_dir, f"{vid}_hamer.pt")):

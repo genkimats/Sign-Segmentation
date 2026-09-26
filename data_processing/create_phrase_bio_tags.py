@@ -55,7 +55,7 @@ except ImportError as e:
         "and update the import above if the path has changed."
     ) from e
 
-PARENT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PARENT_DIR = os.path.dirname(os.path.abspath(__file__))
 ANNOTATIONS_DIR = os.path.join(PARENT_DIR, "raw_data", "annotations")
 VIDEOS_DIR = os.path.join(PARENT_DIR, "raw_data", "videos")
 GLOSS_LABELS_DIR = "processed_data/BIO_tags"          # existing, already-verified sign-level labels
@@ -117,16 +117,20 @@ def snap_to_gloss_boundaries(raw_start_frame, raw_end_frame, gloss_labels, toler
 
 
 def build_phrase_bio_array(phrase_spans, num_frames):
-    """Builds a per-frame int array (0=Outside, 1=Begin, 2=Inside), matching
-    processed_data/BIO_tags/'s exact existing format, from a list of
-    (start_frame, end_frame) phrase spans (end EXCLUSIVE)."""
+    """Builds a per-frame int array (0=Outside, 1=Inside, 2=Begin), matching
+    processed_data/BIO_tags/'s exact existing convention -- confirmed
+    directly against the real data (this function originally had Begin/
+    Inside swapped, which silently produced thousands of spurious 1-frame
+    "phrases" per video wherever it was used downstream; fixed here before
+    any real phrase-level training happens on mislabeled data), from a list
+    of (start_frame, end_frame) phrase spans (end EXCLUSIVE)."""
     labels = np.zeros(num_frames, dtype=np.int64)
     for start, end in phrase_spans:
         if start >= end or start < 0 or end > num_frames:
             continue
-        labels[start] = 1              # Begin
+        labels[start] = 2              # Begin
         if end - start > 1:
-            labels[start + 1:end] = 2  # Inside
+            labels[start + 1:end] = 1  # Inside
     return labels
 
 
@@ -216,9 +220,9 @@ def main():
             processed_count += 1
 
             if sanity_checked < SANITY_CHECK_COUNT:
-                num_phrases = int((result == 1).sum())
+                num_phrases = int((result == 2).sum())   # Begin
                 total_frames = len(result)
-                inside_frac = float((result == 2).sum()) / total_frames if total_frames else 0
+                inside_frac = float((result == 1).sum()) / total_frames if total_frames else 0  # Inside
                 print(f"\n[SANITY CHECK] {out_id}: {num_phrases} phrases detected, "
                       f"{total_frames} total frames, {inside_frac * 100:.1f}% of frames inside a phrase")
                 sanity_checked += 1
