@@ -194,61 +194,45 @@ def expand_experiments_with_seeds(experiments, seed_indices, seeds=(42, 123, 202
 
 EXPERIMENTS_TO_RUN = [
     {
-        "basename": "mlpaux_mamba",
+        "basename": "stgcn_transformer",
         "window_size": 64,
         "overlap": 0,
         "use_hamer_features": True,
-        "description": "overlap ratio (0/64), hamer"
+        "loss_function": "unified_ctc",
+        "description": "overlap ratio (0/64), loss=unified_ctc, hamer"
     },
     {
-        "basename": "mlpaux_mamba",
-        "window_size": 128,
-        "overlap": 0,
-        "use_hamer_features": True,
-        "description": "overlap ratio (0/128), hamer"
-    },
-    {
-        "basename": "mlpaux_bimamba",
+        "basename": "stgcn_bilstm",
         "window_size": 64,
         "overlap": 0,
         "use_hamer_features": True,
-        "description": "overlap ratio (0/64), hamer"
+        "loss_function": "unified_ctc",
+        "description": "overlap ratio (0/64), loss=unified_ctc, hamer"
     },
     {
-        "basename": "mlpaux_bimamba",
-        "window_size": 128,
-        "overlap": 0,
-        "use_hamer_features": True,
-        "description": "overlap ratio (0/128), hamer"
-    },
-    {
-        "basename": "mlpaux_bilstm",
+        "basename": "stgcn_bimamba",
         "window_size": 64,
         "overlap": 0,
         "use_hamer_features": True,
-        "description": "overlap ratio (0/64), hamer"
+        "loss_function": "unified_ctc",
+        "description": "overlap ratio (0/64), loss=unified_ctc, hamer"
     },
     {
-        "basename": "mlpaux_bilstm",
-        "window_size": 128,
-        "overlap": 0,
-        "use_hamer_features": True,
-        "description": "overlap ratio (0/128), hamer"
-    },
-    {
-        "basename": "mlpaux_transformer",
+        "basename": "transformer_baseline",
         "window_size": 64,
         "overlap": 0,
         "use_hamer_features": True,
-        "description": "overlap ratio (0/64), hamer"
+        "loss_function": "unified_ctc",
+        "description": "overlap ratio (0/64), loss=unified_ctc, hamer"
     },
     {
-        "basename": "mlpaux_transformer",
-        "window_size": 128,
+        "basename": "bi_mamba",
+        "window_size": 64,
         "overlap": 0,
         "use_hamer_features": True,
-        "description": "overlap ratio (0/128), hamer"
-    },
+        "loss_function": "unified_ctc",
+        "description": "overlap ratio (0/64), loss=unified_ctc, hamer"
+    }
 ]
 
 if CHOSEN_TYPE == 'mamba':
