@@ -24,7 +24,7 @@ import time
 import random
 import copy
 import socket
-import numpy as np
+import math
 import torch
 import torch.nn.functional as F
 import torch.optim as optim
@@ -116,7 +116,17 @@ def train_model(config):
     LEARNING_RATE = config.get("learning_rate", 0.0001)
     TOLERANCE_WINDOW = config.get("tolerance_window", 5)
     CLASS_WEIGHTS = config.get("class_weights", [0.6, 0.8, 1.0])
-    GLOSS_LOSS_WEIGHT = config.get("gloss_loss_weight", 0.3)
+    GLOSS_LOSS_WEIGHT = config.get("gloss_loss_weight", 0.1)
+    # Normalizing by log(vocab_size) -- the loss a uniform-random classifier
+    # would get -- puts the gloss loss on a comparable scale to the 3-class
+    # BIO loss regardless of vocabulary size, so gloss_loss_weight means
+    # roughly the same thing across different vocab sizes instead of being
+    # silently dominated by however large the vocabulary happens to be.
+    # Confirmed necessary empirically: at weight=0.3 unnormalized, the
+    # weighted gloss term was over 3x LARGER than the bio loss itself
+    # (0.3 x ~5.5 vs ~0.53), and F1 dropped to ~0.55 from a ~0.81 baseline --
+    # the auxiliary task was dominating, not assisting.
+    NORMALIZE_GLOSS_LOSS = config.get("normalize_gloss_loss", True)
     BASE_FEATURES = config.get("base_features", ["x-cord", "y-cord", "z-cord"])
     KINEMATIC_FEATURES = config.get("kinematic_features", [])
     IN_CHANNELS = config.get("in_channels", 3)
@@ -223,7 +233,19 @@ def train_model(config):
             else:
                 gloss_loss = torch.tensor(0.0, device=device)
 
-            total_loss = bio_loss + GLOSS_LOSS_WEIGHT * gloss_loss
+            # Normalize by log(vocab_size) -- the loss a uniform-random
+            # classifier would get -- before applying the weight. Without
+            # this, gloss_loss_weight's effective strength depends heavily on
+            # vocabulary size, and a "modest" 0.3 can still dominate the bio
+            # loss by 3x+ purely because a 2813-class problem starts with a
+            # much larger raw loss than a 3-class one, not because the weight
+            # itself was set high.
+            if NORMALIZE_GLOSS_LOSS and gloss_vocab_size > 1:
+                gloss_loss_scaled = gloss_loss / math.log(gloss_vocab_size)
+            else:
+                gloss_loss_scaled = gloss_loss
+
+            total_loss = bio_loss + GLOSS_LOSS_WEIGHT * gloss_loss_scaled
 
             if torch.isnan(total_loss):
                 continue
@@ -284,6 +306,7 @@ def train_model(config):
         "best_epoch": best_epoch,
         "best_f1": best_f1,
         "gloss_loss_weight": GLOSS_LOSS_WEIGHT,
+        "normalize_gloss_loss": NORMALIZE_GLOSS_LOSS,
         "gloss_vocab_size": gloss_vocab_size,
         "total_training_seconds": round(total_time, 2),
         "total_training_time": f"{int(total_time // 60)}m {int(total_time % 60)}s",
