@@ -29,6 +29,7 @@ import torch
 import torch.nn.functional as F
 import torch.optim as optim
 from tqdm import tqdm
+import numpy as np
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 _PROJECT_ROOT = os.path.dirname(_SCRIPT_DIR)
