@@ -38,6 +38,7 @@ import os
 import sys
 import torch
 import torch.nn as nn
+from torch.utils.checkpoint import checkpoint
 
 # This file lives in Sign-Segmentation/detr/, but needs the existing
 # Sign-Segmentation/src/ package (SkeletonGraph, STGCNBlock), which is NOT
@@ -145,7 +146,19 @@ class STGCN_DETR(nn.Module):
         B, C, T, V = x.shape
         assert B == 1, "STGCN_DETR is designed for batch_size=1 (one full video per forward pass)"
 
-        feat = self.stgcn_blocks(x)
+        # Gradient checkpointing for the spatial encoder and LSTM: this
+        # project's full videos run 100,000+ frames, and even O(T)-linear
+        # operations (STGCN convolutions, LSTM recurrence) produce per-
+        # timestep activations that ALL need to be retained for backprop
+        # across every layer -- at this length that alone can exceed a 16 GB
+        # GPU, even with the decoder's cross-attention already fixed via
+        # memory_pool_stride (that fix addresses a DIFFERENT bottleneck,
+        # downstream of these two calls -- it cannot help here, which is
+        # exactly why the earlier OOM persisted unchanged after adding it).
+        # Checkpointing recomputes each forward pass during backward instead
+        # of storing every intermediate, trading roughly 30-50% more compute
+        # time for a large memory reduction.
+        feat = checkpoint(self.stgcn_blocks, x, use_reentrant=False)
         feat = feat.permute(0, 2, 3, 1).contiguous().view(B, T, -1)
 
         if self.hamer_dim is not None:
@@ -172,7 +185,16 @@ class STGCN_DETR(nn.Module):
         # when it is.
         feat = feat.contiguous()
 
-        lstm_out, _ = self.encoder_lstm(feat)   # (1, T, d_model*2)
+        # Same checkpointing rationale as the spatial encoder above. Wrapped
+        # in a small function because checkpoint() works most reliably when
+        # the checkpointed callable returns a plain tensor rather than
+        # nn.LSTM's native (output, (h_n, c_n)) nested-tuple return -- h_n/c_n
+        # aren't needed downstream anyway.
+        def _run_lstm(inp):
+            out, _ = self.encoder_lstm(inp)
+            return out
+
+        lstm_out = checkpoint(_run_lstm, feat, use_reentrant=False)
         memory = self.encoder_proj(lstm_out)    # (1, T, d_model)
         memory = self.memory_pool(memory.transpose(1, 2)).transpose(1, 2)  # (1, T_pooled, d_model)
 
