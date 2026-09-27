@@ -122,6 +122,7 @@ def train_model(config):
     D_MODEL = config.get("d_model", 256)
     ENCODER_LSTM_LAYERS = config.get("encoder_lstm_layers", 4)
     NUM_DECODER_LAYERS = config.get("num_decoder_layers", 4)
+    MEMORY_POOL_STRIDE = config.get("memory_pool_stride", 16)
     CONFIDENCE_THRESHOLD = config.get("confidence_threshold", 0.5)
     IOU_MATCH_THRESHOLD = config.get("iou_match_threshold", 0.5)
     BASE_FEATURES = config.get("base_features", ["x-cord", "y-cord", "z-cord"])
@@ -184,7 +185,7 @@ def train_model(config):
     model_kwargs = dict(
         num_vertices=config.get("num_vertices", 65), in_channels=IN_CHANNELS, d_model=D_MODEL,
         encoder_lstm_layers=ENCODER_LSTM_LAYERS, num_decoder_layers=NUM_DECODER_LAYERS,
-        num_queries=NUM_QUERIES,
+        num_queries=NUM_QUERIES, memory_pool_stride=MEMORY_POOL_STRIDE,
     )
     if USE_HAMER_FEATURES:
         if train_dataset.detected_hamer_dim is None:

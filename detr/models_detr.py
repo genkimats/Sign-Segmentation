@@ -57,7 +57,8 @@ class STGCN_DETR(nn.Module):
     def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256,
                  encoder_lstm_layers=4, num_decoder_layers=4, num_queries=4500,
                  nhead=8, dim_feedforward=1024, dropout=0.2,
-                 hamer_dim=None, hamer_proj_dim=64, dinov2_dim=None, dinov2_proj_dim=128):
+                 hamer_dim=None, hamer_proj_dim=64, dinov2_dim=None, dinov2_proj_dim=128,
+                 memory_pool_stride=16):
         super().__init__()
         graph = SkeletonGraph(num_vertices=num_vertices)
         A = graph.A
@@ -101,6 +102,21 @@ class STGCN_DETR(nn.Module):
             dropout=dropout if encoder_lstm_layers > 1 else 0
         )
         self.encoder_proj = nn.Linear(d_model * 2, d_model)  # bidirectional output -> d_model
+
+        # Pools the encoder's output along TIME before the decoder cross-attends
+        # to it. This is the actual fix for a real memory problem, not a tuning
+        # knob: decoder cross-attention needs num_queries x T x nhead x
+        # num_decoder_layers activations retained simultaneously for backprop --
+        # at T~100,000 (this corpus's longest videos) that's ~60 GB regardless
+        # of num_queries, nearly 4x a 16 GB GPU. Pooling by 16x brings T down to
+        # ~6,500, and total cross-attention memory down to ~3.75 GB. This does
+        # NOT reduce prediction precision: start/end are still predicted as
+        # continuous sigmoid outputs, not tied to the memory's temporal
+        # resolution -- the decoder just gets a coarser (but still full-video)
+        # view of context, the same way video transformers commonly use
+        # temporal patches/tokens rather than per-frame attention.
+        self.memory_pool_stride = memory_pool_stride
+        self.memory_pool = nn.AvgPool1d(kernel_size=memory_pool_stride, stride=memory_pool_stride, ceil_mode=True)
 
         # Learned query embeddings -- one per potential segment, matching DETR's
         # learned "object queries" convention (here: "segment queries"). Must
@@ -158,6 +174,7 @@ class STGCN_DETR(nn.Module):
 
         lstm_out, _ = self.encoder_lstm(feat)   # (1, T, d_model*2)
         memory = self.encoder_proj(lstm_out)    # (1, T, d_model)
+        memory = self.memory_pool(memory.transpose(1, 2)).transpose(1, 2)  # (1, T_pooled, d_model)
 
         queries = self.query_embed.unsqueeze(0)  # (1, num_queries, d_model)
         decoded = self.decoder(queries, memory)  # (1, num_queries, d_model)
