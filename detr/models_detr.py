@@ -148,6 +148,14 @@ class STGCN_DETR(nn.Module):
 
         feat = self.feature_proj(feat + 1e-5)  # (1, T, d_model)
 
+        # Defensive: cuDNN's LSTM implementation can be picky about memory
+        # layout in ways plain PyTorch ops don't always guarantee end-to-end
+        # (especially once hamer/dinov2 concatenation is in the mix) --
+        # .contiguous() on an already-contiguous tensor is a no-op, so this
+        # costs nothing when it's not needed and prevents a real failure mode
+        # when it is.
+        feat = feat.contiguous()
+
         lstm_out, _ = self.encoder_lstm(feat)   # (1, T, d_model*2)
         memory = self.encoder_proj(lstm_out)    # (1, T, d_model)
 
