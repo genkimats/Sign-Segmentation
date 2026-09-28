@@ -1,0 +1,71 @@
+{
+  "run": "stgcn_transformer-46",
+  "basename": "stgcn_transformer",
+  "window": 64,
+  "stride": 64,
+  "tolerance_window": 1,
+  "class_weights": [
+    0.6,
+    0.8,
+    1.0
+  ],
+  "fps_by_vid": {
+    "1247641_A": 50.0,
+    "1247641_B": 50.0,
+    "1582841_A": 50.0,
+    "1582841_B": 50.0,
+    "1429910-16075041-16115817_A": 50.0,
+    "1429910-16075041-16115817_B": 50.0,
+    "1414123_A": 50.0,
+    "1414123_B": 50.0,
+    "1413236_A": 50.0,
+    "1413236_B": 50.0,
+    "1212402_A": 50.0,
+    "1212402_B": 50.0
+  },
+  "n_videos": 12,
+  "hyperparameters": {
+    "basename": "stgcn_transformer",
+    "window_size": 64,
+    "overlap": 0,
+    "batch_size": 16,
+    "epochs": 100,
+    "early_stopping": true,
+    "patience": 10,
+    "learning_rate": 0.0001,
+    "num_vertices": 65,
+    "tolerance_window": 1,
+    "temporal_downsample_factor": 1,
+    "loss_function": "weighted_ce",
+    "ctc_weight": 0.5,
+    "class_weights": [
+      0.6,
+      0.8,
+      1.0
+    ],
+    "tmse_weight": 0.15,
+    "tmse_threshold": 0.1,
+    "base_features": [
+      "x-cord",
+      "y-cord",
+      "z-cord"
+    ],
+    "kinematic_features": [],
+    "in_channels": 3,
+    "use_face_keypoints": false,
+    "face_dir": "processed_data/face_keypoints_normalized",
+    "use_hamer_features": true,
+    "hamer_dir": "processed_data/hamer_features",
+    "use_dinov2_features": false,
+    "dinov2_dir": "processed_data/dinov2_features_reduced",
+    "d_model": 256,
+    "n_layers": 4,
+    "mamba_d_state": 16,
+    "mamba_d_conv": 4,
+    "mamba_expand": 2,
+    "optimizer": "AdamW",
+    "scheduler": "CosineAnnealingLR",
+    "description": "overlap ratio (0/64), tolerance=1, hamer",
+    "prefix": "46"
+  }
+}
