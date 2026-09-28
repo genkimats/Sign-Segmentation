@@ -21,7 +21,7 @@ MULTITASK_DEFAULTS = {
     "kinematic_features": [],
     "in_channels": 3,
     "class_weights": [0.6, 0.8, 1.0],
-    "gloss_loss_weight": 0.1,
+    "gloss_loss_weight": 0.0,
     "normalize_gloss_loss": True,
     "use_hamer_features": False,
     "hamer_dir": "processed_data/hamer_features",
