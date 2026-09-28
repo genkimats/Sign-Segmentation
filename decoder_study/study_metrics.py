@@ -1,0 +1,210 @@
+"""
+Metrics for the decoder study (numpy only).
+
+Why this replaces src/metrics.py for this study (details verified in
+test_decoder_study.py):
+  * src/metrics.py matches segments MANY-TO-ONE and divides that same TP count
+    by the number of GOLD segments to get recall. Over-segmenting a long sign
+    into pieces that each overlap it >=50% therefore inflates recall and can
+    push "Segment F1" ABOVE 1.0. Here segments are matched ONE-TO-ONE.
+  * src/metrics.py "Mean_IoU" averages over PREDICTED segments only, so it never
+    penalises missed gold segments. Kept below as `legacy_*` for continuity, but
+    always read it together with segment_ratio.
+Everything is scored against the RAW gold labels, never the smoothed argmax.
+
+Segments are (start, end) with END EXCLUSIVE, built with the project's rule:
+B opens a segment (closing any open one), O closes it, a stray I after O is
+ignored -- identical to src/metrics.py extract_segments.
+"""
+import numpy as np
+from study_common import O, I, B
+
+
+# ------------------------------------------------------------------ segments --
+def bio_to_segments(bio):
+    segs, start = [], -1
+    for i, tag in enumerate(np.asarray(bio).tolist()):
+        if tag == B:
+            if start != -1:
+                segs.append((start, i))
+            start = i
+        elif tag == O:
+            if start != -1:
+                segs.append((start, i))
+                start = -1
+    if start != -1:
+        segs.append((start, len(bio)))
+    return segs
+
+
+def overlapping_pairs(pred, gold):
+    """All (i, j, inter) with inter > 0. Both lists sorted and disjoint, so a
+    two-pointer sweep is O(N + pairs)."""
+    pairs, j0 = [], 0
+    for i, (ps, pe) in enumerate(pred):
+        while j0 < len(gold) and gold[j0][1] <= ps:
+            j0 += 1
+        j = j0
+        while j < len(gold) and gold[j][0] < pe:
+            inter = min(pe, gold[j][1]) - max(ps, gold[j][0])
+            if inter > 0:
+                pairs.append((i, j, inter))
+            j += 1
+    return pairs
+
+
+def _pair_iou(pred, gold, i, j, inter):
+    union = (pred[i][1] - pred[i][0]) + (gold[j][1] - gold[j][0]) - inter
+    return inter / union
+
+
+def match_one_to_one(pred, gold, iou_thr):
+    """Greedy highest-IoU-first one-to-one matching of pairs with IoU >= thr."""
+    cands = []
+    for i, j, inter in overlapping_pairs(pred, gold):
+        iou = _pair_iou(pred, gold, i, j, inter)
+        if iou >= iou_thr:
+            cands.append((iou, i, j))
+    cands.sort(reverse=True)
+    used_p, used_g, matches = set(), set(), []
+    for iou, i, j in cands:
+        if i in used_p or j in used_g:
+            continue
+        used_p.add(i); used_g.add(j); matches.append((i, j, iou))
+    return matches
+
+
+def match_boundaries(pred_pos, gold_pos, tol):
+    """Max-cardinality one-to-one matching of sorted 1-D positions within +-tol
+    (the classic two-pointer greedy is optimal for this structure)."""
+    i = j = tp = 0
+    while i < len(pred_pos) and j < len(gold_pos):
+        d = pred_pos[i] - gold_pos[j]
+        if abs(d) <= tol:
+            tp += 1; i += 1; j += 1
+        elif d < -tol:
+            i += 1
+        else:
+            j += 1
+    return tp
+
+
+# ------------------------------------------------------------ legacy metrics --
+def legacy_metrics(pred, gold, iou_thr=0.5):
+    """Faithful re-implementation of src/metrics.py's per-video Segment_F1 and
+    Mean_IoU (many-to-one). NOTE recall here = (#pred matching anything) / #gold,
+    which is what the original does and why it can exceed 1."""
+    if len(gold) == 0 and len(pred) == 0:
+        return 1.0, 1.0
+    if len(gold) == 0 or len(pred) == 0:
+        return 0.0, 0.0
+    best = np.zeros(len(pred))
+    for i, j, inter in overlapping_pairs(pred, gold):
+        best[i] = max(best[i], _pair_iou(pred, gold, i, j, inter))
+    tp = int((best >= iou_thr).sum())
+    precision, recall = tp / len(pred), tp / len(gold)
+    f1 = 0.0 if precision + recall == 0 else 2 * precision * recall / (precision + recall)
+    return f1, float(best.mean())
+
+
+# ------------------------------------------------------------ per-video stats --
+def video_stats(pred_bio, gold_bio, iou_thrs=(0.3, 0.5, 0.7), tols=(2, 5), bucket_edges=None):
+    pred_bio = np.asarray(pred_bio).astype(np.int64)
+    gold_bio = np.asarray(gold_bio).astype(np.int64)
+    assert pred_bio.shape == gold_bio.shape
+    ps, gs = bio_to_segments(pred_bio), bio_to_segments(gold_bio)
+
+    st = {"conf": np.bincount(gold_bio * 3 + pred_bio, minlength=9).reshape(3, 3).astype(np.float64),
+          "n_pred": len(ps), "n_gold": len(gs), "n_frames": len(gold_bio)}
+    for thr in iou_thrs:
+        st[f"tp@{thr}"] = len(match_one_to_one(ps, gs, thr))
+    p_starts, g_starts = [s for s, _ in ps], [s for s, _ in gs]
+    p_ends, g_ends = [e for _, e in ps], [e for _, e in gs]
+    for tol in tols:
+        st[f"bs_tp@{tol}"] = match_boundaries(p_starts, g_starts, tol)
+        st[f"be_tp@{tol}"] = match_boundaries(p_ends, g_ends, tol)
+
+    lf1, liou = legacy_metrics(ps, gs)
+    st["legacy_f1"], st["legacy_iou"] = lf1, liou
+
+    # over-/under-segmentation counts from overlap structure
+    per_gold, per_pred = np.zeros(len(gs), int), np.zeros(len(ps), int)
+    for i, j, _ in overlapping_pairs(ps, gs):
+        per_gold[j] += 1; per_pred[i] += 1
+    st["frag_gold"] = int((per_gold >= 2).sum())    # gold split into >=2 predictions
+    st["merge_pred"] = int((per_pred >= 2).sum())   # prediction spanning >=2 gold
+
+    if bucket_edges is not None:
+        matched_gold = {j for _, j, _ in match_one_to_one(ps, gs, 0.5)}
+        nb = len(bucket_edges) - 1
+        st["bucket_n"], st["bucket_tp"] = np.zeros(nb), np.zeros(nb)
+        for j, (s, e) in enumerate(gs):
+            b = int(np.searchsorted(bucket_edges, e - s, side="right") - 1)
+            b = min(max(b, 0), nb - 1)
+            st["bucket_n"][b] += 1
+            st["bucket_tp"][b] += j in matched_gold
+    return st
+
+
+_SUM_KEYS_EXCLUDE = {"legacy_f1", "legacy_iou"}
+
+
+def aggregate(stats_list):
+    keys = [k for k in stats_list[0] if k not in _SUM_KEYS_EXCLUDE]
+    agg = {k: sum(np.asarray(s[k]) for s in stats_list) for k in keys}
+    agg["legacy_f1"] = float(np.mean([s["legacy_f1"] for s in stats_list]))
+    agg["legacy_iou"] = float(np.mean([s["legacy_iou"] for s in stats_list]))
+    return agg
+
+
+def _f1(tp, n_pred, n_gold):
+    p = tp / n_pred if n_pred else 0.0
+    r = tp / n_gold if n_gold else 0.0
+    return 0.0 if p + r == 0 else 2 * p * r / (p + r)
+
+
+def summarize(agg, iou_thrs=(0.3, 0.5, 0.7), tols=(2, 5)):
+    conf = agg["conf"]
+    tp = np.diag(conf); fp = conf.sum(0) - tp; fn = conf.sum(1) - tp
+    per_class = np.where(2 * tp + fp + fn > 0, 2 * tp / np.maximum(2 * tp + fp + fn, 1e-12), 0.0)
+    out = {"frame_macro_f1": float(per_class.mean()),
+           "frame_f1_O": float(per_class[O]), "frame_f1_I": float(per_class[I]), "frame_f1_B": float(per_class[B]),
+           "n_pred": float(agg["n_pred"]), "n_gold": float(agg["n_gold"]),
+           "segment_ratio": float(agg["n_pred"] / max(agg["n_gold"], 1))}
+    for thr in iou_thrs:
+        out[f"segF1@{thr}"] = _f1(agg[f"tp@{thr}"], agg["n_pred"], agg["n_gold"])
+    for tol in tols:
+        out[f"startF1@{tol}"] = _f1(agg[f"bs_tp@{tol}"], agg["n_pred"], agg["n_gold"])
+        out[f"endF1@{tol}"] = _f1(agg[f"be_tp@{tol}"], agg["n_pred"], agg["n_gold"])
+    out["frag_gold_rate"] = float(agg["frag_gold"] / max(agg["n_gold"], 1))
+    out["merge_pred_rate"] = float(agg["merge_pred"] / max(agg["n_pred"], 1))
+    out["legacy_segF1"], out["legacy_meanIoU"] = agg["legacy_f1"], agg["legacy_iou"]
+    if "bucket_n" in agg:
+        for b, (n, t) in enumerate(zip(agg["bucket_n"], agg["bucket_tp"])):
+            out[f"recall_bucket{b}"] = float(t / n) if n else float("nan")
+            out[f"n_gold_bucket{b}"] = float(n)
+    return out
+
+
+def bootstrap_ci(stats_list, n_boot=1000, seed=0, alpha=0.05, **summ_kw):
+    """Percentile CI over VIDEOS (the natural sampling unit -- frames within a
+    video are far from independent). With ~10-20 test videos these are wide,
+    which is exactly the honest picture."""
+    rng = np.random.default_rng(seed)
+    n = len(stats_list)
+    draws = []
+    for _ in range(n_boot):
+        idx = rng.integers(0, n, n)
+        draws.append(summarize(aggregate([stats_list[i] for i in idx]), **summ_kw))
+    keys = draws[0].keys()
+    return {k: (float(np.nanpercentile([d[k] for d in draws], 100 * alpha / 2)),
+                float(np.nanpercentile([d[k] for d in draws], 100 * (1 - alpha / 2)))) for k in keys}
+
+
+def evaluate(preds, golds, bucket_edges=None, iou_thrs=(0.3, 0.5, 0.7), tols=(2, 5), n_boot=0):
+    """preds/golds: dict vid -> BIO array. Returns (summary, per_video_stats, ci|None)."""
+    vids = sorted(golds)
+    stats = [video_stats(preds[v], golds[v], iou_thrs, tols, bucket_edges) for v in vids]
+    summ = summarize(aggregate(stats), iou_thrs, tols)
+    ci = bootstrap_ci(stats, n_boot, iou_thrs=iou_thrs, tols=tols) if n_boot else None
+    return summ, stats, ci
