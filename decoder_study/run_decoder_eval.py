@@ -22,6 +22,7 @@ import os
 import sys
 import csv
 import json
+import math
 import argparse
 import numpy as np
 
@@ -34,9 +35,29 @@ import study_calibration as C
 SELECT_METRIC = "segF1@0.5"
 DEFAULT_GRIDS = {
     "t_b": (0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8), "t_o": (0.3, 0.4, 0.5, 0.6, 0.7),
-    "hyst": (0.5, 0.6, 0.7, 0.8),
-    "sm_w": (0.25, 0.5, 1.0, 2.0), "sm_pen": (-2.0, 0.0, 2.0, 4.0),
+    "hyst": (0.3, 0.4, 0.5, 0.6, 0.7, 0.8),
+    # First real run tuned dur_w=0.25 and seg_pen=-2.0 -- both the LOWEST grid values -- so the
+    # optimum was outside the grid. Extended downward; edge_warnings() flags it if it happens again.
+    "sm_w": (0.05, 0.1, 0.25, 0.5, 1.0), "sm_pen": (-6.0, -4.0, -2.0, 0.0, 2.0),
 }
+PARAM_TO_GRID = {"t_b": "t_b", "t_o": "t_o", "thr": "hyst", "dur_w": "sm_w", "seg_pen": "sm_pen"}
+
+
+def doc_id(vid):
+    """Recording/document id: '1247641_A' -> '1247641'. A and B of one recording are
+    resampled together in the bootstrap (see study_metrics.bootstrap_ci)."""
+    return vid.rsplit("_", 1)[0]
+
+
+def edge_warnings(params, grids):
+    """A tuned value sitting on the min or max of its grid means the true optimum is
+    probably outside the grid, i.e. the decoder is under-tuned."""
+    msgs = []
+    for k, v in params.items():
+        g = sorted(grids[PARAM_TO_GRID[k]])
+        if len(g) > 1 and (v == g[0] or v == g[-1]):
+            msgs.append(f"{k}={v} is at the {'lower' if v == g[0] else 'upper'} edge of its grid {g[0]}..{g[-1]}")
+    return msgs
 
 
 def _collapse(fn):
@@ -116,13 +137,30 @@ def run_evaluation(select_records, eval_records, train_gold, tolerance_window=5,
              "hysteresis": D.decode_hysteresis, "viterbi": D.decode_viterbi,
              "semi-Markov": lambda lp: D.decode_semi_markov(lp, prior["dur_logp"])}
     log("\n=== ORACLE 1: gold logits must decode back to gold (pipeline sanity) ===")
-    oracle_ok = {}
+    ev_durs = np.array([e - st for g in gold_ev.values() for st, e in M.bio_to_segments(g)])
+    n_ev = len(ev_durs)
+    dmax = prior["dmax"]
+    n_long = int((ev_durs > dmax).sum())
+    extra = int(sum(math.ceil(d / dmax) - 1 for d in ev_durs if d > dmax))   # forced extra splits
+    # A capped sign is split into >= ceil(d/dmax) pieces of <= dmax frames; its best piece has IoU <= dmax/d,
+    # so it can only still be MATCHED at IoU 0.5 when d <= 2*dmax.
+    n_unmatchable = int((ev_durs > 2 * dmax).sum())
+    seg_ceiling = 2 * (n_ev - n_unmatchable) / (2 * n_ev + extra) if n_ev else 1.0
+    oracle_ok, out["oracle_notes"] = {}, {}
     for name, fn in canon.items():
         preds = {v: fn(D.oracle_logp(g)) for v, g in gold_ev.items()}
-        s, _, _ = M.evaluate(preds, gold_ev)
-        oracle_ok[name] = s["segF1@0.5"] > 1 - 1e-9 and s["frame_macro_f1"] > 1 - 1e-9
-        log(f"  {name:12s} segF1@0.5={s['segF1@0.5']:.4f} frameF1={s['frame_macro_f1']:.4f}  {'ok' if oracle_ok[name] else '*** LOSES INFORMATION ***'}")
+        s_, _, _ = M.evaluate(preds, gold_ev)
+        strict = s_["segF1@0.5"] > 1 - 1e-9 and s_["frame_macro_f1"] > 1 - 1e-9
+        explained = (name == "semi-Markov" and not strict and n_long > 0
+                     and s_["segF1@0.5"] >= seg_ceiling - 1e-3 and s_["frame_macro_f1"] >= 1 - (extra + n_unmatchable) / max(n_ev, 1))
+        oracle_ok[name] = bool(strict or explained)
+        tag = "ok" if strict else ("ok (loss fully explained by the dmax cap, see below)" if explained else "*** LOSES INFORMATION ***")
+        log(f"  {name:12s} segF1@0.5={s_['segF1@0.5']:.4f} frameF1={s_['frame_macro_f1']:.4f}  {tag}")
     out["oracle_gold_ok"] = oracle_ok
+    out["oracle_notes"] = {"n_gold_longer_than_dmax": n_long, "forced_extra_splits": extra, "n_unmatchable": n_unmatchable, "semi_markov_segF1_ceiling": seg_ceiling}
+    log(f"  gold signs in the eval split longer than dmax={dmax} frames: {n_long} of {n_ev}. The semi-Markov DP cannot represent"
+        f" them, so >= {extra} extra split segments are forced ({n_unmatchable} of these signs are also too long to match at IoU 0.5)"
+        f" -> its oracle segF1 ceiling is {seg_ceiling:.4f}.")
     log("\n=== ORACLE 2: PERFECT model of the dilated training targets, scored vs RAW gold ===")
     log("  (isolates what each decoder loses to Begin-dilation alone, before any encoder error)")
     dil_fns = {"argmax": D.decode_argmax, "argmax+collapse": _collapse(D.decode_argmax),
@@ -143,14 +181,20 @@ def run_evaluation(select_records, eval_records, train_gold, tolerance_window=5,
     for name, cands in fams.items():
         params, fn, sel_summ = tune(cands, logp_sel, gold_sel) if len(cands) > 1 else (cands[0][0], cands[0][1], None)
         preds = {v: fn(lp) for v, lp in logp_ev.items()}
-        summ, _, ci = M.evaluate(preds, gold_ev, bucket_edges=bucket_edges, n_boot=n_boot)
+        summ, _, ci = M.evaluate(preds, gold_ev, bucket_edges=bucket_edges, n_boot=n_boot, group_fn=doc_id)
         out["decoders"][name] = {"params": params, "eval": summ, "ci": ci, "selection": sel_summ}
         rows.append((name, params, summ, ci))
+        warns = edge_warnings(params, grids) if params else []
+        out["decoders"][name]["edge_warnings"] = warns
         log(f"  done: {name}  {params if params else ''}")
+        for w in warns:
+            log(f"      WARNING: tuned {w} -> optimum is probably outside the grid; extend it before trusting this row")
 
     def fmt(ci, k, s):
         return f"{s[k]:.3f}" + (f" [{ci[k][0]:.3f},{ci[k][1]:.3f}]" if ci else "")
-    log("\n" + "=" * 118)
+    n_docs_ev = len({doc_id(v) for v in gold_ev}); out["n_eval_documents"] = n_docs_ev
+    log(f"\n(95% CIs resample whole RECORDINGS: {n_docs_ev} documents in the eval split, not {len(gold_ev)} independent videos)")
+    log("=" * 118)
     log(f"{'decoder':42s} {'segF1@0.5 [95% CI]':24s} {'seg ratio [95% CI]':22s} {'startF1@2':9s} {'frameF1':8s} {'legacyF1':8s}")
     log("-" * 118)
     for name, params, s, ci in rows:
@@ -170,10 +214,30 @@ def run_evaluation(select_records, eval_records, train_gold, tolerance_window=5,
 
 
 def _jsonable(o):
-    if isinstance(o, dict): return {k: _jsonable(v) for k, v in o.items()}
-    if isinstance(o, (list, tuple)): return [_jsonable(v) for v in o]
-    if isinstance(o, (np.floating, np.integer)): return o.item()
+    """Recursively convert to strict-JSON types: numpy scalars/arrays -> python, NaN/inf -> None."""
+    if isinstance(o, dict):
+        return {str(k): _jsonable(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)):
+        return [_jsonable(v) for v in o]
+    if isinstance(o, np.ndarray):
+        return _jsonable(o.tolist())
+    if isinstance(o, np.generic):          # np.bool_, np.integer, np.floating, ...
+        return _jsonable(o.item())
+    if isinstance(o, float) and (math.isnan(o) or math.isinf(o)):
+        return None
     return o
+
+
+def save_results(out, run_dir):
+    os.makedirs(run_dir, exist_ok=True)
+    with open(os.path.join(run_dir, "results.json"), "w") as f:
+        json.dump(_jsonable(out), f, indent=2, allow_nan=False)
+    with open(os.path.join(run_dir, "results.csv"), "w", newline="") as f:
+        w = csv.writer(f)
+        keys = list(next(iter(out["decoders"].values()))["eval"].keys())
+        w.writerow(["decoder", "params"] + keys)
+        for name, d in out["decoders"].items():
+            w.writerow([name, json.dumps(_jsonable(d["params"]))] + [_jsonable(d["eval"].get(k)) for k in keys])
 
 
 def main():
@@ -187,8 +251,8 @@ def main():
 
     sel, meta = load_export(args.run, args.select_split)
     ev, _ = load_export(args.run, args.eval_split)
-    if set(sel) & set(ev):
-        raise SystemExit("selection and eval splits share videos -- that would leak tuning into evaluation")
+    if {doc_id(v) for v in sel} & {doc_id(v) for v in ev}:
+        raise SystemExit("selection and eval splits share recordings -- that would leak tuning into evaluation")
     train_gold = list(load_gold_for_split("train").values())
     fps = sorted({round(v, 2) for v in (meta.get("fps_by_vid") or {}).values() if v})
     print(f"Run {args.run}: window={meta.get('window')}, fps seen: {fps or 'unknown'}")
@@ -196,14 +260,8 @@ def main():
         print("  WARNING: multiple frame rates present -- durations in frames are not comparable across them; "
               "fit one duration prior per fps group before trusting the semi-Markov numbers.")
     out = run_evaluation(sel, ev, train_gold, meta.get("tolerance_window", 5), args.temperature, args.boot)
-
-    rd = os.path.join(RESULTS_DIR, args.run); os.makedirs(rd, exist_ok=True)
-    json.dump(_jsonable(out), open(os.path.join(rd, "results.json"), "w"), indent=2)
-    with open(os.path.join(rd, "results.csv"), "w", newline="") as f:
-        w = csv.writer(f); keys = list(next(iter(out["decoders"].values()))["eval"].keys())
-        w.writerow(["decoder", "params"] + keys)
-        for name, d in out["decoders"].items():
-            w.writerow([name, json.dumps(_jsonable(d["params"]))] + [d["eval"][k] for k in keys])
+    rd = os.path.join(RESULTS_DIR, args.run)
+    save_results(out, rd)
     print(f"\nSaved {rd}/results.json and results.csv")
 
 

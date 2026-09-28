@@ -224,5 +224,55 @@ for l in lines:
     if l.startswith(("decoder ", "argmax", "threshold", "hysteresis", "viterbi", "semi-Markov")) and "segF1" not in l[:6] and len(l) > 60:
         print("  " + l)
 
+
+# ------------------------------------- save path / grouping / grid edges / cap ----
+print("\n== saving, document-level CIs, grid-edge warnings, dmax-aware oracle ==")
+import json as _json, tempfile, csv as _csv
+# (a) the exact failure seen on real data: numpy bools + NaN must survive a STRICT json dump
+res["oracle_gold_ok"]["_np_bool_probe"] = np.bool_(True)
+res["decoders"]["argmax"]["eval"]["_nan_probe"] = float("nan")
+with tempfile.TemporaryDirectory() as td:
+    R.save_results(res, td)
+    back = _json.load(open(os.path.join(td, "results.json")), parse_constant=lambda c: (_ for _ in ()).throw(ValueError(c)))
+    rows = list(_csv.reader(open(os.path.join(td, "results.csv"))))
+check("save_results writes STRICT JSON (numpy bool_ and NaN handled) and a CSV", back["oracle_gold_ok"]["_np_bool_probe"] is True
+      and back["decoders"]["argmax"]["eval"]["_nan_probe"] is None and len(rows) == 1 + len(res["decoders"]))
+
+# (b) document-level bootstrap must be WIDER than per-video when A and B of a recording are duplicates
+docs = {}
+for d in range(8):
+    g = synth_gold(rng, 1500); z = rng.normal(0, 1.5, (1500, 3)); z[np.arange(1500), g] += 2.0
+    p_ = D.decode_argmax(D.to_logp(z)); docs[f"doc{d}_A"] = (p_, g); docs[f"doc{d}_B"] = (p_.copy(), g.copy())
+pr_ = {k: v[0] for k, v in docs.items()}; go_ = {k: v[1] for k, v in docs.items()}
+_, _, ci_v = M.evaluate(pr_, go_, n_boot=400)
+_, _, ci_d = M.evaluate(pr_, go_, n_boot=400, group_fn=R.doc_id)
+w_v = ci_v["segF1@0.5"][1] - ci_v["segF1@0.5"][0]; w_d = ci_d["segF1@0.5"][1] - ci_d["segF1@0.5"][0]
+check("document-level CI is wider than naive per-video CI when A/B are dependent", w_d > w_v, f"{w_d:.4f} vs {w_v:.4f}")
+check("doc_id groups A and B of one recording", R.doc_id("1429910-16075041-16115817_A") == R.doc_id("1429910-16075041-16115817_B") == "1429910-16075041-16115817")
+
+# (c) grid-edge warnings
+g_ = R.DEFAULT_GRIDS
+check("edge_warnings flags a value on the grid boundary", len(R.edge_warnings({"dur_w": g_["sm_w"][0], "seg_pen": 0.0}, g_)) == 1)
+check("edge_warnings is silent for interior values", R.edge_warnings({"dur_w": 0.25, "seg_pen": -2.0, "t_b": 0.5, "t_o": 0.5}, g_) == [])
+check("the old optimum (dur_w=0.25, seg_pen=-2.0) is now interior to the extended grid", R.edge_warnings({"dur_w": 0.25, "seg_pen": -2.0}, g_) == [])
+
+# (d) oracle with signs longer than dmax: semi-Markov cannot represent them; the runner must EXPLAIN, not cry wolf
+def gold_with(durs, T=4000):
+    lab = np.zeros(T, np.int8); t = 5
+    for d in durs:
+        lab[t] = B; lab[t + 1:t + d] = I; t += d + 6
+    return lab
+tr = [gold_with(rng.integers(6, 50, 60).tolist()) for _ in range(6)]           # dmax will be ~60
+ev_g = {"e1": gold_with([20] * 30 + [130] + [15] * 30, 6000), "e2": gold_with([25] * 40 + [400], 6000)}   # 130 (<=2*dmax), 400 (>2*dmax)
+ev_r = {k: {"logits": D.oracle_logp(g).astype(np.float32), "labels": g} for k, g in ev_g.items()}
+sel_r = {k: {"logits": D.oracle_logp(gold_with([20] * 40, 3000)).astype(np.float32), "labels": gold_with([20] * 40, 3000)} for k in ("s1",)}
+lines2 = []
+r2 = R.run_evaluation(sel_r, ev_r, tr, 5, 1.0, 0, targets_fn=tt, grids={"t_b": (0.5,), "t_o": (0.5,), "hyst": (0.6,), "sm_w": (1.0,), "sm_pen": (0.0,)}, log=lambda m: lines2.append(m))
+notes = r2["oracle_notes"]
+check("runner counts gold signs beyond dmax and the forced splits", notes["n_gold_longer_than_dmax"] == 2 and notes["forced_extra_splits"] >= 2, str(notes))
+sm_line = next(l for l in lines2 if l.strip().startswith("semi-Markov") and "segF1@0.5=" in l and "ORACLE" not in l and "ok" in l)
+check("semi-Markov's oracle shortfall is reported as explained by the dmax cap (not 'LOSES INFORMATION')",
+      r2["oracle_gold_ok"]["semi-Markov"] and "explained" in sm_line and all(r2["oracle_gold_ok"][k] for k in ("argmax", "threshold", "hysteresis", "viterbi")), sm_line.strip()[:110])
+
 print(f"\n{sum(_results)}/{len(_results)} checks passed")
 sys.exit(0 if all(_results) else 1)

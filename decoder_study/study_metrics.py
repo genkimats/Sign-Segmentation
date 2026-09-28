@@ -186,25 +186,40 @@ def summarize(agg, iou_thrs=(0.3, 0.5, 0.7), tols=(2, 5)):
     return out
 
 
-def bootstrap_ci(stats_list, n_boot=1000, seed=0, alpha=0.05, **summ_kw):
-    """Percentile CI over VIDEOS (the natural sampling unit -- frames within a
-    video are far from independent). With ~10-20 test videos these are wide,
-    which is exactly the honest picture."""
+def bootstrap_ci(stats_list, n_boot=1000, seed=0, alpha=0.05, groups=None, **summ_kw):
+    """Percentile CI from resampling. With `groups` (one label per video), whole
+    GROUPS are resampled together. Use the recording/document id: participant A
+    and B of one recording share session, topic, annotator conventions and video
+    segmentation, and the dataset split itself is by document, so resampling
+    A and B independently understates the uncertainty (CIs come out too narrow).
+    Frames within a video are far from independent, so never resample frames."""
     rng = np.random.default_rng(seed)
-    n = len(stats_list)
+    if groups is None:
+        members = [[i] for i in range(len(stats_list))]
+    else:
+        by_group = {}
+        for i, g in enumerate(groups):
+            by_group.setdefault(g, []).append(i)
+        members = list(by_group.values())
+    n = len(members)
     draws = []
     for _ in range(n_boot):
-        idx = rng.integers(0, n, n)
+        pick = rng.integers(0, n, n)
+        idx = [i for k in pick for i in members[k]]
         draws.append(summarize(aggregate([stats_list[i] for i in idx]), **summ_kw))
     keys = draws[0].keys()
     return {k: (float(np.nanpercentile([d[k] for d in draws], 100 * alpha / 2)),
                 float(np.nanpercentile([d[k] for d in draws], 100 * (1 - alpha / 2)))) for k in keys}
 
 
-def evaluate(preds, golds, bucket_edges=None, iou_thrs=(0.3, 0.5, 0.7), tols=(2, 5), n_boot=0):
-    """preds/golds: dict vid -> BIO array. Returns (summary, per_video_stats, ci|None)."""
+def evaluate(preds, golds, bucket_edges=None, iou_thrs=(0.3, 0.5, 0.7), tols=(2, 5), n_boot=0, group_fn=None):
+    """preds/golds: dict vid -> BIO array. group_fn maps a video id to its
+    recording/document id for the bootstrap. Returns (summary, per_video_stats, ci|None)."""
     vids = sorted(golds)
     stats = [video_stats(preds[v], golds[v], iou_thrs, tols, bucket_edges) for v in vids]
     summ = summarize(aggregate(stats), iou_thrs, tols)
-    ci = bootstrap_ci(stats, n_boot, iou_thrs=iou_thrs, tols=tols) if n_boot else None
+    ci = None
+    if n_boot:
+        groups = [group_fn(v) for v in vids] if group_fn else None
+        ci = bootstrap_ci(stats, n_boot, groups=groups, iou_thrs=iou_thrs, tols=tols)
     return summ, stats, ci
