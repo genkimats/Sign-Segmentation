@@ -198,41 +198,25 @@ EXPERIMENTS_TO_RUN = [
         "window_size": 64,
         "overlap": 0,
         "use_hamer_features": True,
-        "loss_function": "unified_ctc",
-        "description": "overlap ratio (0/64), loss=unified_ctc, hamer"
-    },
-    {
-        "basename": "stgcn_bilstm",
-        "window_size": 64,
-        "overlap": 0,
-        "use_hamer_features": True,
-        "loss_function": "unified_ctc",
-        "description": "overlap ratio (0/64), loss=unified_ctc, hamer"
+        "tolerance_window": 1,
+        "description": "overlap ratio (0/64), tolerance=1, hamer"
     },
     {
         "basename": "stgcn_bimamba",
         "window_size": 64,
         "overlap": 0,
         "use_hamer_features": True,
-        "loss_function": "unified_ctc",
-        "description": "overlap ratio (0/64), loss=unified_ctc, hamer"
+        "tolerance_window": 1,
+        "description": "overlap ratio (0/64), tolerance=1, hamer"
     },
     {
-        "basename": "transformer_baseline",
+        "basename": "stgcn_bilstm",
         "window_size": 64,
         "overlap": 0,
         "use_hamer_features": True,
-        "loss_function": "unified_ctc",
-        "description": "overlap ratio (0/64), loss=unified_ctc, hamer"
+        "tolerance_window": 1,
+        "description": "overlap ratio (0/64), tolerance=1, hamer"
     },
-    {
-        "basename": "bi_mamba",
-        "window_size": 64,
-        "overlap": 0,
-        "use_hamer_features": True,
-        "loss_function": "unified_ctc",
-        "description": "overlap ratio (0/64), loss=unified_ctc, hamer"
-    }
 ]
 
 if CHOSEN_TYPE == 'mamba':
