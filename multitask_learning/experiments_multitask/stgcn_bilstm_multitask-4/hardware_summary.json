@@ -1,0 +1,11 @@
+{
+    "seed": 42,
+    "machine_hostname": "z790",
+    "best_epoch": 14,
+    "best_f1": 0.5492385594563827,
+    "gloss_loss_weight": 0.1,
+    "normalize_gloss_loss": true,
+    "gloss_vocab_size": 2813,
+    "total_training_seconds": 5871.53,
+    "total_training_time": "97m 51s"
+}
