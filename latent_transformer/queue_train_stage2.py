@@ -42,7 +42,7 @@ STAGE2_DEFAULTS = {
 # EDIT THIS: each entry overrides STAGE2_DEFAULTS for one queued job.
 # Set "pretrained_checkpoint" here, or override it per-entry below.
 # ==============================================================================
-GLOBAL_PRETRAINED_CHECKPOINT = os.path.join(STAGE1_MODEL_DIR, "stgcn_transformer_autoencoder-1.pth")  # e.g. os.path.join(STAGE1_MODEL_DIR, "stgcn_transformer_autoencoder-01.pth")
+GLOBAL_PRETRAINED_CHECKPOINT = None  # e.g. os.path.join(STAGE1_MODEL_DIR, "stgcn_transformer_autoencoder-01.pth")
 
 EXPERIMENTS_TO_RUN = [
     {
@@ -55,7 +55,6 @@ EXPERIMENTS_TO_RUN = [
         "frozen_encoder": False,
         "pretrained_checkpoint": GLOBAL_PRETRAINED_CHECKPOINT,
     },
-
 ]
 
 
@@ -129,6 +128,27 @@ if __name__ == "__main__":
     seed_indices = select_seed_experiments(experiments_to_run)
     experiments_to_run = expand_experiments_with_seeds(experiments_to_run, seed_indices)
     print()
+
+    # Catch typo'd/unrecognized config keys before queueing -- dict.update()
+    # silently ADDS an unknown key rather than overriding the intended one
+    # (e.g. "frozen_encoder" instead of "freeze_encoder" creates a second,
+    # ignored key while the real "freeze_encoder" quietly keeps its default).
+    # This exact mistake has already happened once; catching it here avoids
+    # burning a full training run on a config that isn't what was intended.
+    known_keys = set(STAGE2_DEFAULTS.keys()) | {"description", "seed"}
+    bad_entries = []
+    for i, exp in enumerate(experiments_to_run):
+        unknown = set(exp.keys()) - known_keys
+        if unknown:
+            bad_entries.append((i, unknown))
+    if bad_entries:
+        print("❌ Unrecognized config key(s) -- likely a typo (e.g. \"frozen_encoder\" instead of "
+              "\"freeze_encoder\"). dict.update() would silently ADD these as new, ignored keys "
+              "rather than overriding the setting you meant:")
+        for i, unknown in bad_entries:
+            print(f"   entry {i}: {sorted(unknown)}")
+        print("Nothing was queued. Fix the key name(s) in EXPERIMENTS_TO_RUN and rerun.")
+        sys.exit(1)
 
     # Refuse to queue anything without a resolvable pretrained_checkpoint --
     # this fails LOUD here, rather than silently after training has already started.

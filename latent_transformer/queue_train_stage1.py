@@ -3,6 +3,7 @@ queue_train_stage1.py -- builds train_queue_stage1.json for
 train_stage1_pretrain.py.
 """
 import os
+import sys
 import json
 
 STAGE1_DEFAULTS = {
@@ -96,6 +97,23 @@ if __name__ == "__main__":
     seed_indices = select_seed_experiments(experiments_to_run)
     experiments_to_run = expand_experiments_with_seeds(experiments_to_run, seed_indices)
     print()
+
+    # Same safeguard as queue_train_stage2.py -- catch typo'd/unrecognized
+    # config keys before queueing, since dict.update() silently ADDS an
+    # unknown key rather than overriding the intended one.
+    known_keys = set(STAGE1_DEFAULTS.keys()) | {"description", "seed"}
+    bad_entries = []
+    for i, exp in enumerate(experiments_to_run):
+        unknown = set(exp.keys()) - known_keys
+        if unknown:
+            bad_entries.append((i, unknown))
+    if bad_entries:
+        print("❌ Unrecognized config key(s) -- likely a typo. dict.update() would silently ADD "
+              "these as new, ignored keys rather than overriding the setting you meant:")
+        for i, unknown in bad_entries:
+            print(f"   entry {i}: {sorted(unknown)}")
+        print("Nothing was queued. Fix the key name(s) in EXPERIMENTS_TO_RUN and rerun.")
+        sys.exit(1)
 
     next_prefix = (max(prefixes_data) + 1) if prefixes_data else 1
     count = 0
