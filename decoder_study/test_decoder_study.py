@@ -324,5 +324,46 @@ check("every non-best decoder gets a verdict against the reference", len(others)
 check(f"reference '{best_ref}' is indeed the top decoder by point estimate",
       best_ref == max(res3["decoders"], key=lambda k: res3["decoders"][k]["eval"][R.SELECT_METRIC]))
 
+
+# ------------------------------------------------ short-sign diagnostic ----
+print("\n== short-sign diagnostic: classify_misses / begin_confidence / short_sign_report ==")
+def segs_to_bio(segs, T):
+    bio = np.zeros(T, dtype=np.int8)
+    for s, e in segs: bio[s] = 2; bio[s+1:e] = 1
+    return bio
+
+gold_ss = [(5,10), (20,25), (26,31), (50,55)]
+T_ss = 70
+logp_ss = np.log(np.full((T_ss,3), [0.9, 0.08, 0.02]))
+logp_ss[5] = logp_ss[20] = logp_ss[26] = np.log([0.05, 0.15, 0.80])
+logp_ss[50] = np.log([0.55, 0.40, 0.05])
+conf_ss = M.begin_confidence(logp_ss, gold_ss, tol=2)
+check("begin_confidence: high near confidently-proposed onsets, low near a never-confident one",
+      all(c > 0.7 for c in conf_ss[:3]) and conf_ss[3] < 0.5, str([round(c,2) for c in conf_ss]))
+
+pred_good_bio = segs_to_bio(gold_ss, T_ss)
+pred_merge_bio = segs_to_bio([(5,10), (19,32)], T_ss)
+lbl_good = M.classify_misses(M.bio_to_segments(pred_good_bio), gold_ss)
+lbl_merge = M.classify_misses(M.bio_to_segments(pred_merge_bio), gold_ss)
+check("classify_misses: perfect predictions -> all matched", lbl_good == ["matched"]*4)
+check("classify_misses: one span over 2 gold sings -> both labeled merged, untouched sign dropped",
+      lbl_merge == ["matched", "merged", "merged", "dropped"], str(lbl_merge))
+
+rep_ss = M.short_sign_report({"good": pred_good_bio, "merge": pred_merge_bio}, logp_ss, gold_ss, np.array([0, 100]))
+check("short_sign_report end-to-end matches the direct per-segment calls",
+      rep_ss[0]["good"] == {"matched": 4} and rep_ss[0]["merge"] == {"matched": 1, "merged": 2, "dropped": 1})
+mpb = rep_ss[0]["mean_peak_pB"]
+check("short_sign_report's mean_peak_pB reflects the mixed confidence in this bucket",
+      0.4 < mpb < 0.8, f"{mpb:.3f}")
+
+# runner integration
+res_ss = R.run_evaluation(sel3, ev3, [synth_gold(rng, 2500) for _ in range(15)], 5, "auto", 0,
+                          targets_fn=tt, grids=small, log=lambda m: None)
+check("runner produces a short_sign_diagnostic with all three duration buckets",
+      set(res_ss["short_sign_diagnostic"]) == {"short", "medium", "long"})
+check("each bucket reports encoder confidence and per-decoder label counts for all 3 tracked decoders",
+      all("mean_peak_pB" in v and all(d in v for d in ("argmax+collapse", "viterbi+collapse", "semi-Markov (tuned)"))
+          for v in res_ss["short_sign_diagnostic"].values()))
+
 print(f"\n{sum(_results)}/{len(_results)} checks passed")
 sys.exit(0 if all(_results) else 1)

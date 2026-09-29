@@ -214,6 +214,41 @@ def run_evaluation(select_records, eval_records, train_gold, tolerance_window=5,
     log("  frag_gold_rate = share of gold signs split across >=2 predictions (over-segmentation);")
     log("  merge_pred_rate = share of predictions spanning >=2 gold signs (under-segmentation).")
 
+    log("\n--- SHORT-SIGN DIAGNOSTIC: why are short signs missed -- encoder confidence, or decoder structure? ---")
+    log("  mean_peak_pB: encoder's peak P(Begin) within +-2 frames of each gold sign's true onset,")
+    log("  independent of any decoder. Low here means the encoder itself never proposed the sign;")
+    log("  high here but still 'merged'/'dropped' below means a DECODER problem, not an encoder one.")
+    short_decoders = {"argmax+collapse": None, "viterbi+collapse": None, "semi-Markov (tuned)": None}
+    for name in list(short_decoders):
+        if name in fams:
+            _, fn, _ = tune(fams[name], logp_sel, gold_sel) if len(fams[name]) > 1 else (fams[name][0][0], fams[name][0][1], None)
+            short_decoders[name] = fn
+        else:
+            short_decoders.pop(name)
+    all_reports = []
+    for v in gold_ev:
+        preds_v = {name: fn(logp_ev[v]) for name, fn in short_decoders.items()}
+        all_reports.append(M.short_sign_report(preds_v, logp_ev[v], M.bio_to_segments(gold_ev[v]), bucket_edges))
+    nb = len(bucket_edges) - 1
+    bucket_names = ["short", "medium", "long"] if nb == 3 else [f"bucket{b}" for b in range(nb)]
+    out["short_sign_diagnostic"] = {}
+    for b, bname in enumerate(bucket_names):
+        n = sum(r[b]["n"] for r in all_reports)
+        if n == 0:
+            continue
+        mean_conf = float(np.average([r[b]["mean_peak_pB"] for r in all_reports if r[b]["n"] > 0],
+                                     weights=[r[b]["n"] for r in all_reports if r[b]["n"] > 0]))
+        log(f"  {bname} (n={n}, mean encoder peak P(Begin) near true onset = {mean_conf:.3f}):")
+        bucket_out = {"n": n, "mean_peak_pB": mean_conf}
+        for name in short_decoders:
+            counts = {}
+            for r in all_reports:
+                for k, v in r[b][name].items():
+                    counts[k] = counts.get(k, 0) + v
+            bucket_out[name] = counts
+            log(f"    {name:24s} " + ", ".join(f"{k}={v}" for k, v in sorted(counts.items())))
+        out["short_sign_diagnostic"][bname] = bucket_out
+
     if n_boot:
         vids_order = sorted(gold_ev)
         docs_ev = [doc_id(v) for v in vids_order]

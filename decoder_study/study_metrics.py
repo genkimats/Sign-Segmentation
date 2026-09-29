@@ -214,6 +214,81 @@ def bootstrap_ci(stats_list, n_boot=1000, seed=0, alpha=0.05, groups=None, **sum
                 float(np.nanpercentile([d[k] for d in draws], 100 * (1 - alpha / 2)))) for k in keys}
 
 
+def classify_misses(pred, gold, iou_thr=0.5):
+    """For every GOLD segment, classifies what the prediction did with it:
+      'matched'     -- one-to-one IoU >= iou_thr (see match_one_to_one)
+      'dropped'     -- no predicted segment overlaps it at all
+      'merged'      -- exactly one predicted segment overlaps it, and that
+                       prediction ALSO overlaps >=1 other gold segment (a
+                       predicted span swallowing multiple signs)
+      'fragmented'  -- >=2 predicted segments overlap it (over-segmented)
+      'poor_iou'    -- exactly one overlapping prediction, one-to-one with
+                       THIS gold segment, but IoU < iou_thr (imprecise, not
+                       structurally wrong)
+    Returns a list of labels, one per gold segment, in gold's order. This is
+    diagnostic, not a scoring metric -- it explains a miss, it doesn't grade one.
+    """
+    matched_gold = {j for _, j, _ in match_one_to_one(pred, gold, iou_thr)}
+    pred_overlaps = [[] for _ in pred]     # pred_overlaps[i] = list of gold idx i overlaps
+    gold_overlaps = [[] for _ in gold]     # gold_overlaps[j] = list of pred idx overlapping j
+    for i, j, _ in overlapping_pairs(pred, gold):
+        pred_overlaps[i].append(j)
+        gold_overlaps[j].append(i)
+
+    labels = []
+    for j in range(len(gold)):
+        if j in matched_gold:
+            labels.append("matched")
+        elif len(gold_overlaps[j]) == 0:
+            labels.append("dropped")
+        elif len(gold_overlaps[j]) >= 2:
+            labels.append("fragmented")
+        else:
+            i = gold_overlaps[j][0]
+            labels.append("merged" if len(pred_overlaps[i]) >= 2 else "poor_iou")
+    return labels
+
+
+def begin_confidence(logp, gold, tol=2):
+    """For each gold segment (start, end), the encoder's PEAK P(Begin) within
+    [start-tol, start+tol] -- did the encoder have meaningful Begin signal near
+    the true onset at all, independent of what any decoder then did with it.
+    logp: (T, 3) log-probs. Returns one float per gold segment, gold's order."""
+    logp = np.asarray(logp)
+    T = len(logp)
+    out = []
+    for s, _ in gold:
+        lo, hi = max(0, s - tol), min(T, s + tol + 1)
+        out.append(float(np.exp(logp[lo:hi, B]).max()) if hi > lo else float("nan"))
+    return out
+
+
+def short_sign_report(pred_by_decoder, logp, gold, bucket_edges, tol=2, iou_thr=0.5):
+    """Ties classify_misses + begin_confidence together for one video, bucketed
+    by gold sign duration. pred_by_decoder: dict decoder_name -> BIO array (all
+    scored against the SAME gold/logp). Returns {bucket_idx: {"n": int,
+    "mean_peak_pB": float, decoder_name: {label: count}}}."""
+    gold = list(gold)
+    durs = np.array([e - s for s, e in gold])
+    nb = len(bucket_edges) - 1
+    buckets = np.clip(np.searchsorted(bucket_edges, durs, side="right") - 1, 0, nb - 1)
+    conf = begin_confidence(logp, gold, tol)
+
+    report = {b: {"n": 0, "peak_pB": [], **{name: {} for name in pred_by_decoder}} for b in range(nb)}
+    for j, b in enumerate(buckets):
+        report[b]["n"] += 1
+        report[b]["peak_pB"].append(conf[j])
+    for name, pred_bio in pred_by_decoder.items():
+        pred_segs = bio_to_segments(pred_bio)
+        labels = classify_misses(pred_segs, gold, iou_thr)
+        for j, b in enumerate(buckets):
+            report[b][name][labels[j]] = report[b][name].get(labels[j], 0) + 1
+    for b in report:
+        pB = report[b].pop("peak_pB")
+        report[b]["mean_peak_pB"] = float(np.mean(pB)) if pB else float("nan")
+    return report
+
+
 def paired_bootstrap_diff(stats_a, stats_b, groups=None, n_boot=2000, seed=0, alpha=0.05, **summ_kw):
     """CI for summary_metric(A) - summary_metric(B), resampling the SAME document
     indices for both decoders in every draw. This is the right tool when A and B
