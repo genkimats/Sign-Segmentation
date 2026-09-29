@@ -42,7 +42,7 @@ STAGE2_DEFAULTS = {
 # EDIT THIS: each entry overrides STAGE2_DEFAULTS for one queued job.
 # Set "pretrained_checkpoint" here, or override it per-entry below.
 # ==============================================================================
-GLOBAL_PRETRAINED_CHECKPOINT = None  # e.g. os.path.join(STAGE1_MODEL_DIR, "stgcn_transformer_autoencoder-01.pth")
+GLOBAL_PRETRAINED_CHECKPOINT = os.path.join(STAGE1_MODEL_DIR, "stgcn_transformer_autoencoder-1.pth")  # e.g. os.path.join(STAGE1_MODEL_DIR, "stgcn_transformer_autoencoder-01.pth")
 
 EXPERIMENTS_TO_RUN = [
     {
