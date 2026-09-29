@@ -184,9 +184,9 @@ def run_evaluation(select_records, eval_records, train_gold, tolerance_window=5,
     for name, cands in fams.items():
         params, fn, sel_summ = tune(cands, logp_sel, gold_sel) if len(cands) > 1 else (cands[0][0], cands[0][1], None)
         preds = {v: fn(lp) for v, lp in logp_ev.items()}
-        summ, _, ci = M.evaluate(preds, gold_ev, bucket_edges=bucket_edges, n_boot=n_boot, group_fn=doc_id)
+        summ, dstats, ci = M.evaluate(preds, gold_ev, bucket_edges=bucket_edges, n_boot=n_boot, group_fn=doc_id)
         out["decoders"][name] = {"params": params, "eval": summ, "ci": ci, "selection": sel_summ}
-        rows.append((name, params, summ, ci))
+        rows.append((name, params, summ, ci, dstats))
         warns = edge_warnings(params, grids) if params else []
         out["decoders"][name]["edge_warnings"] = warns
         log(f"  done: {name}  {params if params else ''}")
@@ -200,7 +200,7 @@ def run_evaluation(select_records, eval_records, train_gold, tolerance_window=5,
     log("=" * 132)
     log(f"{'decoder':42s} {'segF1@0.5 [95% CI]':24s} {'seg ratio [95% CI]':22s} {'P@.5':6s} {'R@.5':6s} {'startF1@2':9s} {'frameF1':8s} {'legacyF1':8s}")
     log("-" * 132)
-    for name, params, s, ci in rows:
+    for name, params, s, ci, _dstats in rows:
         log(f"{name:42s} {fmt(ci, 'segF1@0.5', s):24s} {fmt(ci, 'segment_ratio', s):22s} "
             f"{s['segP@0.5']:<6.3f} {s['segR@0.5']:<6.3f} {s['startF1@2']:<9.3f} {s['frame_macro_f1']:<8.3f} {s['legacy_segF1']:<8.3f}")
     log("=" * 132)
@@ -208,11 +208,30 @@ def run_evaluation(select_records, eval_records, train_gold, tolerance_window=5,
     log("  (can exceed 1; shown only to connect to older numbers). startF1@2 is in FRAMES -- its meaning depends on fps.")
     log("\n--- stratified by gold sign duration: recall of gold signs matched at IoU>=0.5 ---")
     log(f"{'decoder':42s} {'short':8s} {'medium':8s} {'long':8s}   frag_gold_rate  merge_pred_rate")
-    for name, params, s, ci in rows:
+    for name, params, s, ci, _dstats in rows:
         log(f"{name:42s} {s['recall_bucket0']:<8.3f} {s['recall_bucket1']:<8.3f} {s['recall_bucket2']:<8.3f}   "
             f"{s['frag_gold_rate']:<14.3f}  {s['merge_pred_rate']:.3f}")
     log("  frag_gold_rate = share of gold signs split across >=2 predictions (over-segmentation);")
     log("  merge_pred_rate = share of predictions spanning >=2 gold signs (under-segmentation).")
+
+    if n_boot:
+        vids_order = sorted(gold_ev)
+        docs_ev = [doc_id(v) for v in vids_order]
+        best_name = max(rows, key=lambda r: r[2][SELECT_METRIC])[0]
+        log(f"\n--- paired comparison vs '{best_name}' (top by point estimate), {SELECT_METRIC}, same resampled documents both sides ---")
+        log("  (marginal CIs above can overlap even when one decoder is reliably ahead -- both decoders score the SAME")
+        log("   videos, so pairing removes the shared encoder-error noise that inflates two separate marginal CIs)")
+        best_stats = next(dstats for name, _, _, _, dstats in rows if name == best_name)
+        out["paired_vs_best"] = {"reference": best_name}
+        for name, params, summ, ci, dstats in rows:
+            if name == best_name:
+                continue
+            pd = M.paired_bootstrap_diff(best_stats, dstats, groups=docs_ev, n_boot=n_boot)
+            lo, hi, p_gt = pd[SELECT_METRIC]
+            decisive = lo > 0 or hi < 0
+            verdict = f"{best_name} likely better" if lo > 0 else (f"{name} likely better" if hi < 0 else "not resolved at 95%")
+            out["paired_vs_best"][name] = {"diff_ci": [lo, hi], "p_ref_greater": p_gt, "verdict": verdict}
+            log(f"  {best_name} - {name:38s} diff=[{lo:+.4f},{hi:+.4f}]  P({best_name} better)={p_gt:.3f}  -> {verdict}")
     return out
 
 

@@ -282,5 +282,47 @@ check("hysteresis thr<=1/3 (rule disabled) raises no warning", R.edge_warnings({
 _s = M.summarize(M.aggregate([M.video_stats(pred2, gold)]))
 check("segP/segR are consistent with segF1", abs(2 * _s["segP@0.5"] * _s["segR@0.5"] / (_s["segP@0.5"] + _s["segR@0.5"]) - _s["segF1@0.5"]) < 1e-9)
 
+
+# ------------------------------------------------ paired bootstrap ----
+print("\n== paired bootstrap: resolves small differences marginal CIs cannot ==")
+def synth_gold2(rng, T, med=15):
+    lab = np.zeros(T, np.int8); t = int(rng.integers(0, 10))
+    while t < T - 2:
+        d = min(int(np.clip(rng.lognormal(np.log(med), 0.4), 3, 60)), T - t)
+        lab[t] = 2; lab[t+1:t+d] = 1; t += d + int(rng.integers(1, 10))
+    return lab
+
+A_, B_, gold_ = {}, {}, {}
+for d in range(9):
+    g = synth_gold2(rng, 2000); noise = rng.normal(0, 1.3, (2000, 3))
+    la = noise.copy(); la[np.arange(2000), g] += 1.85       # A: small true edge
+    lb = noise.copy(); lb[np.arange(2000), g] += 1.80       # B: same shared noise draw
+    A_[f"d{d}"] = D.decode_argmax(D.to_logp(la))
+    B_[f"d{d}"] = D.decode_argmax(D.to_logp(lb))
+    gold_[f"d{d}"] = g
+
+_, stats_a, ci_a = M.evaluate(A_, gold_, n_boot=600, group_fn=lambda v: v)
+_, stats_b, ci_b = M.evaluate(B_, gold_, n_boot=600, group_fn=lambda v: v)
+marg_overlap = not (ci_a["segF1@0.5"][1] < ci_b["segF1@0.5"][0] or ci_b["segF1@0.5"][1] < ci_a["segF1@0.5"][0])
+pd_ab = M.paired_bootstrap_diff(stats_a, stats_b, groups=list(gold_), n_boot=1500)
+lo, hi, p_gt = pd_ab["segF1@0.5"]
+check("paired test on correlated decoders: marginal CIs overlap but paired CI still excludes 0",
+      marg_overlap and (lo > 0 or hi < 0) and p_gt > 0.9, f"marginal_overlap={marg_overlap}, paired=[{lo:.4f},{hi:.4f}], P={p_gt:.3f}")
+pd_aa = M.paired_bootstrap_diff(stats_a, stats_a, groups=list(gold_), n_boot=200)
+check("paired diff of a decoder against ITSELF is exactly zero", pd_aa["segF1@0.5"] == (0.0, 0.0, 0.0), str(pd_aa["segF1@0.5"]))
+
+# ------------------------------------------- runner surfaces paired comparisons ----
+print("\n== runner: paired_vs_best section ==")
+sel3, ev3 = make_records(4, 2500), make_records(4, 2500)   # reuse helpers from the earlier full-pipeline test
+res3 = R.run_evaluation(sel3, ev3, [synth_gold(rng, 2500) for _ in range(15)], 5, "auto", 300,
+                        targets_fn=tt, grids=small, log=lambda m: None)
+check("runner records a paired_vs_best block naming the top decoder", "paired_vs_best" in res3 and "reference" in res3["paired_vs_best"])
+best_ref = res3["paired_vs_best"]["reference"]
+others = [k for k in res3["paired_vs_best"] if k != "reference"]
+check("every non-best decoder gets a verdict against the reference", len(others) == len(res3["decoders"]) - 1
+      and all("verdict" in res3["paired_vs_best"][k] for k in others))
+check(f"reference '{best_ref}' is indeed the top decoder by point estimate",
+      best_ref == max(res3["decoders"], key=lambda k: res3["decoders"][k]["eval"][R.SELECT_METRIC]))
+
 print(f"\n{sum(_results)}/{len(_results)} checks passed")
 sys.exit(0 if all(_results) else 1)

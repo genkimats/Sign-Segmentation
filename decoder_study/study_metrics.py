@@ -214,6 +214,37 @@ def bootstrap_ci(stats_list, n_boot=1000, seed=0, alpha=0.05, groups=None, **sum
                 float(np.nanpercentile([d[k] for d in draws], 100 * (1 - alpha / 2)))) for k in keys}
 
 
+def paired_bootstrap_diff(stats_a, stats_b, groups=None, n_boot=2000, seed=0, alpha=0.05, **summ_kw):
+    """CI for summary_metric(A) - summary_metric(B), resampling the SAME document
+    indices for both decoders in every draw. This is the right tool when A and B
+    were scored on the SAME videos (always true here): their errors are
+    correlated (same encoder, same hard/easy videos), and pairing removes that
+    shared, cross-video noise instead of letting it inflate two separate marginal
+    CIs that then get compared by eye. `stats_a`/`stats_b` must be per_video_stats
+    lists from M.evaluate() IN THE SAME VIDEO ORDER."""
+    assert len(stats_a) == len(stats_b)
+    rng = np.random.default_rng(seed)
+    if groups is None:
+        members = [[i] for i in range(len(stats_a))]
+    else:
+        by_group = {}
+        for i, g in enumerate(groups):
+            by_group.setdefault(g, []).append(i)
+        members = list(by_group.values())
+    n = len(members)
+    diffs = {}
+    for _ in range(n_boot):
+        pick = rng.integers(0, n, n)
+        idx = [i for k in pick for i in members[k]]
+        sa = summarize(aggregate([stats_a[i] for i in idx]), **summ_kw)
+        sb = summarize(aggregate([stats_b[i] for i in idx]), **summ_kw)
+        for k in sa:
+            if isinstance(sa[k], float):
+                diffs.setdefault(k, []).append(sa[k] - sb[k])
+    return {k: (float(np.nanpercentile(v, 100 * alpha / 2)), float(np.nanpercentile(v, 100 * (1 - alpha / 2))),
+                float(np.mean(np.array(v) > 0))) for k, v in diffs.items()}  # (lo, hi, P(A > B))
+
+
 def evaluate(preds, golds, bucket_edges=None, iou_thrs=(0.3, 0.5, 0.7), tols=(2, 5), n_boot=0, group_fn=None):
     """preds/golds: dict vid -> BIO array. group_fn maps a video id to its
     recording/document id for the bootstrap. Returns (summary, per_video_stats, ci|None)."""
