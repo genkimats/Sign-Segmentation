@@ -173,6 +173,8 @@ def summarize(agg, iou_thrs=(0.3, 0.5, 0.7), tols=(2, 5)):
            "segment_ratio": float(agg["n_pred"] / max(agg["n_gold"], 1))}
     for thr in iou_thrs:
         out[f"segF1@{thr}"] = _f1(agg[f"tp@{thr}"], agg["n_pred"], agg["n_gold"])
+        out[f"segP@{thr}"] = float(agg[f"tp@{thr}"] / max(agg["n_pred"], 1))
+        out[f"segR@{thr}"] = float(agg[f"tp@{thr}"] / max(agg["n_gold"], 1))
     for tol in tols:
         out[f"startF1@{tol}"] = _f1(agg[f"bs_tp@{tol}"], agg["n_pred"], agg["n_gold"])
         out[f"endF1@{tol}"] = _f1(agg[f"be_tp@{tol}"], agg["n_pred"], agg["n_gold"])

@@ -34,11 +34,12 @@ import study_calibration as C
 
 SELECT_METRIC = "segF1@0.5"
 DEFAULT_GRIDS = {
-    "t_b": (0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8), "t_o": (0.3, 0.4, 0.5, 0.6, 0.7),
+    # Grids must bracket the optimum on BOTH sides -- edge_warnings() flags any tuned value that lands on a
+    # boundary. Real runs so far: dilated-target encoder wanted sm_w=0.25/sm_pen=-2 (fewer, weaker-prior
+    # segments); raw-target encoder wanted sm_w=1.0/sm_pen=+2 and t_b=0.2 (its Begin probability is diffuse).
+    "t_b": (0.05, 0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8), "t_o": (0.3, 0.4, 0.5, 0.6, 0.7),
     "hyst": (0.3, 0.4, 0.5, 0.6, 0.7, 0.8),
-    # First real run tuned dur_w=0.25 and seg_pen=-2.0 -- both the LOWEST grid values -- so the
-    # optimum was outside the grid. Extended downward; edge_warnings() flags it if it happens again.
-    "sm_w": (0.05, 0.1, 0.25, 0.5, 1.0), "sm_pen": (-6.0, -4.0, -2.0, 0.0, 2.0),
+    "sm_w": (0.05, 0.1, 0.25, 0.5, 1.0, 2.0, 4.0), "sm_pen": (-6.0, -4.0, -2.0, 0.0, 2.0, 4.0, 6.0, 8.0),
 }
 PARAM_TO_GRID = {"t_b": "t_b", "t_o": "t_o", "thr": "hyst", "dur_w": "sm_w", "seg_pen": "sm_pen"}
 
@@ -54,6 +55,8 @@ def edge_warnings(params, grids):
     probably outside the grid, i.e. the decoder is under-tuned."""
     msgs = []
     for k, v in params.items():
+        if k == "thr" and v <= 1 / 3 + 1e-9:
+            continue   # hysteresis thr <= 1/3 switches the sticky rule off entirely (top prob of 3 classes >= 1/3): nothing to extend
         g = sorted(grids[PARAM_TO_GRID[k]])
         if len(g) > 1 and (v == g[0] or v == g[-1]):
             msgs.append(f"{k}={v} is at the {'lower' if v == g[0] else 'upper'} edge of its grid {g[0]}..{g[-1]}")
@@ -194,13 +197,13 @@ def run_evaluation(select_records, eval_records, train_gold, tolerance_window=5,
         return f"{s[k]:.3f}" + (f" [{ci[k][0]:.3f},{ci[k][1]:.3f}]" if ci else "")
     n_docs_ev = len({doc_id(v) for v in gold_ev}); out["n_eval_documents"] = n_docs_ev
     log(f"\n(95% CIs resample whole RECORDINGS: {n_docs_ev} documents in the eval split, not {len(gold_ev)} independent videos)")
-    log("=" * 118)
-    log(f"{'decoder':42s} {'segF1@0.5 [95% CI]':24s} {'seg ratio [95% CI]':22s} {'startF1@2':9s} {'frameF1':8s} {'legacyF1':8s}")
-    log("-" * 118)
+    log("=" * 132)
+    log(f"{'decoder':42s} {'segF1@0.5 [95% CI]':24s} {'seg ratio [95% CI]':22s} {'P@.5':6s} {'R@.5':6s} {'startF1@2':9s} {'frameF1':8s} {'legacyF1':8s}")
+    log("-" * 132)
     for name, params, s, ci in rows:
         log(f"{name:42s} {fmt(ci, 'segF1@0.5', s):24s} {fmt(ci, 'segment_ratio', s):22s} "
-            f"{s['startF1@2']:<9.3f} {s['frame_macro_f1']:<8.3f} {s['legacy_segF1']:<8.3f}")
-    log("=" * 118)
+            f"{s['segP@0.5']:<6.3f} {s['segR@0.5']:<6.3f} {s['startF1@2']:<9.3f} {s['frame_macro_f1']:<8.3f} {s['legacy_segF1']:<8.3f}")
+    log("=" * 132)
     log("  segment ratio = predicted/true segments (ideal 1.0). legacyF1 = src/metrics.py's many-to-one Segment F1")
     log("  (can exceed 1; shown only to connect to older numbers). startF1@2 is in FRAMES -- its meaning depends on fps.")
     log("\n--- stratified by gold sign duration: recall of gold signs matched at IoU>=0.5 ---")

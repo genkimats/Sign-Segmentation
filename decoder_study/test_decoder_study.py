@@ -274,5 +274,13 @@ sm_line = next(l for l in lines2 if l.strip().startswith("semi-Markov") and "seg
 check("semi-Markov's oracle shortfall is reported as explained by the dmax cap (not 'LOSES INFORMATION')",
       r2["oracle_gold_ok"]["semi-Markov"] and "explained" in sm_line and all(r2["oracle_gold_ok"][k] for k in ("argmax", "threshold", "hysteresis", "viterbi")), sm_line.strip()[:110])
 
+
+# (e) grids bracket both real optima; hysteresis-off is not a warning; P/R consistent with F1
+check("both real semi-Markov optima (0.25,-2.0) and (1.0,+2.0) are interior to the grids", R.edge_warnings({"dur_w": 0.25, "seg_pen": -2.0}, g_) == [] and R.edge_warnings({"dur_w": 1.0, "seg_pen": 2.0}, g_) == [])
+check("threshold optimum t_b=0.2 is now interior", R.edge_warnings({"t_b": 0.2, "t_o": 0.5}, g_) == [])
+check("hysteresis thr<=1/3 (rule disabled) raises no warning", R.edge_warnings({"thr": 0.3}, g_) == [])
+_s = M.summarize(M.aggregate([M.video_stats(pred2, gold)]))
+check("segP/segR are consistent with segF1", abs(2 * _s["segP@0.5"] * _s["segR@0.5"] / (_s["segP@0.5"] + _s["segR@0.5"]) - _s["segF1@0.5"]) < 1e-9)
+
 print(f"\n{sum(_results)}/{len(_results)} checks passed")
 sys.exit(0 if all(_results) else 1)
