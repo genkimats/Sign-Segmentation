@@ -77,16 +77,26 @@ def match_one_to_one(pred, gold, iou_thr):
 def match_boundaries(pred_pos, gold_pos, tol):
     """Max-cardinality one-to-one matching of sorted 1-D positions within +-tol
     (the classic two-pointer greedy is optimal for this structure)."""
-    i = j = tp = 0
+    return len(match_boundaries_indices(pred_pos, gold_pos, tol))
+
+
+def match_boundaries_indices(pred_pos, gold_pos, tol):
+    """Same matching as match_boundaries, but returns the set of GOLD INDICES
+    (positions in gold_pos) that got matched -- needed to bucket boundary
+    matches by which gold segment they belong to. pred_pos/gold_pos must be
+    sorted ascending (true for segment starts/ends from bio_to_segments,
+    which scans left to right)."""
+    i = j = 0
+    matched = set()
     while i < len(pred_pos) and j < len(gold_pos):
         d = pred_pos[i] - gold_pos[j]
         if abs(d) <= tol:
-            tp += 1; i += 1; j += 1
+            matched.add(j); i += 1; j += 1
         elif d < -tol:
             i += 1
         else:
             j += 1
-    return tp
+    return matched
 
 
 # ------------------------------------------------------------ legacy metrics --
@@ -135,14 +145,38 @@ def video_stats(pred_bio, gold_bio, iou_thrs=(0.3, 0.5, 0.7), tols=(2, 5), bucke
     st["merge_pred"] = int((per_pred >= 2).sum())   # prediction spanning >=2 gold
 
     if bucket_edges is not None:
-        matched_gold = {j for _, j, _ in match_one_to_one(ps, gs, 0.5)}
         nb = len(bucket_edges) - 1
-        st["bucket_n"], st["bucket_tp"] = np.zeros(nb), np.zeros(nb)
-        for j, (s, e) in enumerate(gs):
-            b = int(np.searchsorted(bucket_edges, e - s, side="right") - 1)
-            b = min(max(b, 0), nb - 1)
+        gold_bucket = np.zeros(len(gs), dtype=int)
+        for j, (gs_, ge_) in enumerate(gs):
+            b = int(np.searchsorted(bucket_edges, ge_ - gs_, side="right") - 1)
+            gold_bucket[j] = min(max(b, 0), nb - 1)
+        st["bucket_n"] = np.zeros(nb)
+        for b in gold_bucket:
             st["bucket_n"][b] += 1
-            st["bucket_tp"][b] += j in matched_gold
+
+        # Recall at EVERY requested IoU threshold, bucketed by gold duration --
+        # not just 0.5. A fixed IoU threshold is mechanically harsher on short
+        # segments (a 2-frame boundary error drops a 5-frame sign's IoU to ~0.43
+        # but a 30-frame sign's to ~0.88 -- same absolute error, opposite
+        # verdict), so comparing bucket recall ACROSS thresholds shows how much
+        # of any short-vs-long gap is that artifact versus a genuine miss.
+        for thr in iou_thrs:
+            matched = {j for _, j, _ in match_one_to_one(ps, gs, thr)}
+            tp = np.zeros(nb)
+            for j in matched:
+                tp[gold_bucket[j]] += 1
+            st[f"bucket_tp@{thr}"] = tp
+        st["bucket_tp"] = st[f"bucket_tp@0.5"] if 0.5 in iou_thrs else st[f"bucket_tp@{iou_thrs[0]}"]
+
+        # Bucketed START-boundary match at each tolerance: an ABSOLUTE-frame
+        # criterion, not proportional to segment length -- the natural point of
+        # comparison for whether the IoU-based gap above is mostly that artifact.
+        for tol in tols:
+            matched_starts = match_boundaries_indices(p_starts, g_starts, tol)
+            bs_tp = np.zeros(nb)
+            for j in matched_starts:
+                bs_tp[gold_bucket[j]] += 1
+            st[f"bucket_bs_tp@{tol}"] = bs_tp
     return st
 
 
@@ -182,9 +216,25 @@ def summarize(agg, iou_thrs=(0.3, 0.5, 0.7), tols=(2, 5)):
     out["merge_pred_rate"] = float(agg["merge_pred"] / max(agg["n_pred"], 1))
     out["legacy_segF1"], out["legacy_meanIoU"] = agg["legacy_f1"], agg["legacy_iou"]
     if "bucket_n" in agg:
-        for b, (n, t) in enumerate(zip(agg["bucket_n"], agg["bucket_tp"])):
-            out[f"recall_bucket{b}"] = float(t / n) if n else float("nan")
+        n_arr = agg["bucket_n"]
+        for b, n in enumerate(n_arr):
             out[f"n_gold_bucket{b}"] = float(n)
+        # recall_bucket{b} kept as-is (IoU>=0.5) for backward compatibility with
+        # existing dashboards/scripts; recall_bucket{b}@{thr} adds every other
+        # requested threshold, and recall_bucket{b}_bs@{tol} adds the ABSOLUTE-
+        # frame boundary-match view -- comparing these two families for the
+        # SAME bucket is how you tell "genuinely missed" from "an artifact of
+        # a fixed IoU threshold being harsher on short segments".
+        for thr in iou_thrs:
+            tp_arr = agg[f"bucket_tp@{thr}"]
+            for b, (n, t) in enumerate(zip(n_arr, tp_arr)):
+                out[f"recall_bucket{b}@{thr}"] = float(t / n) if n else float("nan")
+                if thr == 0.5:
+                    out[f"recall_bucket{b}"] = out[f"recall_bucket{b}@{thr}"]
+        for tol in tols:
+            tp_arr = agg[f"bucket_bs_tp@{tol}"]
+            for b, (n, t) in enumerate(zip(n_arr, tp_arr)):
+                out[f"recall_bucket{b}_bs@{tol}"] = float(t / n) if n else float("nan")
     return out
 
 

@@ -365,5 +365,28 @@ check("each bucket reports encoder confidence and per-decoder label counts for a
       all("mean_peak_pB" in v and all(d in v for d in ("argmax+collapse", "viterbi+collapse", "semi-Markov (tuned)"))
           for v in res_ss["short_sign_diagnostic"].values()))
 
+
+# ------------------------------------------------ IoU-threshold-harshness diagnostic ----
+print("\n== IoU-threshold artifact: fixed threshold is harsher on short segments ==")
+gold_art, pred_art = [], []
+tt_ = 0
+for _ in range(20):
+    gold_art.append((tt_, tt_+5)); pred_art.append((tt_+2, tt_+7)); tt_ += 15
+for _ in range(20):
+    gold_art.append((tt_, tt_+30)); pred_art.append((tt_+2, tt_+32)); tt_ += 45
+gold_bio_art = np.zeros(tt_, dtype=np.int8)
+for s_, e_ in gold_art: gold_bio_art[s_] = 2; gold_bio_art[s_+1:e_] = 1
+pred_bio_art = np.zeros(tt_, dtype=np.int8)
+for s_, e_ in pred_art: pred_bio_art[s_] = 2; pred_bio_art[s_+1:e_] = 1
+edges_art = np.array([0, 10, 1e9])
+st_art = M.video_stats(pred_bio_art, gold_bio_art, iou_thrs=(0.3,0.5,0.7), tols=(2,5), bucket_edges=edges_art)
+summ_art = M.summarize(M.aggregate([st_art]), iou_thrs=(0.3,0.5,0.7), tols=(2,5))
+check("identical 2-frame shift: IoU@0.5 fails short (0.0) but passes long (1.0)",
+      summ_art["recall_bucket0@0.5"] == 0.0 and summ_art["recall_bucket1@0.5"] == 1.0)
+check("the SAME shift under absolute tol=2 passes BOTH buckets -- confirms it's a threshold artifact, not a real gap",
+      summ_art["recall_bucket0_bs@2"] == 1.0 and summ_art["recall_bucket1_bs@2"] == 1.0)
+check("old recall_bucket{b} key (back-compat) still matches the IoU>=0.5 value", summ_art["recall_bucket0"] == summ_art["recall_bucket0@0.5"])
+check("match_boundaries and match_boundaries_indices agree on the count", M.match_boundaries([1,10,20],[1,11,25],2) == len(M.match_boundaries_indices([1,10,20],[1,11,25],2)))
+
 print(f"\n{sum(_results)}/{len(_results)} checks passed")
 sys.exit(0 if all(_results) else 1)
