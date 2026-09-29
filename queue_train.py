@@ -199,24 +199,9 @@ EXPERIMENTS_TO_RUN = [
         "overlap": 0,
         "use_hamer_features": True,
         "tolerance_window": 1,
-        "description": "overlap ratio (0/64), tolerance=1, hamer"
-    },
-    {
-        "basename": "stgcn_bimamba",
-        "window_size": 64,
-        "overlap": 0,
-        "use_hamer_features": True,
-        "tolerance_window": 1,
-        "description": "overlap ratio (0/64), tolerance=1, hamer"
-    },
-    {
-        "basename": "stgcn_bilstm",
-        "window_size": 64,
-        "overlap": 0,
-        "use_hamer_features": True,
-        "tolerance_window": 1,
-        "description": "overlap ratio (0/64), tolerance=1, hamer"
-    },
+        "class_weights": [0.2, 0.4, 1.0],
+        "description": "overlap ratio (0/64), weights=[0.2, 0.4, 1.0], tolerance=1, hamer"
+    }
 ]
 
 if CHOSEN_TYPE == 'mamba':
