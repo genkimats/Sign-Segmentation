@@ -47,12 +47,12 @@ GLOBAL_PRETRAINED_CHECKPOINT = None  # e.g. os.path.join(STAGE1_MODEL_DIR, "stgc
 EXPERIMENTS_TO_RUN = [
     {
         "description": "first stage 2 fine-tune, frozen encoder, hamer",
-        "frozen_encoder": True,
+        "freeze_encoder": True,
         "pretrained_checkpoint": GLOBAL_PRETRAINED_CHECKPOINT,
     },
     {
         "description": "first stage 2 fine-tune, fine-tune encoder, hamer",
-        "frozen_encoder": False,
+        "freeze_encoder": False,
         "pretrained_checkpoint": GLOBAL_PRETRAINED_CHECKPOINT,
     },
 ]
