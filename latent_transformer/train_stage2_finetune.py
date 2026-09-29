@@ -121,6 +121,19 @@ def train_model(config):
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    # SignSegmentationDataset (src/dataset.py) hardcodes its kinematic-features
+    # path as a bare relative string ("processed_data/kinematic_features"),
+    # independent of the absolute keypoints_dir/labels_dir passed in below --
+    # it resolves against whatever the CURRENT WORKING DIRECTORY happens to be
+    # when the script is run, not against this project's root. Since this
+    # script lives in latent_transformer/ and is meant to be run from there,
+    # chdir to the project root first so that internal relative path resolves
+    # correctly regardless of where the script was launched from. Every path
+    # this script itself uses (DEFAULT_*, QUEUE_FILE, MODEL_DIR, etc.) is
+    # already absolute, computed before this point, so this chdir doesn't
+    # affect anything else.
+    os.chdir(_PROJECT_ROOT)
+
     train_dataset = SignSegmentationDataset(
         keypoints_dir=DEFAULT_KEYPOINTS_DIR, labels_dir=DEFAULT_LABELS_DIR, split_file=DEFAULT_SPLIT_FILE,
         split="train", window_size=WINDOW_SIZE, overlap=OVERLAP, tolerance_window=TOLERANCE_WINDOW,
