@@ -45,7 +45,17 @@ STAGE2_DEFAULTS = {
 GLOBAL_PRETRAINED_CHECKPOINT = os.path.join(STAGE1_MODEL_DIR, "stgcn_transformer_autoencoder-1.pth")  # e.g. os.path.join(STAGE1_MODEL_DIR, "stgcn_transformer_autoencoder-01.pth")
 
 EXPERIMENTS_TO_RUN = [
-    {"description": "first stage 2 fine-tune, frozen encoder, hamer"},
+    {
+        "description": "first stage 2 fine-tune, frozen encoder, hamer",
+        "frozen_encoder": True,
+        "pretrained_checkpoint": GLOBAL_PRETRAINED_CHECKPOINT,
+    },
+    {
+        "description": "first stage 2 fine-tune, fine-tune encoder, hamer",
+        "frozen_encoder": False,
+        "pretrained_checkpoint": GLOBAL_PRETRAINED_CHECKPOINT,
+    },
+
 ]
 
 
