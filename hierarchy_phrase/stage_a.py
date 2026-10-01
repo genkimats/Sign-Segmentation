@@ -192,7 +192,7 @@ def train(args):
             loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             opt.step()
-            tot += float(loss)
+            tot += loss.item()
         v = validate(model, val_s, device)
         improved = v["score"] > best
         if improved:

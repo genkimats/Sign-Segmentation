@@ -97,6 +97,9 @@ pol_p = SC.SourcePolicy("pred", 5, 1.0, .5, .5, 0)
 pr = pol_p.segs(items[0], 1)
 check("pred source decodes the Stage-A sign head (close to gold on this clean synthetic cache)",
       abs(len(pr) - len(items[0]["gold_sign"])) <= 0.1 * len(items[0]["gold_sign"]), f"{len(pr)} vs {len(items[0]['gold_sign'])}")
+empty_item = dict(items[0]); empty_item["sign_probs"] = np.tile([0.9, 0.05, 0.05], (items[0]["T"], 1)).astype(np.float32); empty_item["vid"] = "empty"
+ex_e, nfb = SC.make_examples([empty_item], pol_p, 1, G, return_fallbacks=True)
+check("a video with no predicted sign falls back to gold instead of vanishing", nfb == 1 and len(ex_e) == 1 and len(ex_e[0][0]) == len(items[0]["gold_sign"]))
 check("predicted-sign decoding is cached per video", pol_p.pred(items[0]) is pol_p.pred(items[0]))
 
 segs = items[0]["gold_sign"]

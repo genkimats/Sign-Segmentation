@@ -169,6 +169,21 @@ try:
     check("out-of-range segment is rejected with a clear error", False)
 except ValueError:
     check("out-of-range segment is rejected with a clear error", True)
+ok = True
+for n in range(0, 31):                     # regression: videos with fewer than 11 signs used to crash
+    v = rng.random(n) + 0.1
+    lm = ST._local_mean(v)
+    ref = np.array([v[max(0, i - 5):i + 6].mean() for i in range(n)])
+    ok &= lm.shape == (n,) and np.allclose(lm, ref)
+check("local mean is correct for every length 0..30 (short-video regression)", ok)
+ok = True
+for K in (1, 2, 3, 10, 11, 12):
+    sgk = random_signs(60 * K, rng, mean_len=10, gap_p=0.0)[:K]
+    Tk = sgk[-1][1] + 5
+    Xk, _ = ST.build_tokens(sgk, Tk, fps, xyz=rng.normal(size=(Tk, 65, 3)).astype(np.float32), h=rng.normal(size=(Tk, H)).astype(np.float32),
+                            probs=ST.logits_to_probs(rng.normal(size=(Tk, 3))))
+    ok &= Xk.shape[0] == len(sgk) and np.isfinite(Xk).all()
+check("build_tokens works for videos with very few signs", ok)
 Xe, _ = ST.build_tokens([], T, fps, xyz=xyz, h=h, probs=P)
 check("empty segmentation gives an empty (0, D) matrix", Xe.shape == (0, X.shape[1]))
 Xp, cp = ST.build_tokens(sg, T, fps, probs=P, groups=("sign_probs",))

@@ -93,11 +93,16 @@ def speed_signals(xyz, fps):
 
 
 def _local_mean(x, half=5):
+    """Mean over the window [i-half, i+half] clipped to the array, for ANY length (np.convolve(mode='same')
+    returns max(len(x), len(kernel)) values, which broke videos with fewer than 2*half+1 signs)."""
     x = np.asarray(x, dtype=np.float64)
-    k = np.ones(2 * half + 1)
-    num = np.convolve(x, k, mode="same")
-    den = np.convolve(np.ones(len(x)), k, mode="same")
-    return num / np.maximum(den, 1e-9)
+    n = len(x)
+    if n == 0:
+        return x
+    cs = np.concatenate([[0.0], np.cumsum(x)])
+    idx = np.arange(n)
+    lo, hi = np.maximum(idx - half, 0), np.minimum(idx + half + 1, n)
+    return (cs[hi] - cs[lo]) / (hi - lo)
 
 
 def _mean_or(x, default):

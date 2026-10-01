@@ -143,14 +143,19 @@ class SourcePolicy:
         return self.source in ("gold", "pred")
 
 
-def make_examples(items, policy, epoch, groups):
-    ex = []
+def make_examples(items, policy, epoch, groups, return_fallbacks=False):
+    """(tokens, tags) per video under the policy. A video whose chosen segmentation is EMPTY (e.g. Stage A predicts no sign at
+    the thresholds used) falls back to its gold signs so training never receives zero examples; the number of fallbacks is
+    returned when asked, and train() warns about it."""
+    ex, fallbacks = [], 0
     for it in items:
         segs = policy.segs(it, epoch)
         if len(segs) == 0:
+            segs, fallbacks = it["gold_sign"], fallbacks + 1
+        if len(segs) == 0:
             continue
         ex.append((tokens_of(it, segs, groups), phrase_tags_over_signs(segs, it["gold_phrase"])))
-    return ex
+    return (ex, fallbacks) if return_fallbacks else ex
 
 
 # ------------------------------------------------------------------ inference
@@ -255,7 +260,10 @@ def train(a):
     for epoch in range(1, a.epochs + 1):
         t0 = time.time()
         if examples is None or not policy.static:
-            examples = make_examples(train_items, policy, epoch, groups)
+            examples, n_fb = make_examples(train_items, policy, epoch, groups, return_fallbacks=True)
+            if n_fb and a.source != "gold":
+                print(f"WARNING: {n_fb}/{len(train_items)} training videos had NO predicted sign at b/o = {a.b_thr}/{a.o_thr} "
+                      f"and fell back to gold signs. If this is most of them, Stage A is not trained enough or the thresholds are off.")
         sizes = np.array([len(x) for x, _ in examples], dtype=np.float64)
         n_win = max(1, int(sizes.sum() // (a.window // 2)))
         pvid = sizes / sizes.sum()
@@ -278,7 +286,7 @@ def train(a):
             loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             opt.step()
-            tot += float(loss); steps += 1
+            tot += loss.item(); steps += 1
         sched.step()
         model.eval()
         r_pred = evaluate_items(model, val_items, groups, mean, std, a.window, device, lambda it: predicted_signs(it, a.b_thr, a.o_thr))
