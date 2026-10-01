@@ -1914,7 +1914,7 @@ class HandsOn2025(nn.Module):
     forward() keeps returning (logits, embeddings) like every other model. Set ctc_num_tokens=0 to drop it.
 
     Not stated in the paper, so chosen here and exposed as arguments: MLP hidden widths, mixer output width
-    (= d_model), Transformer size, norm/activation, dropout.
+    (= d_model), Transformer size, norm/activation, dropout, pre-LN vs post-LN (`norm_first`).
 
     Downsampling is done inside the model (every `downsample`-th frame, parameter-free) and the BIO logits are
     repeated back to the input frame rate, so the dataset/labels/metrics keep their usual (B, 3, T) shape.
@@ -1925,7 +1925,7 @@ class HandsOn2025(nn.Module):
     def __init__(self, num_vertices=65, in_channels=3, num_classes=3, d_model=256, n_layers=4,
                  nhead=8, dim_feedforward=None, dropout=0.2, adapter_dim=512, adapter_hidden=None,
                  mixer_hidden=512, downsample=2, pose_stream="angles", angle_y_scale=1.0,
-                 ctc_num_tokens=1, hamer_dim=None, dinov2_dim=None):
+                 ctc_num_tokens=1, norm_first=True, hamer_dim=None, dinov2_dim=None):
         super().__init__()
         if hamer_dim is None:
             raise ValueError("HandsOn2025 needs HaMeR features: set use_hamer_features=True.")
@@ -1953,9 +1953,12 @@ class HandsOn2025(nn.Module):
         self.pos_encoder = PositionalEncoding(d_model, dropout)
         encoder_layers = nn.TransformerEncoderLayer(
             d_model=d_model, nhead=nhead, dim_feedforward=dim_feedforward,
-            dropout=dropout, batch_first=True
+            dropout=dropout, batch_first=True, norm_first=norm_first
         )
-        self.transformer_encoder = nn.TransformerEncoder(encoder_layers, num_layers=n_layers)
+        # norm_first=True (pre-LN) trains far more stably than post-LN without a long warm-up; it needs a final LayerNorm.
+        self.transformer_encoder = nn.TransformerEncoder(
+            encoder_layers, num_layers=n_layers, norm=nn.LayerNorm(d_model) if norm_first else None,
+            enable_nested_tensor=False)
         self.classifier = nn.Linear(d_model, num_classes)
         self.ctc_head = nn.Linear(d_model, ctc_num_tokens + 1) if ctc_num_tokens > 0 else None
 

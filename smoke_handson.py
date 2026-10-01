@@ -43,9 +43,9 @@ def mlp3(i, h, o): return lin(i, h) + ln(h) + lin(h, h) + ln(h) + lin(h, o) + ln
 def encoder_layer(d, ff): return (3 * d * d + 3 * d) + (d * d + d) + lin(d, ff) + lin(ff, d) + 2 * ln(d)
 
 
-def expected(pose_in, hamer_dim=288, d=256, L=4, ff=1024, ad=512, mh=512, classes=3, ctc_k=2):
+def expected(pose_in, hamer_dim=288, d=256, L=4, ff=1024, ad=512, mh=512, classes=3, ctc_k=2, pre_ln=True):
     return (mlp3(hamer_dim, ad, ad) + mlp3(pose_in, ad, ad) + mlp3(2 * ad, mh, d)
-            + L * encoder_layer(d, ff) + lin(d, classes) + lin(d, ctc_k))
+            + L * encoder_layer(d, ff) + (ln(d) if pre_ln else 0) + lin(d, classes) + lin(d, ctc_k))
 
 
 torch.manual_seed(0)
@@ -67,6 +67,10 @@ for stream, pin in pose_dim.items():
         check(f"shapes stream={stream} T={T}",
               tuple(logits.shape) == (2, 3, T) and tuple(emb.shape) == (2, 256, T) and tuple(net.ctc_logits.shape) == (2, Tp, 2),
               f"logits {tuple(logits.shape)} ctc {tuple(net.ctc_logits.shape)}")
+
+_post = HandsOn2025(in_channels=3, num_vertices=V, pose_stream="angles", hamer_dim=288, norm_first=False)
+_n = sum(p.numel() for p in _post.parameters())
+check("param count post-LN variant (norm_first=False)", _n == expected(ANGLE_FEATURE_DIM, pre_ln=False), f"real={_n:,}")
 
 # ---------------------------------------------------------------- angles: torch == numpy
 xyz = torch.randn(2, 5, V, 3)

@@ -114,7 +114,7 @@ def build_model(hp, state_dict, device):
           "adapter_dim": hp.get("adapter_dim", 512), "adapter_hidden": hp.get("adapter_hidden"),
           "mixer_hidden": hp.get("mixer_hidden", 512), "downsample": hp.get("downsample", 2),
           "pose_stream": hp.get("pose_stream", "angles"), "angle_y_scale": hp.get("angle_y_scale", 1.0),
-          "ctc_num_tokens": hp.get("ctc_num_tokens", 1)}
+          "ctc_num_tokens": hp.get("ctc_num_tokens", 1), "norm_first": hp.get("norm_first", True)}
     hd, hp_proj = infer_in_dim(state_dict, "hamer")
     if hd is not None:
         kw["hamer_dim"], kw["hamer_proj_dim"] = hd, hp_proj

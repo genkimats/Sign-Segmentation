@@ -180,6 +180,9 @@ def train_model(config):
     GRAD_CLIP = config.get("grad_clip", 1.0)
     SELECTION_METRIC = config.get("selection_metric", "combined")   # "combined" | "frame_f1"
     PLATEAU = (SCHEDULER_NAME == "ReduceLROnPlateau")
+    WARMUP_STEPS = config.get("warmup_steps", 0)             # linear LR warm-up over the first N optimizer steps
+    COLLAPSE_GUARD = config.get("collapse_guard", False)     # stop the job if val predictions are one class for 2 epochs
+    DIAG_LOG_EVERY = config.get("diag_log_every", 0)         # >0: print loss parts / grad norm / class mix in epochs 1-2
     
     prefix = config.get("prefix", "01")
     run_name = f"{MODEL_NAME}-{prefix}"
@@ -271,6 +274,7 @@ def train_model(config):
         model_kwargs["pose_stream"] = config.get("pose_stream", "angles")
         model_kwargs["angle_y_scale"] = config.get("angle_y_scale", 1.0)
         model_kwargs["ctc_num_tokens"] = config.get("ctc_num_tokens", 1)
+        model_kwargs["norm_first"] = config.get("norm_first", True)
         
     if MODEL_NAME in ["latent_stgcn_mamba", "ctrgcn_mamba", "infogcn_mamba", "shiftgcn_mamba", "spatial_transformer_mamba", "hdgcn_mamba", "hypersign_mamba"]:
         model_kwargs["latent_dim"] = config.get("latent_dim", 128)
@@ -418,6 +422,8 @@ def train_model(config):
             
         needs_restart = False
 
+        global_step = 0
+        collapsed_epochs = 0
         for epoch in range(1, EPOCHS + 1):
             actual_epochs_ran = epoch
             epoch_start_time = time.time()
@@ -451,6 +457,7 @@ def train_model(config):
                 
                 features = torch.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
                 optimizer.zero_grad()
+                diag_ce = diag_ctc = None
                 
                 if LOSS_FUNCTION == "bcl":
                     logits, embeddings = call_model(features, hamer, dinov2)
@@ -462,7 +469,7 @@ def train_model(config):
                 elif LOSS_FUNCTION == "handson_ctc":
                     logits, _ = call_model(features, hamer, dinov2)
                     hard_labels = torch.argmax(labels, dim=1)
-                    loss, _, _ = criterion(logits, model.ctc_logits, hard_labels)
+                    loss, diag_ce, diag_ctc = criterion(logits, model.ctc_logits, hard_labels)
                 else:
                     # Depending on the model, it might return (logits, embeddings) or just logits
                     output = call_model(features, hamer, dinov2)
@@ -482,11 +489,25 @@ def train_model(config):
                     continue
                 
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=GRAD_CLIP)
+                grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=GRAD_CLIP)
+                if WARMUP_STEPS > 0 and global_step < WARMUP_STEPS:
+                    for g in optimizer.param_groups:
+                        g["lr"] = LEARNING_RATE * (global_step + 1) / WARMUP_STEPS
                 optimizer.step()
+                global_step += 1
                 
                 train_loss += loss.item()
                 valid_batches += 1
+
+                if DIAG_LOG_EVERY and epoch <= 2 and (global_step % DIAG_LOG_EVERY == 0 or global_step in (25, 50, 100, 200, 400)):
+                    with torch.no_grad():
+                        pf = torch.bincount(logits.argmax(1).flatten(), minlength=3).float()
+                        tf = torch.bincount(hard_labels.flatten(), minlength=3).float() if LOSS_FUNCTION != "bcl" else pf
+                        pf, tf = (100 * pf / pf.sum()).tolist(), (100 * tf / tf.sum()).tolist()
+                    parts = f" ce={float(diag_ce):.3f} ctc={float(diag_ctc):.3f}" if diag_ce is not None else ""
+                    tqdm.write(f"   [diag] step {global_step:>6} loss={loss.item():.3f}{parts} gradnorm={float(grad_norm):.2f} "
+                               f"lr={optimizer.param_groups[0]['lr']:.1e} | batch pred O/I/B={pf[0]:.0f}/{pf[1]:.0f}/{pf[2]:.0f}% "
+                               f"true={tf[0]:.0f}/{tf[1]:.0f}/{tf[2]:.0f}%")
                 loop.set_postfix(loss=loss.item(), nans=epoch_nan_count)
 
                 try:
@@ -644,6 +665,17 @@ def train_model(config):
             with open(metrics_log_path, mode='a', newline='') as file:
                 writer = csv.writer(file)
                 writer.writerow([epoch, avg_train_loss, avg_val_loss, epoch_f1, epoch_iou, epoch_seg, epoch_duration, epoch_nan_count])
+
+            if len(epoch_val_pred) > 0:
+                pc = np.bincount(np.array(epoch_val_pred, dtype=int), minlength=3)[:3] / len(epoch_val_pred) * 100
+                tc = np.bincount(np.array(epoch_val_true, dtype=int), minlength=3)[:3] / len(epoch_val_true) * 100
+                extra = f" | CTC windows excluded {100 * criterion.excluded_fraction():.1f}%" if LOSS_FUNCTION == "handson_ctc" else ""
+                print(f"   ↳ val frames predicted O/I/B = {pc[0]:.1f}/{pc[1]:.1f}/{pc[2]:.1f}%   (true {tc[0]:.1f}/{tc[1]:.1f}/{tc[2]:.1f}%){extra}")
+                collapsed_epochs = collapsed_epochs + 1 if pc.max() >= 99.5 else 0
+                if COLLAPSE_GUARD and collapsed_epochs >= 2:
+                    print(f"\n🧯 COLLAPSE GUARD: validation predictions have been a single class for {collapsed_epochs} epochs "
+                          f"-- the model is ignoring its input. Stopping this job (the queue continues).")
+                    break
 
             if EARLY_STOPPING and epochs_without_improvement >= PATIENCE and epoch >= MIN_EPOCHS:
                 print(f"\n🛑 Early stopping triggered! No improvement in combined score for {PATIENCE} epochs (Minimum {MIN_EPOCHS} epochs met).")

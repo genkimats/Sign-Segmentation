@@ -233,23 +233,52 @@ HANDSON_2025_RECIPE = {
     "angle_y_scale": 1.0,
 }
 
-EXPERIMENTS_TO_RUN = [
-    {
-        **HANDSON_2025_RECIPE,
-        "pose_stream": "angles",
-        "description": "2025 Hands-On recipe | HaMeR + joint angles from MediaPipe (paper configuration)"
-    },
-    {
-        **HANDSON_2025_RECIPE,
-        "pose_stream": "xyz+angles",
-        "description": "2025 Hands-On recipe | HaMeR + (xyz coordinates + joint angles)"
-    },
-    {
-        **HANDSON_2025_RECIPE,
-        "pose_stream": "xyz",
-        "description": "2025 Hands-On recipe | HaMeR + xyz coordinates only (ablation: no angles)"
-    },
+# ------------------------------------------------------------------------------
+# 🩺 STABILISED VARIANT (added after the first full-recipe runs collapsed to a constant prediction)
+# The paper's literal recipe (lr 3e-4, post-LN Transformer, no warm-up, unweighted CE, CTC from step 0) produced
+# a model whose validation output was one class from epoch 1 (identical metrics every epoch, all three pose streams).
+# Standard stabilisers, none of which the paper rules out: this repo's lr (1e-4), linear warm-up, pre-LN
+# Transformer. Also turns on per-step diagnostics and the collapse guard (stops a job whose validation predictions
+# are one class for 2 epochs, instead of burning 15+ epochs).
+HANDSON_2025_STABLE = {
+    **HANDSON_2025_RECIPE,
+    "learning_rate": 1e-4,
+    "warmup_steps": 500,
+    "norm_first": True,
+    "collapse_guard": True,
+    "diag_log_every": 1000,
+}
+
+# RUN_MODE = "probe": 3-epoch single-factor probes to find WHICH change fixes the collapse (~10 min of training each
+#                     plus data caching). Read the "[diag]" lines and the "val frames predicted O/I/B" line.
+# RUN_MODE = "full" : the three real experiments (angles / xyz+angles / xyz) with the stabilised settings. Update
+#                     HANDSON_2025_STABLE first with whatever the probes showed.
+RUN_MODE = "probe"
+
+_PROBE = {"pose_stream": "angles", "epochs": 3, "early_stopping": False}
+PROBE_EXPERIMENTS = [
+    {**HANDSON_2025_STABLE, **_PROBE,
+     "description": "PROBE A | stabilised: lr 1e-4 + warmup 500 + pre-LN, CE + CTC(0.5)"},
+    {**HANDSON_2025_STABLE, **_PROBE, "ctc_weight": 0.0,
+     "description": "PROBE B | A without CTC (is the CTC term involved?)"},
+    {**HANDSON_2025_STABLE, **_PROBE, "learning_rate": 3e-4,
+     "description": "PROBE C | A but the paper's lr 3e-4 (is the learning rate the culprit?)"},
+    {**HANDSON_2025_STABLE, **_PROBE, "handson_weighted_ce": True,
+     "description": "PROBE D | A with class-weighted CE (is it majority-class collapse?)"},
+    {**HANDSON_2025_STABLE, **_PROBE, "norm_first": False,
+     "description": "PROBE E | A but post-LN Transformer (is pre-LN what matters?)"},
 ]
+
+FULL_EXPERIMENTS = [
+    {**HANDSON_2025_STABLE, "pose_stream": "angles",
+     "description": "2025 Hands-On recipe (stabilised) | HaMeR + joint angles from MediaPipe (paper configuration)"},
+    {**HANDSON_2025_STABLE, "pose_stream": "xyz+angles",
+     "description": "2025 Hands-On recipe (stabilised) | HaMeR + (xyz coordinates + joint angles)"},
+    {**HANDSON_2025_STABLE, "pose_stream": "xyz",
+     "description": "2025 Hands-On recipe (stabilised) | HaMeR + xyz coordinates only (ablation: no angles)"},
+]
+
+EXPERIMENTS_TO_RUN = PROBE_EXPERIMENTS if RUN_MODE == "probe" else FULL_EXPERIMENTS
 
 # (previous experiment, kept for reference)
 # {"basename": "stgcn_transformer", "window_size": 64, "overlap": 0, "use_hamer_features": True,
