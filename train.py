@@ -23,8 +23,10 @@ from src.models import (PureMambaBaseline, BiMambaBaseline, STGCN_Mamba, STGCN_M
                         TransformerBaseline, STGCN_Transformer, Latent_STGCN_Mamba,
                         CTRGCN_Mamba, InfoGCN_Mamba, ShiftGCN_Mamba, SpatialTransformer_Mamba,
                         HDGCN_Mamba, HyperSign_Mamba, STGCN_HybridSequential, STGCN_HybridParallel,
-                        MLPAux_Mamba, MLPAux_BiMamba, MLPAux_BiLSTM, MLPAux_Transformer)
+                        MLPAux_Mamba, MLPAux_BiMamba, MLPAux_BiLSTM, MLPAux_Transformer,
+                        HandsOn2025)
 from src.metrics import evaluate_batch
+from src.handson_loss import HandsOnCTCLoss
 from src.loss import CombinedBoundaryLoss, FocalLoss, StandardCrossEntropyLoss, WeightedCrossEntropyLoss, UnifiedCTCLoss, WeightedCE_TMSE_Loss, WeightedNLLLoss
 # (Removed decoder import since we no longer use it in training/validation)
 
@@ -56,7 +58,8 @@ MODEL_REGISTRY = {
     "mlpaux_mamba": MLPAux_Mamba,
     "mlpaux_bimamba": MLPAux_BiMamba,
     "mlpaux_bilstm": MLPAux_BiLSTM,
-    "mlpaux_transformer": MLPAux_Transformer
+    "mlpaux_transformer": MLPAux_Transformer,
+    "handson_2025": HandsOn2025
 }
 
 def get_next_job():
@@ -105,6 +108,38 @@ def set_seed(seed):
         torch.cuda.manual_seed_all(seed)
 
 
+def report_param_count(model, exp_dir, run_name):
+    """Prints (and saves to experiments/<run>/param_count.json) the parameter count, split by top-level
+    module, BEFORE any training happens. 'trainable' = requires_grad; frozen buffers-as-parameters (e.g. the
+    ST-GCN adjacency matrices) show up in 'total' only."""
+    params = list(model.parameters())
+    trainable = sum(p.numel() for p in params if p.requires_grad)
+    total = sum(p.numel() for p in params)
+    parts = {}
+    for name, child in model.named_children():
+        n = sum(p.numel() for p in child.parameters())
+        if n:
+            parts[name] = n
+    direct = total - sum(parts.values())
+    if direct > 0:
+        parts["(direct parameters)"] = direct
+    width = max([len(k) for k in parts] + [10])
+    print(f"\n{'-' * 60}\n🔢 PARAMETER COUNT  ({run_name})\n{'-' * 60}")
+    for k, v in sorted(parts.items(), key=lambda kv: -kv[1]):
+        print(f"  {k:<{width}} {v:>12,}  ({100.0 * v / max(total, 1):5.1f}%)")
+    print(f"  {'-' * (width + 22)}")
+    print(f"  {'trainable':<{width}} {trainable:>12,}  ({trainable / 1e6:.2f}M)")
+    print(f"  {'frozen':<{width}} {total - trainable:>12,}")
+    print(f"  {'total':<{width}} {total:>12,}\n{'-' * 60}\n")
+    try:
+        with open(os.path.join(exp_dir, "param_count.json"), "w") as f:
+            json.dump({"run": run_name, "trainable": trainable, "frozen": total - trainable,
+                       "total": total, "by_module": parts}, f, indent=4)
+    except OSError as e:
+        print(f"⚠️ Could not write param_count.json: {e}")
+    return trainable, total
+
+
 def train_model(config):
     print(f"\n{'='*60}\n🚀 STARTING QUEUED JOB\n{'='*60}")
     print(json.dumps(config, indent=4))
@@ -141,6 +176,10 @@ def train_model(config):
     OPTIMIZER_NAME = config["optimizer"]
     SCHEDULER_NAME = config["scheduler"]
     MODEL_NAME = config["basename"]
+    # Optional recipe knobs (defaults reproduce the previous behaviour exactly):
+    GRAD_CLIP = config.get("grad_clip", 1.0)
+    SELECTION_METRIC = config.get("selection_metric", "combined")   # "combined" | "frame_f1"
+    PLATEAU = (SCHEDULER_NAME == "ReduceLROnPlateau")
     
     prefix = config.get("prefix", "01")
     run_name = f"{MODEL_NAME}-{prefix}"
@@ -220,6 +259,18 @@ def train_model(config):
         
     if MODEL_NAME == "stgcn_mlp_mamba":
         model_kwargs["mlp_expansion_factor"] = config.get("mlp_expansion_factor", 4)
+
+    if MODEL_NAME == "handson_2025":
+        model_kwargs["nhead"] = config.get("nhead", 8)
+        model_kwargs["dim_feedforward"] = config.get("dim_feedforward", D_MODEL * 4)
+        model_kwargs["adapter_dim"] = config.get("adapter_dim", 512)
+        model_kwargs["adapter_hidden"] = config.get("adapter_hidden", None)
+        model_kwargs["mixer_hidden"] = config.get("mixer_hidden", 512)
+        model_kwargs["downsample"] = config.get("downsample", 2)
+        model_kwargs["dropout"] = config.get("dropout", 0.2)
+        model_kwargs["pose_stream"] = config.get("pose_stream", "angles")
+        model_kwargs["angle_y_scale"] = config.get("angle_y_scale", 1.0)
+        model_kwargs["ctc_num_tokens"] = config.get("ctc_num_tokens", 1)
         
     if MODEL_NAME in ["latent_stgcn_mamba", "ctrgcn_mamba", "infogcn_mamba", "shiftgcn_mamba", "spatial_transformer_mamba", "hdgcn_mamba", "hypersign_mamba"]:
         model_kwargs["latent_dim"] = config.get("latent_dim", 128)
@@ -238,7 +289,8 @@ def train_model(config):
                                "stgcn_bilstm", "stgcn_transformer",
                                "stgcn_mlp_mamba", "stgcn_bimamba", "decoupled_stgcn_mamba",
                                "stgcn_hybrid_seq", "stgcn_hybrid_parallel",
-                               "mlpaux_mamba", "mlpaux_bimamba", "mlpaux_bilstm", "mlpaux_transformer"]
+                               "mlpaux_mamba", "mlpaux_bimamba", "mlpaux_bilstm", "mlpaux_transformer",
+                               "handson_2025"]
     if USE_HAMER_FEATURES:
         if MODEL_NAME not in HAMER_SUPPORTED_MODELS:
             raise ValueError(
@@ -287,6 +339,11 @@ def train_model(config):
             print(f"\n🔄 RESTARTING TRAINING (Attempt {redo_count + 1}/{MAX_REDOS + 1}) DUE TO NAN EXPLOSION...")
             
         model = model_class(**model_kwargs).to(device)
+        if redo_count == 0:      # once per job; NaN-triggered restarts rebuild the identical model
+            if MODEL_NAME == "handson_2025":
+                print(f"🖐️  HandsOn2025 streams: HaMeR (dim {model_kwargs['hamer_dim']}) + pose='{model_kwargs['pose_stream']}' "
+                      f"| CTC head tokens={model_kwargs['ctc_num_tokens']} | loss={LOSS_FUNCTION}")
+            report_param_count(model, exp_dir, run_name)
         weights = torch.tensor(CLASS_WEIGHTS, dtype=torch.float).to(device)
 
         # Centralizes the "pass hamer/dinov2 or don't" branching in one place instead
@@ -303,6 +360,11 @@ def train_model(config):
             criterion = CombinedBoundaryLoss(focal_gamma=FOCAL_LOSS_GAMMA, contrastive_weight=config.get("contrastive_weight", 0.15))
         elif LOSS_FUNCTION == "unified_ctc":
             criterion = UnifiedCTCLoss(blank_idx=0, ctc_weight=config.get("ctc_weight", 0.5))
+        elif LOSS_FUNCTION == "handson_ctc":
+            # CE + sign-level CTC on the model's own CTC head (src/handson_loss.py). Plain CE as in the paper
+            # unless handson_weighted_ce=True, which applies class_weights to the CE term.
+            criterion = HandsOnCTCLoss(ctc_weight=config.get("ctc_weight", 0.5),
+                                       class_weights=weights if config.get("handson_weighted_ce", False) else None)
         elif LOSS_FUNCTION == "standard_ce":
             criterion = StandardCrossEntropyLoss()
         elif LOSS_FUNCTION == "weighted_ce":
@@ -327,6 +389,11 @@ def train_model(config):
             
         if SCHEDULER_NAME == "CosineAnnealingLR":
             scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS)
+        elif PLATEAU:
+            # Stepped AFTER validation with the selection score (see below); mode "max" because higher is better.
+            scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+                optimizer, mode="max", factor=config.get("scheduler_factor", 0.1),
+                patience=config.get("scheduler_patience", 5))
         else:
             scheduler = None
             
@@ -392,6 +459,10 @@ def train_model(config):
                     logits, _ = call_model(features, hamer, dinov2)
                     hard_labels = torch.argmax(labels, dim=1)
                     loss, _, _ = criterion(logits, hard_labels)
+                elif LOSS_FUNCTION == "handson_ctc":
+                    logits, _ = call_model(features, hamer, dinov2)
+                    hard_labels = torch.argmax(labels, dim=1)
+                    loss, _, _ = criterion(logits, model.ctc_logits, hard_labels)
                 else:
                     # Depending on the model, it might return (logits, embeddings) or just logits
                     output = call_model(features, hamer, dinov2)
@@ -411,7 +482,7 @@ def train_model(config):
                     continue
                 
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=GRAD_CLIP)
                 optimizer.step()
                 
                 train_loss += loss.item()
@@ -429,7 +500,7 @@ def train_model(config):
                 
             avg_train_loss = train_loss / valid_batches if valid_batches > 0 else float('inf')
             
-            if scheduler:
+            if scheduler and not PLATEAU:
                 scheduler.step()
                 
             model.eval()
@@ -465,6 +536,10 @@ def train_model(config):
                         logits, _ = call_model(features, hamer, dinov2)
                         hard_labels = torch.argmax(labels, dim=1)
                         loss, _, _ = criterion(logits, hard_labels)
+                    elif LOSS_FUNCTION == "handson_ctc":
+                        logits, _ = call_model(features, hamer, dinov2)
+                        hard_labels = torch.argmax(labels, dim=1)
+                        loss, _, _ = criterion(logits, model.ctc_logits, hard_labels)
                     else:
                         output = call_model(features, hamer, dinov2)
                         logits = output[0] if isinstance(output, tuple) else output
@@ -517,7 +592,9 @@ def train_model(config):
             epoch_end_time = time.time()
             epoch_duration = round(epoch_end_time - epoch_start_time, 2)
             
-            combined_score = epoch_f1 + epoch_iou + epoch_seg
+            combined_score = epoch_f1 if SELECTION_METRIC == "frame_f1" else (epoch_f1 + epoch_iou + epoch_seg)
+            if scheduler and PLATEAU:
+                scheduler.step(combined_score)
             
             if combined_score > best_combined_score:
                 best_combined_score = combined_score

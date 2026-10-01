@@ -192,17 +192,69 @@ def expand_experiments_with_seeds(experiments, seed_indices, seeds=(42, 123, 202
     return final
 
 
+# ==============================================================================
+# 📄 2025 HANDS-ON PAPER RECIPE
+# ==============================================================================
+# Settings the paper states (Sec. III-D): Adam, lr 3e-4, ReduceLROnPlateau (patience 5), gradient clipping
+# 0.1, early stopping, frame-level F1 as the model-selection / early-stopping criterion, loss = CE + CTC.
+# Settings it does NOT state (kept at this project's defaults): batch size, window size, dropout, Transformer
+# size, epochs, early-stopping patience, CTC weight, ReduceLROnPlateau factor.
+# Deviations (deliberate):
+#   (1) the paper's 104-d 3D-angle stream is replaced by joint angles COMPUTED FROM THE MEDIAPIPE xyz
+#       (src/skeleton_angles.py, 70 features), calculated inside the model -> base_features must stay xyz and
+#       kinematic_features must stay [] (so in_channels = 3);
+#   (2) the paper's CTC is gloss-level; here it is SIGN-LEVEL (one token per sign, from the BIO tags) on a
+#       dedicated CTC head -- src/handson_loss.py ("handson_ctc"). No dependency on UnifiedCTCLoss.
+# HaMeR is required by the model (use_hamer_features must be True).
+HANDSON_2025_RECIPE = {
+    "basename": "handson_2025",
+    "use_hamer_features": True,
+    "base_features": ["x-cord", "y-cord", "z-cord"],   # angles are computed from channels 0-2 = x, y, z
+    "kinematic_features": [],
+    "tolerance_window": 1,             # hard BIO targets, as in the paper (the repo default 5 smooths Begin)
+    "loss_function": "handson_ctc",    # CE + ctc_weight * sign-level CTC
+    "ctc_weight": 0.5,
+    "handson_weighted_ce": False,      # paper: plain CE. True applies class_weights to the CE term.
+    "optimizer": "Adam",               # plain Adam (no weight decay), as in the paper
+    "learning_rate": 3e-4,
+    "scheduler": "ReduceLROnPlateau",
+    "scheduler_patience": 5,
+    "grad_clip": 0.1,
+    "selection_metric": "frame_f1",    # paper: F1 for model selection and early stopping
+    "early_stopping": True,
+    "patience": 10,
+    # architecture (adapter/mixer widths are guesses: the paper only says "three-layer MLP", out 512 / 1024-in)
+    "d_model": 256, "n_layers": 4, "nhead": 8, "dim_feedforward": 1024,
+    "adapter_dim": 512, "mixer_hidden": 512, "downsample": 2,
+    "ctc_num_tokens": 1,               # sign-level CTC: blank + one "sign" class
+    # MediaPipe coordinates are normalised IMAGE coordinates (x in width units, y in height units), which skews 3D
+    # angles for non-square video. Set to video height / width (e.g. 0.5625 for 16:9) once you have checked your
+    # resolution. 1.0 = no correction.
+    "angle_y_scale": 1.0,
+}
+
 EXPERIMENTS_TO_RUN = [
     {
-        "basename": "stgcn_transformer",
-        "window_size": 64,
-        "overlap": 0,
-        "use_hamer_features": True,
-        "tolerance_window": 1,
-        "class_weights": [0.2, 0.4, 1.0],
-        "description": "overlap ratio (0/64), weights=[0.2, 0.4, 1.0], tolerance=1, hamer"
-    }
+        **HANDSON_2025_RECIPE,
+        "pose_stream": "angles",
+        "description": "2025 Hands-On recipe | HaMeR + joint angles from MediaPipe (paper configuration)"
+    },
+    {
+        **HANDSON_2025_RECIPE,
+        "pose_stream": "xyz+angles",
+        "description": "2025 Hands-On recipe | HaMeR + (xyz coordinates + joint angles)"
+    },
+    {
+        **HANDSON_2025_RECIPE,
+        "pose_stream": "xyz",
+        "description": "2025 Hands-On recipe | HaMeR + xyz coordinates only (ablation: no angles)"
+    },
 ]
+
+# (previous experiment, kept for reference)
+# {"basename": "stgcn_transformer", "window_size": 64, "overlap": 0, "use_hamer_features": True,
+#  "tolerance_window": 1, "class_weights": [0.2, 0.4, 1.0],
+#  "description": "overlap ratio (0/64), weights=[0.2, 0.4, 1.0], tolerance=1, hamer"}
 
 if CHOSEN_TYPE == 'mamba':
     defaults = MAMBA_DEFAULTS

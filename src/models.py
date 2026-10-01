@@ -6,6 +6,7 @@ from mamba_ssm import Mamba
 from src.graph import SkeletonGraph
 from src.stgcn import STGCNBlock
 from src.stgcn import DecoupledSTGCNBlock
+from src.skeleton_angles import skeleton_angle_features, ANGLE_FEATURE_DIM
 
 
 class STGCN_MLP_Mamba(nn.Module):
@@ -1856,3 +1857,138 @@ class MLPAux_Transformer(nn.Module):
         embeddings = self.transformer_encoder(features)
         logits = self.classifier(embeddings)
         return logits.permute(0, 2, 1), embeddings.permute(0, 2, 1)
+
+
+# ==============================================================================
+# 🆕 2025 Hands-On paper architecture ("Hands-On: Segmenting Individual Signs from
+#    Continuous Sequences"), trainable in train.py as basename "handson_2025"
+# ==============================================================================
+class SequenceMLP3(nn.Module):
+    """Three-layer MLP applied per frame to a (B, T, D) sequence.
+    Same Linear-LayerNorm-GELU-Dropout block as AuxiliaryMLPEncoder.net (the paper does not
+    state norm/activation, so this follows the codebase's convention)."""
+    def __init__(self, input_dim, hidden_dim, output_dim, dropout=0.2):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, output_dim),
+            nn.LayerNorm(output_dim),
+            nn.GELU(),
+            nn.Dropout(dropout),
+        )
+
+    def forward(self, x):
+        return self.net(x)
+
+
+class HandsOn2025(nn.Module):
+    """
+    Architecture of the 2025 Hands-On sign segmentation paper (Sec. III-C, Fig. 2):
+
+        HaMeR (288)  --> 3-layer MLP adapter --> 512 --+
+                                                         +-> temporal downsample x2 -> concat (1024)
+        pose stream  --> 3-layer MLP adapter --> 512 --+      -> 3-layer MLP mixer -> d_model
+        -> Transformer encoder -> per-frame BIO logits   (+ a CTC head for the sign-level CTC loss)
+
+    HaMeR is a mandatory input (use_hamer_features=True): the model refuses to build or run without it.
+
+    POSE STREAM (`pose_stream`). The paper's second stream is a 104-d 3D-skeleton-angle vector from a separate
+    pose model, which this project does not have. Instead the angles are COMPUTED from the MediaPipe xyz
+    coordinates already in x (src/skeleton_angles.py: finger/elbow flexion, finger spread, shoulder/wrist angles,
+    limb directions, palm normals; ANGLE_FEATURE_DIM features). Options:
+        "angles"      joint angles only                     (closest to the paper)
+        "xyz"         flattened skeleton coordinates        (all in_channels x num_vertices)
+        "xyz+angles"  both concatenated
+    The angle features read channels 0-2 of x, which must be x/y/z (base_features = ["x-cord","y-cord","z-cord"]).
+    `angle_y_scale` = video height / width corrects MediaPipe's normalised-image anisotropy (see skeleton_angles).
+
+    CTC: a separate Linear head on the Transformer output (ctc_num_tokens + 1 classes, blank = 0, at the
+    DOWNSAMPLED frame rate) is exposed after every forward() as `self.ctc_logits` (B, T', ctc_num_tokens + 1);
+    forward() keeps returning (logits, embeddings) like every other model. Set ctc_num_tokens=0 to drop it.
+
+    Not stated in the paper, so chosen here and exposed as arguments: MLP hidden widths, mixer output width
+    (= d_model), Transformer size, norm/activation, dropout.
+
+    Downsampling is done inside the model (every `downsample`-th frame, parameter-free) and the BIO logits are
+    repeated back to the input frame rate, so the dataset/labels/metrics keep their usual (B, 3, T) shape.
+    Input convention (same as every other model here): x (B, C, T, V), hamer (B, hamer_dim, T).
+    """
+    POSE_STREAMS = ("angles", "xyz", "xyz+angles")
+
+    def __init__(self, num_vertices=65, in_channels=3, num_classes=3, d_model=256, n_layers=4,
+                 nhead=8, dim_feedforward=None, dropout=0.2, adapter_dim=512, adapter_hidden=None,
+                 mixer_hidden=512, downsample=2, pose_stream="angles", angle_y_scale=1.0,
+                 ctc_num_tokens=1, hamer_dim=None, dinov2_dim=None):
+        super().__init__()
+        if hamer_dim is None:
+            raise ValueError("HandsOn2025 needs HaMeR features: set use_hamer_features=True.")
+        if dinov2_dim is not None:
+            raise ValueError("HandsOn2025 has no DINOv2 stream; set use_dinov2_features=False.")
+        if pose_stream not in self.POSE_STREAMS:
+            raise ValueError(f"pose_stream must be one of {self.POSE_STREAMS}, got '{pose_stream}'.")
+        if "angles" in pose_stream and (in_channels < 3 or num_vertices < 65):
+            raise ValueError("angle features need x/y/z in channels 0-2 and the 65-vertex skeleton.")
+        adapter_hidden = adapter_hidden or adapter_dim
+        dim_feedforward = dim_feedforward or d_model * 4
+        self.downsample = max(1, int(downsample))
+        self.hamer_dim = hamer_dim
+        self.pose_stream = pose_stream
+        self.angle_y_scale = float(angle_y_scale)
+        self.ctc_logits = None
+
+        pose_in = {"angles": ANGLE_FEATURE_DIM,
+                   "xyz": in_channels * num_vertices,
+                   "xyz+angles": in_channels * num_vertices + ANGLE_FEATURE_DIM}[pose_stream]
+        self.hamer_adapter = SequenceMLP3(hamer_dim, adapter_hidden, adapter_dim, dropout)
+        self.pose_adapter = SequenceMLP3(pose_in, adapter_hidden, adapter_dim, dropout)
+        self.mixer = SequenceMLP3(2 * adapter_dim, mixer_hidden, d_model, dropout)
+
+        self.pos_encoder = PositionalEncoding(d_model, dropout)
+        encoder_layers = nn.TransformerEncoderLayer(
+            d_model=d_model, nhead=nhead, dim_feedforward=dim_feedforward,
+            dropout=dropout, batch_first=True
+        )
+        self.transformer_encoder = nn.TransformerEncoder(encoder_layers, num_layers=n_layers)
+        self.classifier = nn.Linear(d_model, num_classes)
+        self.ctc_head = nn.Linear(d_model, ctc_num_tokens + 1) if ctc_num_tokens > 0 else None
+
+    def pose_features(self, x):
+        """x: (B, C, T', V) already downsampled -> (B, T', pose_dim)."""
+        B, C, T, V = x.shape
+        parts = []
+        if "xyz" in self.pose_stream:
+            parts.append(x.permute(0, 2, 1, 3).reshape(B, T, C * V))
+        if "angles" in self.pose_stream:
+            with torch.no_grad():                                  # fixed geometry, no learnable parameters
+                xyz = x[:, :3].permute(0, 2, 3, 1).float()         # (B, T', V, 3)
+                parts.append(skeleton_angle_features(xyz, y_scale=self.angle_y_scale).to(x.dtype))
+        return torch.cat(parts, dim=-1)
+
+    def forward(self, x, hamer=None, dinov2=None):
+        if hamer is None:
+            raise ValueError("HandsOn2025.forward() was called without a `hamer` tensor.")
+        if dinov2 is not None:
+            raise ValueError("HandsOn2025 has no DINOv2 stream.")
+        T = x.shape[2]
+        ham = hamer.permute(0, 2, 1)                             # (B, T, hamer_dim)
+        if self.downsample > 1:                                  # downsample first: everything before the Transformer is per-frame
+            x = x[:, :, ::self.downsample]
+            ham = ham[:, ::self.downsample]
+
+        fused = torch.cat([self.hamer_adapter(ham), self.pose_adapter(self.pose_features(x))], dim=-1)   # (B, T', 1024)
+        feats = self.pos_encoder(self.mixer(fused))              # (B, T', d_model)
+        emb = self.transformer_encoder(feats)                    # (B, T', d_model)
+        logits = self.classifier(emb)                            # (B, T', 3)
+        self.ctc_logits = self.ctc_head(emb) if self.ctc_head is not None else None   # (B, T', K), downsampled rate
+
+        if self.downsample > 1:                                  # back to the input frame rate
+            logits = logits.repeat_interleave(self.downsample, dim=1)[:, :T]
+            emb = emb.repeat_interleave(self.downsample, dim=1)[:, :T]
+        return logits.permute(0, 2, 1), emb.permute(0, 2, 1)
