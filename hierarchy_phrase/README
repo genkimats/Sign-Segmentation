@@ -1,0 +1,91 @@
+# hierarchy_phrase — hierarchical sign → phrase segmentation
+
+Implements the brief "Hierarchical sign→phrase segmentation on the Public DGS Corpus". Phrase boundaries are predicted
+**over sign tokens**, not frames: Stage A (BiLSTM) finds signs, Stage C (Transformer) decides for each sign whether it
+starts a new phrase. Everything lives in this directory (`Sign-Segmentation/hierarchy_phrase/`); nothing outside it is
+modified. It reads `processed_data/BIO_tags`, `processed_data/BIO_tags_phrase`, `processed_data/kinematic_features`
+and `dataset_splits.json`, exactly as the rest of the project does.
+
+## Run order
+
+```bash
+cd hierarchy_phrase
+python test_cores.py            # numpy-only, no data, 28 checks   (segments, metrics, tokens, decoding)
+python test_pipeline_stub.py    # numpy-only, no data, 16 checks   (cache I/O, training sources, folds)
+python smoke_test.py            # needs torch, ~1-2 min, synthetic data, tests ALL torch code end to end
+python data_audit.py            # brief step 1: label ratios, phrase-edge/sign-edge alignment, gap-length statistics
+python pipeline.py              # dry run: prints every command incl. all ablations;  add --run to execute
+```
+
+Manual version of the main method for one seed:
+
+```bash
+python stage_a.py train  --name sa_s42 --seed 42
+python stage_a.py export --name sa_s42                      # caches features/logits/keypoints/gold for all splits
+python stage_c.py train  --stage-a sa_s42 --tag main --seed 42 --source mix
+python evaluate.py       --stage-a sa_s42 --tag main --seed 42
+python aggregate.py results/sa_s*__main_s*.json             # mean ± std over seeds
+```
+
+## Files
+
+| file                          | role                                                                                                                                    |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `segments.py`                 | segment algebra: BIO↔segments, frame-rate resampling that preserves sign/phrase edge alignment, sign→phrase tags, jitter, token windows |
+| `metrics.py`                  | frame macro-F1, mask IoU, #pred/#gold, boundary F1 (±2/5/10), segment F1 at IoU thresholds, mF1S                                        |
+| `sign_tokens.py`              | greedy sign decoding; token builder (`h_pool`, `sign_probs`, `prosody` groups)                                                          |
+| `data_audit.py`               | step 1 of the brief                                                                                                                     |
+| `stage_a.py`                  | E1s-style BiLSTM (4×256, lr 1e-3) with a sign head and a flat phrase head; fold models; cache export                                    |
+| `stage_c.py`                  | Transformer (4 layers, d=256, 4 heads, dropout 0.1) over windows of 128 tokens, stride 64; BiLSTM control; all training sources         |
+| `evaluate.py`, `aggregate.py` | flat vs hierarchy vs oracle-sign rows, thresholds tuned on val only; mean ± std over seeds                                              |
+| `pipeline.py`                 | the full command list including all ablations                                                                                           |
+
+## Where I deviated from the brief (and why)
+
+1. **Frame rate.** The corpus is 50 fps (the corpus loader asserts it); the 2023 paper works at 25 fps. Everything runs at a
+   _working rate_ = native / `--stride` (default 2 → 25 fps). Keypoints use `x[::stride]`; labels are mapped **through segments**
+   with one rounding rule, so a phrase edge that equalled a sign edge still does (unit-tested). Tolerances ±2/5/10 are in
+   working frames, i.e. the same wall-clock values as the brief. `--stride 1` gives native 50 fps.
+2. **Out-of-fold training and hidden-feature tokens do not compose.** BiLSTMs trained on different folds have unrelated feature
+   spaces, so a Stage C trained on fold-model `h` cannot be applied to the full model's `h`. Hence: `h_pool` tokens are used with
+   the single full Stage-A model (gold / jitter / schedule / mix training); the out-of-fold variant (`--oof-runs`) is restricted to
+   model-agnostic tokens (`sign_probs` + `prosody`) and the code refuses `--oof-runs` with `h_pool`. Note that with `h_pool` the
+   _features_ of the training videos are still in-sample for Stage A; jitter/mix address the boundaries, not that feature
+   overconfidence — the OOF run is the clean control for it.
+3. **Stage A is trained jointly with the flat phrase head** (as in 2023's E1s) so ablation 1 compares heads on the same encoder.
+   `--no-phrase-head` trains a sign-only encoder (`pipeline.py --only sign_only_encoder`).
+4. **Greedy decoding** (`sign_tokens.greedy_decode`) opens a segment at the _peak of every run_ where P(B) > b and closes it where
+   P(O) > o. It follows the spirit of the 2023 thresholded decoding but is not a line-for-line port of their code, which I could not
+   inspect; "E1s" here is therefore **my re-implementation** of that model, not the released checkpoint.
+5. **IoU.** The 2023 formula is ambiguous. `mask_iou` (pooled IoU of the "inside any segment" masks) is my closest reading;
+   `mean_seg_iou` (many-to-one, over predicted segments) is reported beside it. Compare the _relative_ order of methods, and
+   treat the absolute IoU against the paper's with caution.
+6. **Position encoding** in Stage C is learned within the 128-token window (the brief allowed relative _or_ learned);
+   duration/gap cues are in the tokens.
+7. **Tuning objective.** Thresholds are tuned on validation with `--tune-metric` (default frame F1). Both default (0.5) and tuned
+   numbers are always written. Nothing is tuned on test.
+
+## Ablations → commands (`pipeline.py --only <name>`)
+
+| brief                        | name                          | what                                                                              |
+| ---------------------------- | ----------------------------- | --------------------------------------------------------------------------------- | ------ | -------- | --- | -------------------------------------- |
+| 1 flat vs hierarchical       | any run                       | `flat_*` rows (Stage-A phrase head) vs `hier_*` rows, same encoder                |
+| 2 gold vs predicted signs    | any run                       | `hier_oracle_*` rows = ceiling; difference to `hier_*` = cascade loss             |
+| 3 pooled vs pooled + prosody | `features`                    | `h_pool` only / `prosody` only / `h_pool+prosody`; main = all three groups        |
+| 4 gold / jitter / OOF        | `training_source`, `oof`      | `--source gold                                                                    | jitter | schedule | mix | pred`; `oof` = out-of-fold predictions |
+| 5 Transformer vs BiLSTM      | `bilstm_control`              | `--arch bilstm` (sanity check)                                                    |
+| 6 stronger sign segmenter    | `sign_only_encoder` (partial) | encoder without phrase supervision; a Hands-On-2025 front end is **not** wired in |
+
+## Not implemented
+
+- E3s / E4s baselines (optical flow, 3D hand normalisation) and the released 2023 checkpoints. Only the E1s-style flat head is reproduced.
+- Optional extensions: soft/end-to-end pooling, semi-Markov or BIO-constrained decoding, segment-count prior, the out-of-domain check.
+- Face keypoints (the brief skips them) and optical flow (the project has no flow features; speed cues come from keypoints).
+- Hips are not in the 65-vertex skeleton, so "hand-drop" cues are wrist height relative to the shoulder-centred origin.
+
+## Cost and size
+
+Stage A ≈ 5.84 M parameters, Stage C (default, 1057-d tokens) ≈ 3.46 M (both printed at the start of training). Caches hold full-video `h` (float16, 512-d) and keypoints for every video: expect several GB per
+Stage-A run (`runs/<name>/cache`). The OOF ablation trains K extra BiLSTMs per seed.
+Run `smoke_test.py` first; the torch code (`stage_a.py`, `stage_c.py`, `evaluate.py`) was written without access to torch or your
+data, so the first real run is the first time it meets real files.
