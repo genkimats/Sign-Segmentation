@@ -143,7 +143,7 @@ class SourcePolicy:
         return self.source in ("gold", "pred")
 
 
-def make_examples(items, policy, epoch, groups, return_fallbacks=False):
+def make_examples(items, policy, epoch, groups, return_fallbacks=False, tag_rule="first_end_after"):
     """(tokens, tags) per video under the policy. A video whose chosen segmentation is EMPTY (e.g. Stage A predicts no sign at
     the thresholds used) falls back to its gold signs so training never receives zero examples; the number of fallbacks is
     returned when asked, and train() warns about it."""
@@ -154,7 +154,7 @@ def make_examples(items, policy, epoch, groups, return_fallbacks=False):
             segs, fallbacks = it["gold_sign"], fallbacks + 1
         if len(segs) == 0:
             continue
-        ex.append((tokens_of(it, segs, groups), phrase_tags_over_signs(segs, it["gold_phrase"])))
+        ex.append((tokens_of(it, segs, groups), phrase_tags_over_signs(segs, it["gold_phrase"], tag_rule)))
     return (ex, fallbacks) if return_fallbacks else ex
 
 
@@ -239,7 +239,7 @@ def train(a):
     print(f"train videos {len(train_items)}  val videos {len(val_items)}  groups {groups}")
 
     policy = SourcePolicy(a.source, a.ramp, a.jitter, a.b_thr, a.o_thr, a.seed)
-    gold_ex = make_examples(train_items, SourcePolicy("gold", 1, 0, 0.5, 0.5, 0), 1, groups)
+    gold_ex = make_examples(train_items, SourcePolicy("gold", 1, 0, 0.5, 0.5, 0), 1, groups, tag_rule=a.tag_rule)
     allX = np.concatenate([x for x, _ in gold_ex])
     mean, std = allX.mean(0), allX.std(0) + 1e-6
     tags_all = np.concatenate([t for _, t in gold_ex])
@@ -260,7 +260,7 @@ def train(a):
     for epoch in range(1, a.epochs + 1):
         t0 = time.time()
         if examples is None or not policy.static:
-            examples, n_fb = make_examples(train_items, policy, epoch, groups, return_fallbacks=True)
+            examples, n_fb = make_examples(train_items, policy, epoch, groups, return_fallbacks=True, tag_rule=a.tag_rule)
             if n_fb and a.source != "gold":
                 print(f"WARNING: {n_fb}/{len(train_items)} training videos had NO predicted sign at b/o = {a.b_thr}/{a.o_thr} "
                       f"and fell back to gold signs. If this is most of them, Stage A is not trained enough or the thresholds are off.")
@@ -336,6 +336,8 @@ def main():
     t.add_argument("--wd", type=float, default=0.01)
     t.add_argument("--weight-power", type=float, default=1.0, help="class weight = (N / (2 n_c))^power from the train B:I ratio")
     t.add_argument("--focal-gamma", type=float, default=0.0, help="0 = weighted CE; 2 = focal loss")
+    t.add_argument("--tag-rule", choices=["first_end_after", "nearest_start", "contain_or_next"], default="first_end_after",
+                   help="how a gold phrase start that falls inside a sign is assigned to a sign (run data_audit.py to pick the rule with the highest ceiling)")
     t.add_argument("--ramp", type=int, default=20, help="epochs over which the gold->noisy schedule ramps")
     t.add_argument("--jitter", type=float, default=1.0)
     t.add_argument("--b-thr", type=float, default=0.5)

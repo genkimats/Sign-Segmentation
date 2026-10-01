@@ -13,6 +13,7 @@ import subprocess
 import sys
 
 PY = sys.executable
+TAG_RULE = "first_end_after"      # set by --tag-rule; applied to every Stage-C training command
 
 
 def sa(seed, *extra):
@@ -24,7 +25,7 @@ def ex(name, *extra):
 
 
 def sc(seed, tag, *extra):
-    return [PY, "stage_c.py", "train", "--stage-a", f"sa_s{seed}", "--tag", tag, "--seed", str(seed), *extra]
+    return [PY, "stage_c.py", "train", "--stage-a", f"sa_s{seed}", "--tag", tag, "--seed", str(seed), "--tag-rule", TAG_RULE, *extra]
 
 
 def ev(seed, tag):
@@ -53,7 +54,7 @@ def plan(seeds, folds):
     P["bilstm_control"] = [c for s in seeds for c in (sc(s, "bilstm", "--arch", "bilstm", "--source", "mix"), ev(s, "bilstm"))]   # ablation 5
     P["sign_only_encoder"] = [c for s in seeds for c in (
         [PY, "stage_a.py", "train", "--name", f"sa_s{s}_signonly", "--seed", str(s), "--no-phrase-head"], ex(f"sa_s{s}_signonly"),
-        [PY, "stage_c.py", "train", "--stage-a", f"sa_s{s}_signonly", "--tag", "main", "--seed", str(s), "--source", "mix"],
+        [PY, "stage_c.py", "train", "--stage-a", f"sa_s{s}_signonly", "--tag", "main", "--seed", str(s), "--source", "mix", "--tag-rule", TAG_RULE],
         [PY, "evaluate.py", "--stage-a", f"sa_s{s}_signonly", "--tag", "main", "--seed", str(s)])]  # ablation 6 (encoder without phrase supervision)
     return P
 
@@ -63,8 +64,12 @@ def main():
     ap.add_argument("--seeds", type=int, nargs="+", default=[42, 123, 2024])
     ap.add_argument("--folds", type=int, default=4)
     ap.add_argument("--only", nargs="*", default=None, help="subset of: " + ", ".join(plan([0], 2)))
+    ap.add_argument("--tag-rule", default="first_end_after", choices=["first_end_after", "nearest_start", "contain_or_next"],
+                    help="phrase-start -> sign assignment; pick it from the ORACLE_CEILING block of data_audit.py")
     ap.add_argument("--run", action="store_true")
     a = ap.parse_args()
+    global TAG_RULE
+    TAG_RULE = a.tag_rule
     P = plan(a.seeds, a.folds)
     keys = a.only or list(P)
     for k in keys:

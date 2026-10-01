@@ -65,6 +65,16 @@ python aggregate.py results/sa_s*__main_s*.json             # mean ± std over s
 7. **Tuning objective.** Thresholds are tuned on validation with `--tune-metric` (default frame F1). Both default (0.5) and tuned
    numbers are always written. Nothing is tuned on test.
 
+## Label alignment finding (read this before trusting any number)
+
+On the real data, only ~57% of gold phrase STARTS and ~30% of gold phrase ENDS fall exactly on a gold sign edge (~80% within
+±5 frames at 25 fps), so the brief's premise "phrase edges coincide with sign edges" holds only approximately for the labels
+in `processed_data/BIO_tags_phrase`. Suspected cause: `create_phrase_bio_tags.py` snaps to the first/last non-Outside frame
+inside `[raw_start-15, raw_end+15]`, which lands mid-sign whenever the window edge cuts a sign. Consequences: (1) a ceiling on
+how well gold signs can reproduce gold phrases (reported by `data_audit.py` under `ORACLE_CEILING_gold_signs_to_gold_phrases`);
+(2) the training tags depend on how a mid-sign label is assigned to a sign: choose `--tag-rule` by that ceiling
+(`first_end_after`, `nearest_start`, `contain_or_next`; also `pipeline.py --tag-rule`). Evaluation always uses the raw gold.
+
 ## Ablations → commands (`pipeline.py --only <name>`)
 
 | brief                        | name                          | what                                                                              |

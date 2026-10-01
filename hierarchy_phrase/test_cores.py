@@ -71,6 +71,40 @@ check("shifted signs: #B tags still equals #phrases (+- first sign)", abs(int(ta
 check("first sign is always B; empty input safe", S.phrase_tags_over_signs([(0, 3), (3, 6)], [(4, 6)])[0] == 1
       and len(S.phrase_tags_over_signs([], [])) == 0)
 
+# ------------------------------------------------------------------ tag rules (phrase start falling inside a sign)
+sgR = [(0, 10), (14, 24), (30, 50), (55, 60)]
+same = all(list(S.phrase_tags_over_signs(sgR, [(14, 60)], r)) == [1, 1, 0, 0] for r in S.TAG_RULES)
+check("every rule agrees when the phrase start is exactly a sign start", same)
+check("contain_or_next: first half -> that sign, second half -> next sign",
+      list(S.phrase_tags_over_signs(sgR, [(33, 60)], "contain_or_next")) == [1, 0, 1, 0]
+      and list(S.phrase_tags_over_signs(sgR, [(45, 60)], "contain_or_next")) == [1, 0, 0, 1])
+check("first_end_after assigns a start inside sign k to k; a start in a gap goes to the next sign",
+      list(S.phrase_tags_over_signs(sgR, [(45, 60)], "first_end_after")) == [1, 0, 1, 0]
+      and list(S.phrase_tags_over_signs(sgR, [(26, 60)], "first_end_after")) == [1, 0, 1, 0])
+check("nearest_start picks the closer sign start", list(S.phrase_tags_over_signs(sgR, [(40, 60)], "nearest_start")) == [1, 0, 1, 0]
+      and list(S.phrase_tags_over_signs(sgR, [(47, 60)], "nearest_start")) == [1, 0, 0, 1])
+try:
+    S.phrase_tags_over_signs(sgR, [], "bogus"); check("unknown rule is rejected", False)
+except ValueError:
+    check("unknown rule is rejected", True)
+
+# the suspected label artifact: a window edge pushes the phrase start 1-7 frames BEFORE the true first sign,
+# sometimes into the tail of the previous sign. The original rule mis-tags those; the new rules should not.
+acc = {r: [0, 0] for r in S.TAG_RULES}
+for seed in range(150):
+    r_ = np.random.default_rng(seed)
+    sg_ = random_signs(900, r_, mean_len=12, gap_p=0.5)
+    cuts_ = [0] + sorted(r_.choice(np.arange(1, len(sg_)), size=len(sg_) // 5, replace=False).tolist())
+    truth = np.zeros(len(sg_), int); truth[cuts_] = 1
+    ph_ = [(sg_[k][0] - (int(r_.integers(1, 8)) if (r_.random() < 0.4 and k > 0) else 0), sg_[-1][1]) for k in cuts_]
+    for rule in S.TAG_RULES:
+        t_ = S.phrase_tags_over_signs(sg_, ph_, rule)
+        acc[rule][0] += int((t_ == truth).sum()); acc[rule][1] += len(truth)
+a = {r: v[0] / v[1] for r, v in acc.items()}
+check("on the artifact, contain_or_next and nearest_start tag signs more accurately than first_end_after",
+      a["contain_or_next"] > a["first_end_after"] and a["nearest_start"] > a["first_end_after"],
+      " ".join(f"{r}={v:.4f}" for r, v in a.items()))
+
 # ------------------------------------------------------------------ jitter
 ok = True
 for seed in range(200):
