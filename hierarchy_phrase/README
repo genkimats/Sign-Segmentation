@@ -90,6 +90,29 @@ the 2023 paper's gold: the paper's phrase B:I:O is about 1:58:77; original label
 because the pauses between phrases are no longer absorbed), so the original labels match the paper's Outside share better and the aligned ones
 its Inside share better. Treat any comparison to the paper's numbers as approximate on either.
 
+## Windows, overlap and encoder variants (added after the first Stage-A results)
+
+**What the code actually does (check this against your mental model).** Stage A trains on random crops of `--crop` = 1024 frames (41 s at
+25 fps) and, by default, infers on the WHOLE video in one pass; nothing is concatenated, so there are no stitching edges unless you ask for
+chunked inference. Stage C works on sign TOKENS (windows of 128 signs), not frames. Frame counts are at the WORKING rate (25 fps): 64 frames
+here = 2.6 s = 128 frames at the original 50 fps, so the earlier "64 frames is best" finding (at 50 fps) corresponds to 32 frames now (crop 32 in `window_train`).
+
+**Experiment families** (`python pipeline.py --only <family> [--seeds ...] [--labels ...] --run`):
+
+| family         | question                                                                                                                                                                                                                                                          | retrains Stage A?        |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| `window_study` | does the inference window / overlap matter? whole video vs windows 64-1024 x keep 1.0 / 0.75 / 0.5 on the trained model                                                                                                                                           | no (seconds)             |
+| `overlap`      | end-to-end effect of chunked inference: caches exported with `--infer-window W --infer-keep f`, then Stage C + evaluation                                                                                                                                         | no (re-export + Stage C) |
+| `stgcn`        | `stgcn_bilstm` = "just add ST-GCN"; `stgcn_bimamba` = ST-GCN and a Mamba backbone (two changes, so read the two runs together)                                                                                                                                    | yes                      |
+| `window_train` | training crop 32 / 64 / 128 / 256 / 512 with `--equal-frames` (same frames per epoch); each model is validated and exported in its own chunked regime (windows of its crop length, plain concatenation); `window_study` adds its whole-video and 75%-overlap rows | yes                      |
+
+`keep` is the fraction of each window that is kept: 1.0 = plain concatenation, 0.75 = the central 75% (outer 12.5% per side discarded, covered by
+neighbouring windows from their centres), 0.5 = central half; the first and last windows keep the video edges. Every frame comes from exactly
+one window (unit-tested, `window_inference.py`). The flat phrase head needs context of at least a phrase (~100 frames), so short windows should
+hurt it most. A stronger encoder (`stgcn_*`) must be compared against its OWN flat head (`flat_*` rows): the claim is about the hierarchy.
+`stage_a.py export --as NEW` writes a cache under a new run name (the checkpoint is copied) so inference modes never overwrite each other.
+ST-GCN encoders are not length-aware (zero padding leaks into the last ~8 frames of padded crops; rare, only for videos shorter than the crop).
+
 ## Ablations → commands (`pipeline.py --only <name>`)
 
 | brief                        | name                          | what                                                                              |

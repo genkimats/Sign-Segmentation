@@ -5,6 +5,9 @@ hierarchy_phrase/pipeline.py -- prints (default) or runs (--run) the full comman
     python pipeline.py --seeds 42 123 2024 --run
     python pipeline.py --only main flat_vs_hier --seeds 42 --run
 
+Families added after the first Stage-A results: window_study (inference windows/overlap, no retraining), overlap (end-to-end with
+chunked-inference caches), stgcn (ST-GCN+BiLSTM, ST-GCN+BiMamba), window_train (training crop 32/64/128/256/512).
+
 Stage A is trained ONCE per seed and shared by every Stage-C variant of that seed. Out-of-fold Stage-A models are
 trained only for the 'oof' ablation (K folds per seed -> K extra BiLSTM trainings; the expensive step).
 """
@@ -18,6 +21,7 @@ END_RULE = "last_sign_end"
 PFX = ""                          # run-name prefix per label set (set by --labels)
 LABEL_DIRS = {"original": "BIO_tags_phrase", "aligned": "BIO_tags_phrase_signaligned"}
 LABEL_ENV = {}
+CROPS = (32, 64, 128, 256, 512)      # working-rate frames; 32 @ 25 fps = 64 @ 50 fps, the project's earlier window
 TAG_RULE = "first_end_after"      # set by --tag-rule; applied to every Stage-C training command
 
 
@@ -35,6 +39,29 @@ def sc(seed, tag, *extra):
 
 def ev(seed, tag):
     return [PY, "evaluate.py", "--stage-a", f"{PFX}sa_s{seed}", "--tag", tag, "--seed", str(seed), "--end-rule", END_RULE]
+
+
+def train_a(name, seed, *extra):
+    return [PY, "stage_a.py", "train", "--name", f"{PFX}{name}", "--seed", str(seed), *extra]
+
+
+def export_a(name, *extra, as_name=None):
+    cmd = [PY, "stage_a.py", "export", "--name", f"{PFX}{name}", *extra]
+    return cmd + (["--as", f"{PFX}{as_name}"] if as_name else [])
+
+
+def sc_on(name, seed, tag="main", *extra):
+    return [PY, "stage_c.py", "train", "--stage-a", f"{PFX}{name}", "--tag", tag, "--seed", str(seed), "--tag-rule", TAG_RULE,
+            "--end-rule", END_RULE, "--source", "mix", *extra]
+
+
+def ev_on(name, seed, tag="main"):
+    return [PY, "evaluate.py", "--stage-a", f"{PFX}{name}", "--tag", tag, "--seed", str(seed), "--end-rule", END_RULE]
+
+
+def full_chain(name, seed, train_extra=(), export_extra=()):
+    """train Stage A under `name`, export, train Stage C, evaluate."""
+    return [train_a(name, seed, *train_extra), export_a(name, *export_extra), sc_on(name, seed), ev_on(name, seed)]
 
 
 def plan(seeds, folds):
@@ -61,6 +88,25 @@ def plan(seeds, folds):
         [PY, "stage_a.py", "train", "--name", f"{PFX}sa_s{s}_signonly", "--seed", str(s), "--no-phrase-head"], ex(f"{PFX}sa_s{s}_signonly"),
         [PY, "stage_c.py", "train", "--stage-a", f"{PFX}sa_s{s}_signonly", "--tag", "main", "--seed", str(s), "--source", "mix", "--tag-rule", TAG_RULE, "--end-rule", END_RULE],
         [PY, "evaluate.py", "--stage-a", f"{PFX}sa_s{s}_signonly", "--tag", "main", "--seed", str(s), "--end-rule", END_RULE])]  # ablation 6 (encoder without phrase supervision)
+    # ---- the three experiment families requested after the first Stage-A results ---------------------------------------
+    # (a) inference windows / overlap on the ALREADY TRAINED main Stage A -- no retraining, seconds per mode
+    P["window_study"] = [[PY, "window_study.py", "--run", f"{PFX}sa_s{s}", "--splits", "val"] for s in seeds]
+    # (b) end-to-end effect of the best overlap modes: same weights, caches exported with chunked inference, then Stage C + evaluation
+    P["overlap"] = [c for s in seeds for (w, k) in ((256, 0.75), (1024, 0.75), (1024, 0.5))
+                    for c in (export_a(f"sa_s{s}", "--infer-window", str(w), "--infer-keep", str(k), as_name=f"sa_s{s}_w{w}k{int(k * 100)}"),
+                              sc_on(f"sa_s{s}_w{w}k{int(k * 100)}", s), ev_on(f"sa_s{s}_w{w}k{int(k * 100)}", s))]
+    # (c) the project's ST-GCN front end: stgcn_bilstm isolates "just adding ST-GCN"; stgcn_bimamba then also swaps the backbone
+    P["stgcn"] = [c for s in seeds for arch, nm in (("stgcn_bilstm", "stgcnlstm"), ("stgcn_bimamba", "stgcnmamba"))
+                  for c in full_chain(f"sa_{nm}_s{s}", s, train_extra=("--arch", arch))]
+    # (d) TRAINING crop length W (retrains Stage A; --equal-frames keeps frames per epoch constant). 25 fps: 64 frames = 2.6 s; the
+    #     project's earlier 64-frame window at 50 fps is W = 32 here. Each model is VALIDATED and EXPORTED in its own chunked regime
+    #     (windows of W, plain concatenation = your baseline), because a model trained on W-frame crops is not meant to run whole-video;
+    #     window_study also lists the whole-video row (window 0) and the 75% overlap row for the same model.
+    P["window_train"] = [c for s in seeds for crop in CROPS
+                         for c in full_chain(f"sa_c{crop}_s{s}", s,
+                                             train_extra=("--crop", str(crop), "--equal-frames", "--infer-window", str(crop), "--infer-keep", "1.0"),
+                                             export_extra=("--infer-window", str(crop), "--infer-keep", "1.0"))
+                         + [[PY, "window_study.py", "--run", f"{PFX}sa_c{crop}_s{s}", "--windows", "0", str(crop), "--keeps", "1.0", "0.75"]]]
     return P
 
 
@@ -75,9 +121,11 @@ def main():
     ap.add_argument("--labels", default="aligned", choices=["original", "aligned"],
                     help="phrase label set: 'aligned' = BIO_tags_phrase_signaligned (python relabel_phrases.py), 'original' = BIO_tags_phrase. "
                          "Run names get an 'al_' / 'or_' prefix so the two never share caches or results.")
+    ap.add_argument("--crops", type=int, nargs="+", default=[32, 64, 128, 256, 512], help="training crop lengths for the window_train family")
     ap.add_argument("--run", action="store_true")
     a = ap.parse_args()
-    global TAG_RULE, END_RULE, PFX, LABEL_ENV
+    global TAG_RULE, END_RULE, PFX, LABEL_ENV, CROPS
+    CROPS = tuple(a.crops)
     TAG_RULE, END_RULE = a.tag_rule, a.end_rule
     PFX = "al_" if a.labels == "aligned" else "or_"
     LABEL_ENV = {"HP_PHRASE_DIR": LABEL_DIRS[a.labels]}

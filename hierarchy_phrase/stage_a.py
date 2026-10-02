@@ -18,6 +18,8 @@ import argparse
 import copy
 import json
 import os
+import shutil
+import sys
 import time
 
 import numpy as np
@@ -25,10 +27,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from common import (DEFAULT_STRIDE, RUNS_DIR, SPLIT_FILE, have_all_files, load_cache_video, load_gold_segments,
+from common import (DEFAULT_STRIDE, PROJECT_ROOT, RUNS_DIR, SPLIT_FILE, have_all_files, load_cache_video, load_gold_segments,
                     load_keypoints, run_dir, save_cache_video, segs_to_arr, split_ids)
 from metrics import evaluate_videos
 from segments import bio_to_segments, segments_to_bio
+from window_inference import plan_center_windows, stitch_center
 
 
 # ------------------------------------------------------------------ model
@@ -52,6 +55,71 @@ class StageA(nn.Module):
         else:
             h, _ = self.lstm(z)
         return self.sign_head(h), (self.phrase_head(h) if self.phrase_head is not None else None), h
+
+
+class StageAStgcn(nn.Module):
+    """Stage-A encoder with the project's ST-GCN front end (src.stgcn.STGCNBlock x2 on the skeleton graph) followed by a BiLSTM or a
+    BiMamba temporal backbone -- the same layout as src.models.STGCN_BiLSTM / STGCN_BiMamba -- with a sign head and a flat phrase head.
+    Input (B, T, 195) is reshaped to (B, 3, T, 65). h is 2*hidden wide, exactly like StageA, so Stage C is unchanged.
+    The BiMamba backbone ignores `lengths` (no packing). The ST-GCN convolutions are NOT length-aware either: zero-padded frames
+    become non-zero after the first block (biases) and leak into the last ~8 real frames of a padded sequence. Only crops from videos
+    shorter than --crop are padded, which is rare; full-length crops and whole-video inference are unaffected."""
+
+    def __init__(self, backbone="bilstm", num_vertices=65, in_channels=3, stgcn_channels=64, hidden=256, layers=4, dropout=0.2,
+                 phrase_head=True, mamba_d_state=16, mamba_d_conv=4, mamba_expand=2):
+        super().__init__()
+        if PROJECT_ROOT not in sys.path:
+            sys.path.insert(0, PROJECT_ROOT)
+        from src.graph import SkeletonGraph
+        from src.stgcn import STGCNBlock
+        A = SkeletonGraph(num_vertices=num_vertices).A
+        self.V, self.C, self.backbone = num_vertices, in_channels, backbone
+        self.stgcn_blocks = nn.Sequential(STGCNBlock(in_channels, stgcn_channels, A), STGCNBlock(stgcn_channels, stgcn_channels, A))
+        self.proj = nn.Sequential(nn.Linear(num_vertices * stgcn_channels, hidden), nn.LayerNorm(hidden), nn.ReLU(), nn.Dropout(dropout))
+        if backbone == "bilstm":
+            self.lstm = nn.LSTM(hidden, hidden, num_layers=layers, bidirectional=True, batch_first=True,
+                                dropout=dropout if layers > 1 else 0.0)
+        elif backbone == "bimamba":
+            from mamba_ssm import Mamba
+            self.mamba_fwd = nn.ModuleList([Mamba(d_model=hidden, d_state=mamba_d_state, d_conv=mamba_d_conv, expand=mamba_expand) for _ in range(layers)])
+            self.mamba_bwd = nn.ModuleList([Mamba(d_model=hidden, d_state=mamba_d_state, d_conv=mamba_d_conv, expand=mamba_expand) for _ in range(layers)])
+        else:
+            raise ValueError(backbone)
+        self.sign_head = nn.Linear(2 * hidden, 3)
+        self.phrase_head = nn.Linear(2 * hidden, 3) if phrase_head else None
+
+    def forward(self, x, lengths=None):
+        B, T, _ = x.shape
+        g = x.reshape(B, T, self.V, self.C).permute(0, 3, 1, 2)             # (B, C, T, V)
+        g = self.stgcn_blocks(g).permute(0, 2, 3, 1).contiguous().reshape(B, T, -1)
+        z = self.proj(g)
+        if self.backbone == "bilstm":
+            if lengths is not None:
+                packed = nn.utils.rnn.pack_padded_sequence(z, lengths.cpu(), batch_first=True, enforce_sorted=False)
+                out, _ = self.lstm(packed)
+                h, _ = nn.utils.rnn.pad_packed_sequence(out, batch_first=True, total_length=T)
+            else:
+                h, _ = self.lstm(z)
+        else:
+            f, b = z, torch.flip(z, dims=[1])
+            for lf, lb in zip(self.mamba_fwd, self.mamba_bwd):
+                f, b = lf(f), lb(b)
+            h = torch.cat([f, torch.flip(b, dims=[1])], dim=-1)
+        return self.sign_head(h), (self.phrase_head(h) if self.phrase_head is not None else None), h
+
+
+ARCHS = ("bilstm", "stgcn_bilstm", "stgcn_bimamba")
+
+
+def build_stage_a(c):
+    """Model from a config dict (training args + in_dim); older checkpoints without 'arch' are the plain BiLSTM."""
+    arch = c.get("arch", "bilstm")
+    if arch == "bilstm":
+        return StageA(in_dim=c["in_dim"], hidden=c["hidden"], layers=c["layers"], dropout=c["dropout"], phrase_head=not c["no_phrase_head"])
+    if arch in ("stgcn_bilstm", "stgcn_bimamba"):
+        return StageAStgcn(backbone=arch.split("_")[1], stgcn_channels=c.get("stgcn_channels", 64), hidden=c["hidden"],
+                           layers=c["layers"], dropout=c["dropout"], phrase_head=not c["no_phrase_head"])
+    raise ValueError(f"unknown arch {arch}")
 
 
 # ------------------------------------------------------------------ data
@@ -122,18 +190,29 @@ def make_batch(store, idxs, crop, rng, device):
 
 
 @torch.no_grad()
-def infer_video(model, x_np, device):
-    x = torch.from_numpy(x_np.astype(np.float32)).unsqueeze(0).to(device)
-    sg, ph, h = model(x)
-    return (sg[0].float().cpu().numpy(), None if ph is None else ph[0].float().cpu().numpy(), h[0].float().cpu().numpy())
+def infer_video(model, x_np, device, window=0, keep=1.0, batch=16):
+    """window = 0 (default): the whole video in one pass. window = W > 0: windows of W frames whose starts are W*keep apart; every
+    frame is taken from the window where it is most central (keep = 1.0 -> plain concatenation, 0.75 -> central 75% of each window).
+    Returns (sign logits (T,3), phrase logits (T,3) or None, features h (T, 2*hidden))."""
+    T = len(x_np)
+    plan = plan_center_windows(T, window, keep)
+    sg_o, ph_o, h_o = [], [], []
+    for k in range(0, len(plan), batch):
+        chunk = plan[k:k + batch]
+        xb = torch.from_numpy(np.stack([x_np[s_:e_] for s_, e_, _, _ in chunk]).astype(np.float32)).to(device)
+        sg, ph, h = model(xb)
+        sg_o.extend(sg.float().cpu().numpy()); h_o.extend(h.float().cpu().numpy())
+        if ph is not None:
+            ph_o.extend(ph.float().cpu().numpy())
+    return (stitch_center(T, plan, sg_o), stitch_center(T, plan, ph_o) if ph_o else None, stitch_center(T, plan, h_o))
 
 
-def validate(model, store, device):
+def validate(model, store, device, window=0, keep=1.0):
     """Argmax frame macro-F1 (the 2023 paper's primary metric) of the sign head and, if present, the phrase head."""
     model.eval()
     ps, pp, gs, gp, lens = [], [], [], [], []
     for i in range(len(store)):
-        sg, ph, _ = infer_video(model, store.x[i], device)
+        sg, ph, _ = infer_video(model, store.x[i], device, window, keep)
         ps.append(bio_to_segments(sg.argmax(1)))
         gs.append(store.gold[i]["sign"]); lens.append(store.gold[i]["T"])
         if ph is not None:
@@ -150,7 +229,20 @@ def validate(model, store, device):
 
 
 # ------------------------------------------------------------------ train
+TRAIN_DEFAULTS = dict(arch="bilstm", stgcn_channels=64, equal_frames=False, infer_window=0, infer_keep=1.0)
+EXPORT_DEFAULTS = dict(infer_window=0, infer_keep=1.0, as_name=None)
+
+
+def fill_defaults(args, defaults):
+    """Callers that predate an option (older scripts, the smoke test) still work: missing attributes get their defaults."""
+    for k, v in defaults.items():
+        if not hasattr(args, k):
+            setattr(args, k, v)
+    return args
+
+
 def train(args):
+    fill_defaults(args, TRAIN_DEFAULTS)
     torch.manual_seed(args.seed); np.random.seed(args.seed)
     rng = np.random.default_rng(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -166,10 +258,12 @@ def train(args):
     w_sign = class_weights(train_s.sign, args.weight_power)
     w_phr = class_weights(train_s.phrase, args.weight_power)
     print(f"class weights (O,I,B): sign {np.round(w_sign, 2).tolist()}  phrase {np.round(w_phr, 2).tolist()}")
-    model = StageA(in_dim=train_s.x[0].shape[1], hidden=args.hidden, layers=args.layers, dropout=args.dropout,
-                   phrase_head=not args.no_phrase_head).to(device)
+    if args.equal_frames:                        # keep frames-per-epoch constant when sweeping --crop (reference: crop 1024)
+        args.crops_per_video = max(1, round(args.crops_per_video * 1024 / args.crop))
+    model = build_stage_a({**vars(args), "in_dim": train_s.x[0].shape[1]}).to(device)
     n_par = sum(p.numel() for p in model.parameters())
-    print(f"StageA parameters: {n_par:,}")
+    print(f"Stage A ({args.arch}) parameters: {n_par:,}   crop {args.crop}  crops/video {args.crops_per_video}  "
+          f"validation inference: " + ("whole video" if not args.infer_window else f"windows of {args.infer_window}, keep {args.infer_keep}"))
     opt = torch.optim.Adam(model.parameters(), lr=args.lr)
     cw_s, cw_p = torch.tensor(w_sign, device=device), torch.tensor(w_phr, device=device)
     cfg = {**vars(args), "n_params": n_par, "weights_sign": w_sign.tolist(), "weights_phrase": w_phr.tolist(),
@@ -193,7 +287,7 @@ def train(args):
             nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             opt.step()
             tot += loss.item()
-        v = validate(model, val_s, device)
+        v = validate(model, val_s, device, args.infer_window, args.infer_keep)
         improved = v["score"] > best
         if improved:
             best, bad, best_state = v["score"], 0, copy.deepcopy(model.state_dict())
@@ -214,8 +308,7 @@ def train(args):
 def load_model(name, device):
     ck = torch.load(os.path.join(RUNS_DIR, name, "stage_a.pt"), map_location=device, weights_only=False)
     c = ck["config"]
-    m = StageA(in_dim=c["in_dim"], hidden=c["hidden"], layers=c["layers"], dropout=c["dropout"],
-               phrase_head=not c["no_phrase_head"]).to(device)
+    m = build_stage_a(c).to(device)
     m.load_state_dict(ck["state"])
     m.eval()
     return m, c
@@ -226,8 +319,17 @@ def cache_dir(name, split):
 
 
 def export(args):
+    fill_defaults(args, EXPORT_DEFAULTS)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model, cfg = load_model(args.name, device)
+    out_name = args.as_name or args.name
+    if args.as_name:                             # same weights, separate cache: downstream tools just use the new run name
+        dst = run_dir(out_name)
+        for f in ("stage_a.pt", "stage_a_config.json", "heldout.json"):
+            if os.path.exists(os.path.join(RUNS_DIR, args.name, f)):
+                shutil.copy(os.path.join(RUNS_DIR, args.name, f), os.path.join(dst, f))
+    print(f"exporting '{args.name}' as '{out_name}' | inference: " +
+          ("whole video" if not args.infer_window else f"windows of {args.infer_window}, keep {args.infer_keep}"))
     jobs = []                                              # (split label, ids)
     heldout_path = os.path.join(RUNS_DIR, args.name, "heldout.json")
     if os.path.exists(heldout_path):                       # a fold model: only its held-out videos are out-of-fold
@@ -247,15 +349,16 @@ def export(args):
                 continue
             kp = load_keypoints(vid, args.stride)
             T = min(len(kp), g["T"])
-            sg, ph, h = infer_video(model, kp[:T].reshape(T, -1), device)
-            save_cache_video(os.path.join(cache_dir(args.name, label), f"{vid}.npz"),
+            sg, ph, h = infer_video(model, kp[:T].reshape(T, -1), device, args.infer_window, args.infer_keep)
+            save_cache_video(os.path.join(cache_dir(out_name, label), f"{vid}.npz"),
                              xyz=kp[:T].astype(np.float16), h=h.astype(np.float16), sign_logits=sg.astype(np.float32),
                              phrase_logits=(ph if ph is not None else np.zeros_like(sg)).astype(np.float32),
                              gold_sign=segs_to_arr([s for s in g["sign"] if s[1] <= T]),
                              gold_phrase=segs_to_arr([s for s in g["phrase"] if s[1] <= T]),
-                             T=np.int64(T), stride=np.int64(args.stride), has_phrase_head=np.int64(ph is not None))
+                             T=np.int64(T), stride=np.int64(args.stride), has_phrase_head=np.int64(ph is not None),
+                             infer_window=np.int64(args.infer_window), infer_keep=np.float32(args.infer_keep))
             n += 1
-        print(f"cached {n} videos -> {cache_dir(args.name, label)}")
+        print(f"cached {n} videos -> {cache_dir(out_name, label)}")
 
 
 def main():
@@ -276,12 +379,21 @@ def main():
     t.add_argument("--crops-per-video", type=int, default=2)
     t.add_argument("--weight-power", type=float, default=0.5, help="class weight = (inverse frequency)^power, O=1")
     t.add_argument("--no-phrase-head", action="store_true")
+    t.add_argument("--arch", choices=list(ARCHS), default="bilstm",
+                   help="bilstm = E1s-style BiLSTM on keypoints (default); stgcn_bilstm / stgcn_bimamba = the project's ST-GCN front end + that backbone")
+    t.add_argument("--stgcn-channels", type=int, default=64)
+    t.add_argument("--equal-frames", action="store_true", help="scale --crops-per-video by 1024/--crop so every crop size sees the same number of frames per epoch")
+    t.add_argument("--infer-window", type=int, default=0, help="0 = whole-video validation inference; W = chunked windows of W frames")
+    t.add_argument("--infer-keep", type=float, default=1.0, help="with --infer-window: central fraction of each window that is kept (1.0 = no overlap)")
     t.add_argument("--fold", type=int, default=None)
     t.add_argument("--n-folds", type=int, default=4)
     e = sub.add_parser("export")
     e.add_argument("--name", required=True)
     e.add_argument("--stride", type=int, default=DEFAULT_STRIDE)
     e.add_argument("--splits", nargs="+", default=["train", "val", "test"])
+    e.add_argument("--infer-window", type=int, default=0, help="0 = whole video; W = chunked windows of W frames")
+    e.add_argument("--infer-keep", type=float, default=1.0, help="central fraction of each window kept (0.75 = overlap, drop the outer 12.5%% per side)")
+    e.add_argument("--as", dest="as_name", default=None, help="write the cache under this NEW run name (checkpoint is copied) instead of overwriting")
     a = ap.parse_args()
     train(a) if a.cmd == "train" else export(a)
 

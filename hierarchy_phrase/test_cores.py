@@ -259,6 +259,39 @@ still = np.zeros((T, 65, 3), np.float32)
 Xs, cs_ = ST.build_tokens(sg, T, fps, xyz=still, groups=("prosody",))
 check("a motionless signer has zero speed features", np.allclose(Xs[:, names.index("speed_mean")], 0))
 
+# ------------------------------------------------------------------ chunked inference, center-keep stitching
+import window_inference as WI
+ok_part = ok_in = ok_len = True
+for T in (1, 5, 63, 64, 65, 100, 255, 256, 257, 1000, 4097):
+    for W in (0, 16, 64, 256, 1024):
+        for keep in (1.0, 0.75, 0.5, 0.3):
+            plan = WI.plan_center_windows(T, W, keep)
+            cov = np.zeros(T, int)
+            for s, e, lo, hi in plan:
+                cov[lo:hi] += 1
+                ok_in &= s <= lo <= hi <= e
+            ok_part &= bool((cov == 1).all())
+            ok_len &= all((e - s) == (W if (W > 0 and T > W) else T) for s, e, _, _ in plan)
+check("kept ranges partition every video exactly once (all T, W, keep combinations)", ok_part)
+check("kept range lies inside its window; all windows have the same length (batchable)", ok_in and ok_len)
+f = lambda x: np.stack([np.sin(x), x ** 2], axis=-1)                    # a per-frame function: stitching must reproduce it exactly
+x = rng.normal(size=1234)
+ok = True
+for W, keep in [(64, 1.0), (64, 0.75), (256, 0.5), (1000, 0.75)]:
+    plan = WI.plan_center_windows(len(x), W, keep)
+    ok &= np.allclose(WI.stitch_center(len(x), plan, [f(x[s:e]) for s, e, _, _ in plan]), f(x))
+check("per-frame function: chunked + stitched equals the direct computation", ok)
+plan = WI.plan_center_windows(1000, 100, 0.75)
+inner = plan[1:-1]
+check("keep=0.75: interior windows contribute only their central 75%",
+      all(abs((hi - lo) - 75) <= 1 and lo - s >= 12 and e - hi >= 12 for s, e, lo, hi in inner), str(inner[:2]))
+check("keep=1.0 is plain concatenation (first windows tile exactly)", [(lo, hi) for _, _, lo, hi in WI.plan_center_windows(300, 100, 1.0)] == [(0, 100), (100, 200), (200, 300)])
+check("video shorter than the window is processed whole", WI.plan_center_windows(50, 100, 0.75) == [(0, 50, 0, 50)])
+try:
+    WI.plan_center_windows(500, 64, 0.0); check("keep=0 rejected", False)
+except ValueError:
+    check("keep=0 rejected", True)
+
 # ------------------------------------------------------------------ windows
 ok = True
 for K in (1, 5, 127, 128, 129, 300, 1000):

@@ -101,6 +101,42 @@ oof_n = sum(len(os.listdir(os.path.join(tmp, "runs", f"sa_f{f}", "cache", "oof")
 check("fold models export exactly the held-out train videos as OOF (and no train cache)", oof_n == 8
       and not os.path.exists(os.path.join(tmp, "runs", "sa_f0", "cache", "train")), f"{oof_n} OOF videos")
 
+# ---- chunked inference (window + overlap) and cache under a new run name
+sg_full, ph_full, h_full = A.infer_video(m, x_long[0].numpy(), torch.device("cpu"))
+sg_ch, ph_ch, h_ch = A.infer_video(m, x_long[0].numpy(), torch.device("cpu"), window=48, keep=0.75)
+check("chunked inference (window 48, keep 0.75) returns full-length outputs of the same shapes",
+      sg_ch.shape == sg_full.shape == (120, 3) and ph_ch.shape == (120, 3) and h_ch.shape == h_full.shape == (120, 64) and np.isfinite(sg_ch).all())
+sg_big, _, _ = A.infer_video(m, x_long[0].numpy(), torch.device("cpu"), window=500, keep=0.75)
+check("window longer than the video == whole-video inference", np.allclose(sg_big, sg_full, atol=1e-5))
+A.export(SimpleNamespace(name="sa_t", stride=2, splits=["val"], infer_window=64, infer_keep=0.75, as_name="sa_t_w64k75"))
+zz = C.load_cache_video(os.path.join(tmp, "runs", "sa_t_w64k75", "cache", "val", "val1_B.npz"))
+check("export --as writes a separate cache that records the inference mode", int(zz["infer_window"]) == 64 and abs(float(zz["infer_keep"]) - 0.75) < 1e-6
+      and os.path.exists(os.path.join(tmp, "runs", "sa_t_w64k75", "stage_a.pt")) and zz["h"].shape[0] == int(zz["T"]))
+for arch in ("stgcn_bilstm", "stgcn_bimamba"):
+    try:
+        ms = A.build_stage_a(dict(arch=arch, in_dim=195, hidden=32, layers=2, dropout=0.0, no_phrase_head=False)).eval()
+    except Exception as e:                                           # e.g. mamba_ssm missing
+        print(f"[SKIP] {arch}: cannot build here ({type(e).__name__}: {str(e)[:80]})")
+        continue
+    dev = torch.device("cuda" if (arch == "stgcn_bimamba" and torch.cuda.is_available()) else "cpu")
+    if arch == "stgcn_bimamba" and dev.type == "cpu":
+        print("[SKIP] stgcn_bimamba forward: Mamba kernels need a GPU (it built fine)")
+        continue
+    ms = ms.to(dev)
+    with torch.no_grad():
+        o = ms(torch.randn(2, 80, 195, device=dev))
+    check(f"{arch}: outputs (B,T,3) x2 and features (B,T,64)", o[0].shape == (2, 80, 3) and o[1].shape == (2, 80, 3) and o[2].shape == (2, 80, 64))
+A.train(SimpleNamespace(name="sa_g", fold=None, **{**common_a, "no_phrase_head": False}, arch="stgcn_bilstm", stgcn_channels=8, equal_frames=True,
+                        infer_window=64, infer_keep=0.75))
+check("Stage A trains with the ST-GCN encoder, equal-frames and chunked validation", os.path.exists(os.path.join(tmp, "runs", "sa_g", "stage_a.pt")))
+
+import window_study as WS
+WS.HERE = tmp
+sys.argv = ["window_study.py", "--run", "sa_t", "--windows", "32", "--keeps", "1.0", "0.75"]
+WS.main()
+ws = json.load(open(os.path.join(tmp, "results", "window_study_sa_t.json")))
+check("window_study ran whole-video and chunked modes", {"0x1.0", "32x1.0", "32x0.75"} <= set(ws["val"]) and "phrase" in ws["val"]["0x1.0"])
+
 # ---------------------------------------------------------------- Stage C
 base = dict(stage_a="sa_t", tag="t", seed=0, groups=list(SC.ALL_GROUPS), oof_runs=[], arch="transformer", d_model=32, layers=1,
             heads=2, lstm_layers=1, lstm_hidden=16, dropout=0.1, feat_dropout=0.1, window=16, batch=4, epochs=2, patience=5,
