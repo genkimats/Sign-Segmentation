@@ -104,7 +104,8 @@ check("fold models export exactly the held-out train videos as OOF (and no train
 # ---------------------------------------------------------------- Stage C
 base = dict(stage_a="sa_t", tag="t", seed=0, groups=list(SC.ALL_GROUPS), oof_runs=[], arch="transformer", d_model=32, layers=1,
             heads=2, lstm_layers=1, lstm_hidden=16, dropout=0.1, feat_dropout=0.1, window=16, batch=4, epochs=2, patience=5,
-            lr=1e-3, wd=0.01, weight_power=1.0, focal_gamma=0.0, ramp=2, jitter=1.0, b_thr=0.5, o_thr=0.5, limit=None, source="mix")
+            lr=1e-3, wd=0.01, weight_power=1.0, focal_gamma=0.0, ramp=2, jitter=1.0, b_thr=0.5, o_thr=0.5, limit=None, source="mix",
+            tag_rule="contain_or_next", end_rule="last_sign_end")
 for source in ("gold", "jitter", "schedule", "mix", "pred"):
     SC.train(SimpleNamespace(**{**base, "source": source, "tag": source}))
     check(f"Stage C trains with source '{source}'", os.path.exists(os.path.join(tmp, "runs", "sa_t", "stage_c", f"{source}_s0", "stage_c.pt")))

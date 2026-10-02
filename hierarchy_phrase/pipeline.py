@@ -9,16 +9,20 @@ Stage A is trained ONCE per seed and shared by every Stage-C variant of that see
 trained only for the 'oof' ablation (K folds per seed -> K extra BiLSTM trainings; the expensive step).
 """
 import argparse
+import os
 import subprocess
 import sys
 
 PY = sys.executable
 END_RULE = "last_sign_end"
+PFX = ""                          # run-name prefix per label set (set by --labels)
+LABEL_DIRS = {"original": "BIO_tags_phrase", "aligned": "BIO_tags_phrase_signaligned"}
+LABEL_ENV = {}
 TAG_RULE = "first_end_after"      # set by --tag-rule; applied to every Stage-C training command
 
 
 def sa(seed, *extra):
-    return [PY, "stage_a.py", "train", "--name", f"sa_s{seed}", "--seed", str(seed), *extra]
+    return [PY, "stage_a.py", "train", "--name", f"{PFX}sa_s{seed}", "--seed", str(seed), *extra]
 
 
 def ex(name, *extra):
@@ -26,16 +30,16 @@ def ex(name, *extra):
 
 
 def sc(seed, tag, *extra):
-    return [PY, "stage_c.py", "train", "--stage-a", f"sa_s{seed}", "--tag", tag, "--seed", str(seed), "--tag-rule", TAG_RULE, "--end-rule", END_RULE, *extra]
+    return [PY, "stage_c.py", "train", "--stage-a", f"{PFX}sa_s{seed}", "--tag", tag, "--seed", str(seed), "--tag-rule", TAG_RULE, "--end-rule", END_RULE, *extra]
 
 
 def ev(seed, tag):
-    return [PY, "evaluate.py", "--stage-a", f"sa_s{seed}", "--tag", tag, "--seed", str(seed), "--end-rule", END_RULE]
+    return [PY, "evaluate.py", "--stage-a", f"{PFX}sa_s{seed}", "--tag", tag, "--seed", str(seed), "--end-rule", END_RULE]
 
 
 def plan(seeds, folds):
     P = {"audit": [[PY, "data_audit.py"]]}
-    P["stage_a"] = [c for s in seeds for c in (sa(s), ex(f"sa_s{s}"))]
+    P["stage_a"] = [c for s in seeds for c in (sa(s), ex(f"{PFX}sa_s{s}"))]
     # main method + ablations 1, 2, 3, 4, 5  (ablation 2 = the hier_oracle rows that every evaluation already contains)
     P["main"] = [c for s in seeds for c in (sc(s, "main", "--source", "mix"), ev(s, "main"))]
     P["flat_vs_hier"] = []      # ablation 1: the 'flat_*' rows of every evaluate.py run (same Stage-A encoder, phrase head)
@@ -47,16 +51,16 @@ def plan(seeds, folds):
                             for c in (sc(s, f"src_{t}", "--source", t), ev(s, f"src_{t}"))]            # ablation 4 (+ 'main' = mix)
     P["oof"] = []
     for s in seeds:                                    # ablation 4(b): out-of-fold Stage-A predictions, model-agnostic tokens
-        fold_runs = [f"sa_s{s}_f{f}" for f in range(folds)]
+        fold_runs = [f"{PFX}sa_s{s}_f{f}" for f in range(folds)]
         for f, name in enumerate(fold_runs):
             P["oof"] += [[PY, "stage_a.py", "train", "--name", name, "--seed", str(s), "--fold", str(f), "--n-folds", str(folds)],
                          ex(name)]
         P["oof"] += [sc(s, "oof", "--source", "pred", "--groups", "sign_probs", "prosody", "--oof-runs", *fold_runs), ev(s, "oof")]
     P["bilstm_control"] = [c for s in seeds for c in (sc(s, "bilstm", "--arch", "bilstm", "--source", "mix"), ev(s, "bilstm"))]   # ablation 5
     P["sign_only_encoder"] = [c for s in seeds for c in (
-        [PY, "stage_a.py", "train", "--name", f"sa_s{s}_signonly", "--seed", str(s), "--no-phrase-head"], ex(f"sa_s{s}_signonly"),
-        [PY, "stage_c.py", "train", "--stage-a", f"sa_s{s}_signonly", "--tag", "main", "--seed", str(s), "--source", "mix", "--tag-rule", TAG_RULE, "--end-rule", END_RULE],
-        [PY, "evaluate.py", "--stage-a", f"sa_s{s}_signonly", "--tag", "main", "--seed", str(s), "--end-rule", END_RULE])]  # ablation 6 (encoder without phrase supervision)
+        [PY, "stage_a.py", "train", "--name", f"{PFX}sa_s{s}_signonly", "--seed", str(s), "--no-phrase-head"], ex(f"{PFX}sa_s{s}_signonly"),
+        [PY, "stage_c.py", "train", "--stage-a", f"{PFX}sa_s{s}_signonly", "--tag", "main", "--seed", str(s), "--source", "mix", "--tag-rule", TAG_RULE, "--end-rule", END_RULE],
+        [PY, "evaluate.py", "--stage-a", f"{PFX}sa_s{s}_signonly", "--tag", "main", "--seed", str(s), "--end-rule", END_RULE])]  # ablation 6 (encoder without phrase supervision)
     return P
 
 
@@ -68,19 +72,24 @@ def main():
     ap.add_argument("--tag-rule", default="first_end_after", choices=["first_end_after", "nearest_start", "contain_or_next"],
                     help="phrase-start -> sign assignment; pick it from the ORACLE_CEILING block of data_audit.py")
     ap.add_argument("--end-rule", default="last_sign_end", choices=["last_sign_end", "next_start"])
+    ap.add_argument("--labels", default="aligned", choices=["original", "aligned"],
+                    help="phrase label set: 'aligned' = BIO_tags_phrase_signaligned (python relabel_phrases.py), 'original' = BIO_tags_phrase. "
+                         "Run names get an 'al_' / 'or_' prefix so the two never share caches or results.")
     ap.add_argument("--run", action="store_true")
     a = ap.parse_args()
-    global TAG_RULE, END_RULE
+    global TAG_RULE, END_RULE, PFX, LABEL_ENV
     TAG_RULE, END_RULE = a.tag_rule, a.end_rule
+    PFX = "al_" if a.labels == "aligned" else "or_"
+    LABEL_ENV = {"HP_PHRASE_DIR": LABEL_DIRS[a.labels]}
     P = plan(a.seeds, a.folds)
     keys = a.only or list(P)
     for k in keys:
         print(f"\n# ---- {k}")
         for cmd in P[k]:
-            print(" ".join(cmd))
+            print(f"HP_PHRASE_DIR={LABEL_ENV['HP_PHRASE_DIR']} " + " ".join(cmd))
             if a.run:
-                subprocess.run(cmd, check=True)
-    print("\n# aggregate:  python aggregate.py results/sa_s*__main_s*.json   (repeat per tag)")
+                subprocess.run(cmd, check=True, env={**os.environ, **LABEL_ENV})
+    print(f"\n# aggregate:  python aggregate.py results/{PFX}sa_s*__main_s*.json   (repeat per tag)")
 
 
 if __name__ == "__main__":

@@ -240,7 +240,7 @@ def train(a):
     print(f"train videos {len(train_items)}  val videos {len(val_items)}  groups {groups}")
 
     policy = SourcePolicy(a.source, a.ramp, a.jitter, a.b_thr, a.o_thr, a.seed)
-    gold_ex = make_examples(train_items, SourcePolicy("gold", 1, 0, 0.5, 0.5, 0), 1, groups, tag_rule=a.tag_rule)
+    gold_ex = make_examples(train_items, SourcePolicy("gold", 1, 0, 0.5, 0.5, 0), 1, groups, tag_rule=getattr(a, "tag_rule", "first_end_after"))
     allX = np.concatenate([x for x, _ in gold_ex])
     mean, std = allX.mean(0), allX.std(0) + 1e-6
     tags_all = np.concatenate([t for _, t in gold_ex])
@@ -261,7 +261,7 @@ def train(a):
     for epoch in range(1, a.epochs + 1):
         t0 = time.time()
         if examples is None or not policy.static:
-            examples, n_fb = make_examples(train_items, policy, epoch, groups, return_fallbacks=True, tag_rule=a.tag_rule)
+            examples, n_fb = make_examples(train_items, policy, epoch, groups, return_fallbacks=True, tag_rule=getattr(a, "tag_rule", "first_end_after"))
             if n_fb and a.source != "gold":
                 print(f"WARNING: {n_fb}/{len(train_items)} training videos had NO predicted sign at b/o = {a.b_thr}/{a.o_thr} "
                       f"and fell back to gold signs. If this is most of them, Stage A is not trained enough or the thresholds are off.")

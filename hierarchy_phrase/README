@@ -14,7 +14,8 @@ python test_cores.py            # numpy-only, no data, 28 checks   (segments, me
 python test_pipeline_stub.py    # numpy-only, no data, 16 checks   (cache I/O, training sources, folds)
 python smoke_test.py            # needs torch, ~1-2 min, synthetic data, tests ALL torch code end to end
 python data_audit.py            # brief step 1: label ratios, phrase-edge/sign-edge alignment, gap-length statistics
-python pipeline.py              # dry run: prints every command incl. all ablations;  add --run to execute
+python relabel_phrases.py       # opt-in: sign-aligned phrase labels (see below)
+python pipeline.py --labels aligned    # dry run: prints every command incl. all ablations; add --run to execute
 ```
 
 Manual version of the main method for one seed:
@@ -24,7 +25,7 @@ python stage_a.py train  --name sa_s42 --seed 42
 python stage_a.py export --name sa_s42                      # caches features/logits/keypoints/gold for all splits
 python stage_c.py train  --stage-a sa_s42 --tag main --seed 42 --source mix
 python evaluate.py       --stage-a sa_s42 --tag main --seed 42
-python aggregate.py results/sa_s*__main_s*.json             # mean ± std over seeds
+python aggregate.py results/al_sa_s*__main_s*.json          # mean ± std over seeds (al_ = aligned labels, or_ = original)
 ```
 
 ## Files
@@ -65,26 +66,29 @@ python aggregate.py results/sa_s*__main_s*.json             # mean ± std over s
 7. **Tuning objective.** Thresholds are tuned on validation with `--tune-metric` (default frame F1). Both default (0.5) and tuned
    numbers are always written. Nothing is tuned on test.
 
-## Label alignment finding (read this before trusting any number)
+## Label alignment: measured, and what to use
 
-On the real data only ~57% of gold phrase STARTS and ~30% of ENDS fall exactly on a gold sign edge; ~42% of starts and ~42% of ends
-lie strictly INSIDE a sign (identical shares, because one cut point inside one sign is simultaneously the previous phrase's end and
-the next phrase's start). Cause (read from `create_phrase_bio_tags.py`): `snap_to_gloss_boundaries` takes the first/last non-Outside
-FRAME inside `[raw_start-15, raw_end+15]` -- not the first/last SIGN -- and translation units are contiguous, so every boundary is cut
-at a window edge, usually mid-sign; and `build_phrase_bio_array` lets a later B overwrite the earlier phrase's tail, so consecutive
-phrases TOUCH and a phrase's end becomes the next phrase's start. The simulation behind this reasoning reproduces the effects
-qualitatively, not your exact percentages.
+Audit of the project's ORIGINAL phrase labels (`processed_data/BIO_tags_phrase`), train: only 57% of phrase starts and 30% of ends sit on a
+sign edge; 42% of starts and 42% of ends lie strictly inside a sign; 72% of consecutive gold phrases TOUCH (end == next start; 78% val,
+68% test). Cause, read from `create_phrase_bio_tags.py`: it snaps to the first/last non-Outside FRAME inside `[raw_start-15, raw_end+15]`
+instead of the first/last SIGN, so contiguous translation units are cut mid-sign at window edges, and `build_phrase_bio_array` lets a later B
+overwrite the earlier phrase's tail. Ceiling of the hierarchy on these labels (gold signs -> gold phrases, train): frame F1 0.83, start F1@5
+0.76-0.80, end F1@5 0.47-0.61; best rule pair `contain_or_next + last_sign_end` (or `nearest_start`).
 
-Consequences for the hierarchy: (1) a ceiling on how well gold signs reproduce gold phrases, reported by `data_audit.py` as
-`ORACLE_CEILING_gold_signs_to_gold_phrases` for every combination of `--tag-rule` (how a mid-sign start is given to a sign) and
-`--end-rule` (`last_sign_end` = paper wording, `next_start` = phrase runs up to the next phrase, matching touching labels);
-`share_of_consecutive_gold_phrases_that_touch` says which regime your labels are in. (2) Choose both rules by that ceiling, apply them
-with `stage_c.py` / `evaluate.py` / `pipeline.py --tag-rule ... --end-rule ...`. Evaluation always uses the raw gold.
+`--end-rule next_start` (phrase runs up to the next phrase) is NOT recommended on either label set: on the original labels it lifts end F1@2
+only from 0.33 to 0.40 while frame F1 collapses from 0.83 to 0.49, because the ~28% non-touching phrases are separated by long gaps (mean
+74 frames) that it absorbs; on aligned labels it is simply wrong (frame F1 0.61). It is kept for completeness.
 
-**Alternative: fix the labels.** `relabel_phrases.py` rebuilds phrase labels so every edge is a sign edge ("start of the first sign to
-the end of the last sign", the paper's wording) into `processed_data/BIO_tags_phrase_signaligned/` without touching the old ones;
-`HP_PHRASE_DIR=BIO_tags_phrase_signaligned python <script>` makes every script here use them. On aligned labels use
-`--end-rule last_sign_end`. Report both label sets: they are different gold standards.
+SIGN-ALIGNED labels (`python relabel_phrases.py` -> `processed_data/BIO_tags_phrase_signaligned`, the paper's "start of the first sign to the
+end of the last sign"), same audit: 99.4% of starts and 99.7% of ends on a sign edge, 0.7% of phrases touch, 56,650 train phrases (vs 56,817),
+gold-sign ceiling frame F1 0.998 / B-F1 0.994 / end F1@5 0.999 for every tag rule (they coincide) with `--end-rule last_sign_end`, and the
+gap-length AUC for phrase boundaries rises to 0.76 / 0.75 / 0.79 (train/val/test) from 0.70 / 0.68 / 0.74 because the tags are cleaner.
+
+**Which to report.** Both, as separate result sets (`pipeline.py --labels aligned|original`; run names get an `al_` / `or_` prefix and the
+phrase-label directory is passed to every script through `HP_PHRASE_DIR`, so caches never mix). They are different gold standards. Neither is
+the 2023 paper's gold: the paper's phrase B:I:O is about 1:58:77; original labels give 1:62:77, aligned 1:56:84 (aligned has more Outside
+because the pauses between phrases are no longer absorbed), so the original labels match the paper's Outside share better and the aligned ones
+its Inside share better. Treat any comparison to the paper's numbers as approximate on either.
 
 ## Ablations → commands (`pipeline.py --only <name>`)
 
