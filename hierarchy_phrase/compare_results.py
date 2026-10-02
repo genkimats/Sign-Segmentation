@@ -27,8 +27,9 @@ def main():
         r = json.load(open(f))
         name = os.path.basename(f).replace(".json", "")
         for i, row in enumerate(ROWS):
-            m = r[a.split][row]
-            print(f"{name if i == 0 else '':<44}{row:<20}" + "".join(f"{m[c]:>12.3f}" for c in COLS))
+            m = r[a.split].get(row)
+            cells = "".join(f"{m[c]:>12.3f}" for c in COLS) if m else "".join(f"{'n/a':>12}" for _ in COLS)
+            print(f"{name if i == 0 else '':<44}{row:<20}" + cells)
         sg = r[a.split].get("sign_stage_tuned")
         if sg:
             print(f"{'':<44}{'(sign stage, tuned)':<20}" + f"{sg['frame_f1']:>12.3f}{sg['ratio']:>12.3f}{sg['start_f1@5']:>12.3f}{sg['seg_f1@0.5']:>12.3f}{sg['mask_iou']:>12.3f}")

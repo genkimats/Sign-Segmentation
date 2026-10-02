@@ -88,7 +88,10 @@ def main():
     print(f"Stage C: {bundle.cfg['arch']}  groups {bundle.groups}  source {bundle.cfg['source']}  params {bundle.cfg['n_params']:,}")
 
     # thresholds: validation only ------------------------------------------------------------------
-    fb, fo = tune_flat(val, a.tune_metric)
+    has_flat = all(it["has_phrase_head"] for it in val + test)
+    fb, fo = tune_flat(val, a.tune_metric) if has_flat else (None, None)
+    if not has_flat:
+        print("cache has no phrase head (imported sign model): flat_* rows are omitted")
     sb, so = tune_sign_decoder(val)
     pred_default = lambda it: greedy_decode(it["sign_probs"], 0.5, 0.5)           # noqa: E731
     pred_tuned = lambda it: greedy_decode(it["sign_probs"], sb, so)               # noqa: E731
@@ -99,14 +102,16 @@ def main():
     print(f"tuned on val ({a.tune_metric}): flat b/o = {fb}/{fo} | sign decoder b/o = {sb}/{so} | phrase thr = {thr_tuned:.2f} (oracle {thr_oracle:.2f})")
 
     def run(items):
-        rows = {
+        rows = {} if not has_flat else {
             "flat_default": eval_segs([greedy_decode(it["phrase_probs"], 0.5, 0.5) for it in items], items),
             "flat_tuned": eval_segs([greedy_decode(it["phrase_probs"], fb, fo) for it in items], items),
+        }
+        rows.update({
             "hier_default": eval_segs([phrases_from_pB(pred_default(it), bundle.pB(it, pred_default(it)), thr_default) for it in items], items),
             "hier_tuned": eval_segs([phrases_from_pB(pred_tuned(it), bundle.pB(it, pred_tuned(it)), thr_tuned) for it in items], items),
             "hier_oracle_default": eval_segs([phrases_from_pB(it["gold_sign"], bundle.pB(it, it["gold_sign"]), thr_default) for it in items], items),
             "hier_oracle_tuned": eval_segs([phrases_from_pB(it["gold_sign"], bundle.pB(it, it["gold_sign"]), thr_oracle) for it in items], items),
-        }
+        })
         # sign-segmentation quality of the cascade's first stage (context for the cascade loss)
         sg = evaluate_videos([pred_tuned(it) for it in items], [it["gold_sign"] for it in items], [it["T"] for it in items], tols=(2, 5, 10), iou_thrs=(0.5,))
         rows["sign_stage_tuned"] = sg

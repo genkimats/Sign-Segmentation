@@ -119,6 +119,32 @@ labs = [np.array([0] * 90 + [1] * 8 + [2] * 2)]
 w = A.class_weights(labs, 0.5)
 check("class weights: O = 1, rarer classes up-weighted, monotone in rarity", w[0] == 1 and w[2] > w[1] > w[0], str(np.round(w, 2)))
 
+# ---- importing an external sign model's exported logits (import_sign_model.py)
+import import_sign_model as IM
+exp_dir = os.path.join(tmp, "exports", "ext_run"); os.makedirs(exp_dir)
+gold_imp, arrays = {}, {}
+for i in range(3):
+    T_nat = 1200 + 2 * i
+    sg_n = [(t, t + 20) for t in range(10, T_nat - 40, 37)]
+    gold_imp[f"x{i}_A"] = {"sign": S.resample_segments(sg_n, 2), "phrase": S.resample_segments([(sg_n[0][0], sg_n[-1][1])], 2),
+                           "T": S.working_length(T_nat, 2), "T_native": T_nat}
+    arrays[f"logits__x{i}_A"] = rng.normal(size=(T_nat if i < 2 else T_nat - 5, 3)).astype(np.float32)   # x2: length mismatch
+    arrays[f"labels__x{i}_A"] = np.zeros(T_nat, np.int8)
+np.savez_compressed(os.path.join(exp_dir, "val.npz"), **arrays)
+IM.load_gold_segments = lambda vid, stride=2: gold_imp.get(vid)
+IM.load_keypoints = lambda vid, stride=2: np.zeros((gold_imp[vid]["T"], 65, 3), np.float32)
+IM.RUNS_DIR = os.path.join(tmp, "runs")
+n = IM.import_split("ext_run", "val", "imp", 2, exports_dir=os.path.join(tmp, "exports"))
+check("importer converts matching videos and skips a length mismatch", n == 2)
+imp = SC.load_items([os.path.join(tmp, "runs", "imp", "cache", "val")])
+lg0 = arrays["logits__x0_A"][::2]
+check("imported logits are sub-sampled like the keypoints and marked as having no phrase head",
+      len(imp) == 2 and np.allclose(SC.logits_to_probs(lg0[:imp[0]["T"]]), imp[0]["sign_probs"], atol=1e-6)
+      and all(it["has_phrase_head"] == 0 for it in imp) and imp[0]["h"].shape[1] == 1)
+ex_imp = SC.make_examples(imp, SC.SourcePolicy("gold", 1, 0, .5, .5, 0), 1, ("sign_probs", "prosody"))
+check("Stage C examples build from an imported cache without encoder features",
+      len(ex_imp) == 2 and ex_imp[0][0].shape[1] == SIGN_PROB_DIM + PROSODY_DIM)
+
 print(f"\n{sum(results)}/{len(results)} checks passed   (torch: {'real' if REAL_TORCH else 'stub'})")
 import shutil; shutil.rmtree(tmp)
 sys.exit(0 if all(results) else 1)

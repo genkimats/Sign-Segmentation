@@ -95,7 +95,8 @@ def load_items(cache_dirs, limit=None):
             z = load_cache_video(os.path.join(d, f))
             items.append({"vid": f[:-4], "xyz": z["xyz"], "h": z["h"], "sign_probs": logits_to_probs(z["sign_logits"]),
                           "phrase_probs": logits_to_probs(z["phrase_logits"]), "gold_sign": arr_to_segs(z["gold_sign"]),
-                          "gold_phrase": arr_to_segs(z["gold_phrase"]), "T": int(z["T"]), "stride": int(z["stride"])})
+                          "gold_phrase": arr_to_segs(z["gold_phrase"]), "T": int(z["T"]), "stride": int(z["stride"]),
+                          "has_phrase_head": int(z["has_phrase_head"]) if "has_phrase_head" in z else 1})
     return items
 
 
@@ -238,6 +239,8 @@ def train(a):
     train_items = load_items(train_dirs, a.limit)
     val_items = load_items([os.path.join(base, "val")], a.limit)
     print(f"train videos {len(train_items)}  val videos {len(val_items)}  groups {groups}")
+    if "h_pool" in groups and train_items and train_items[0]["h"].shape[1] <= 1:
+        raise SystemExit("this cache has no encoder features (imported sign model): use --groups sign_probs prosody")
 
     policy = SourcePolicy(a.source, a.ramp, a.jitter, a.b_thr, a.o_thr, a.seed)
     gold_ex = make_examples(train_items, SourcePolicy("gold", 1, 0, 0.5, 0.5, 0), 1, groups, tag_rule=getattr(a, "tag_rule", "first_end_after"))
