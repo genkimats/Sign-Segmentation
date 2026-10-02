@@ -21,7 +21,7 @@ import numpy as np
 
 from common import (HERE, DEFAULT_STRIDE, fps_of, have_all_files, load_gold_segments, split_ids)
 from metrics import evaluate_videos
-from segments import TAG_RULES, phrase_tags_over_signs, phrases_from_tags, segments_to_bio
+from segments import END_RULES, TAG_RULES, phrase_tags_over_signs, phrases_from_tags, segments_to_bio
 
 
 def auc(pos, neg):
@@ -80,7 +80,8 @@ def audit_split(split, stride, tol_list=(0, 1, 2, 5)):
     starts, ends, tot_starts, tot_ends = {t: 0 for t in tol_list}, {t: 0 for t in tol_list}, 0, 0
     gap_phr, gap_in = [], []
     where_s, where_e = {}, {}
-    ceil = {r: {"P": [], "G": [], "L": [], "gp": [], "gi": []} for r in TAG_RULES}
+    touching, n_pairs = 0, 0
+    ceil = {f"{r}+{er}": {"P": [], "G": [], "L": [], "gp": [], "gi": []} for r in TAG_RULES for er in END_RULES}
     for vid in ids:
         g = load_gold_segments(vid, stride)
         if g is None or not g["sign"] or not g["phrase"]:
@@ -92,6 +93,7 @@ def audit_split(split, stride, tol_list=(0, 1, 2, 5)):
         ss = np.array([s for s, _ in g["sign"]]); se = np.array([e for _, e in g["sign"]])
         ps = np.array([s for s, _ in g["phrase"]]); pe = np.array([e for _, e in g["phrase"]])
         ds, de = nearest_dist(ps, ss), nearest_dist(pe, se)
+        touching += int((pe[:-1] == ps[1:]).sum()); n_pairs += max(len(ps) - 1, 0)
         for t in tol_list:
             starts[t] += int((ds <= t).sum()); ends[t] += int((de <= t).sum())
         tot_starts += len(ps); tot_ends += len(pe)
@@ -104,8 +106,10 @@ def audit_split(split, stride, tol_list=(0, 1, 2, 5)):
                 acc[k2] = acc.get(k2, 0) + v2
         for r in TAG_RULES:
             tg = phrase_tags_over_signs(g["sign"], g["phrase"], r)
-            ceil[r]["P"].append(phrases_from_tags(g["sign"], tg)); ceil[r]["G"].append(g["phrase"]); ceil[r]["L"].append(g["T"])
-            ceil[r]["gp"].extend(gaps[tg[1:] == 1].tolist()); ceil[r]["gi"].extend(gaps[tg[1:] == 0].tolist())
+            for er in END_RULES:
+                key = f"{r}+{er}"
+                ceil[key]["P"].append(phrases_from_tags(g["sign"], tg, er)); ceil[key]["G"].append(g["phrase"]); ceil[key]["L"].append(g["T"])
+                ceil[key]["gp"].extend(gaps[tg[1:] == 1].tolist()); ceil[key]["gi"].extend(gaps[tg[1:] == 0].tolist())
     gp, gi = np.array(gap_phr), np.array(gap_in)
     pct = lambda a: {q: float(np.percentile(a, q)) for q in (10, 50, 90)} if len(a) else {}      # noqa: E731
     return {
@@ -121,12 +125,13 @@ def audit_split(split, stride, tol_list=(0, 1, 2, 5)):
         "share_of_zero_gaps": {"phrase_boundary": float((gp == 0).mean()) if len(gp) else None,
                                "within_phrase": float((gi == 0).mean()) if len(gi) else None},
         "AUC_gap_predicts_boundary": auc(gp, gi),
+        "share_of_consecutive_gold_phrases_that_touch(end==next_start)": touching / max(n_pairs, 1),
         "phrase_starts_vs_signs": {k: v / max(sum(where_s.values()), 1) for k, v in where_s.items()},
         "phrase_ends_vs_signs": {k: v / max(sum(where_e.values()), 1) for k, v in where_e.items()},
         "ORACLE_CEILING_gold_signs_to_gold_phrases": {
             r: {**{k: round(v, 3) for k, v in evaluate_videos(ceil[r]["P"], ceil[r]["G"], ceil[r]["L"], tols=(2, 5), iou_thrs=(0.5,)).items()
                    if k in ("frame_f1", "frame_f1_B", "mask_iou", "ratio", "start_f1@2", "start_f1@5", "end_f1@2", "end_f1@5", "seg_f1@0.5")},
-                "AUC_gap_boundary": round(auc(np.array(ceil[r]["gp"]), np.array(ceil[r]["gi"])), 3)} for r in TAG_RULES},
+                "AUC_gap_boundary": round(auc(np.array(ceil[r]["gp"]), np.array(ceil[r]["gi"])), 3)} for r in ceil},
         "_gaps": (gp, gi),
     }
 

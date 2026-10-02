@@ -13,6 +13,7 @@ import subprocess
 import sys
 
 PY = sys.executable
+END_RULE = "last_sign_end"
 TAG_RULE = "first_end_after"      # set by --tag-rule; applied to every Stage-C training command
 
 
@@ -25,11 +26,11 @@ def ex(name, *extra):
 
 
 def sc(seed, tag, *extra):
-    return [PY, "stage_c.py", "train", "--stage-a", f"sa_s{seed}", "--tag", tag, "--seed", str(seed), "--tag-rule", TAG_RULE, *extra]
+    return [PY, "stage_c.py", "train", "--stage-a", f"sa_s{seed}", "--tag", tag, "--seed", str(seed), "--tag-rule", TAG_RULE, "--end-rule", END_RULE, *extra]
 
 
 def ev(seed, tag):
-    return [PY, "evaluate.py", "--stage-a", f"sa_s{seed}", "--tag", tag, "--seed", str(seed)]
+    return [PY, "evaluate.py", "--stage-a", f"sa_s{seed}", "--tag", tag, "--seed", str(seed), "--end-rule", END_RULE]
 
 
 def plan(seeds, folds):
@@ -54,8 +55,8 @@ def plan(seeds, folds):
     P["bilstm_control"] = [c for s in seeds for c in (sc(s, "bilstm", "--arch", "bilstm", "--source", "mix"), ev(s, "bilstm"))]   # ablation 5
     P["sign_only_encoder"] = [c for s in seeds for c in (
         [PY, "stage_a.py", "train", "--name", f"sa_s{s}_signonly", "--seed", str(s), "--no-phrase-head"], ex(f"sa_s{s}_signonly"),
-        [PY, "stage_c.py", "train", "--stage-a", f"sa_s{s}_signonly", "--tag", "main", "--seed", str(s), "--source", "mix", "--tag-rule", TAG_RULE],
-        [PY, "evaluate.py", "--stage-a", f"sa_s{s}_signonly", "--tag", "main", "--seed", str(s)])]  # ablation 6 (encoder without phrase supervision)
+        [PY, "stage_c.py", "train", "--stage-a", f"sa_s{s}_signonly", "--tag", "main", "--seed", str(s), "--source", "mix", "--tag-rule", TAG_RULE, "--end-rule", END_RULE],
+        [PY, "evaluate.py", "--stage-a", f"sa_s{s}_signonly", "--tag", "main", "--seed", str(s), "--end-rule", END_RULE])]  # ablation 6 (encoder without phrase supervision)
     return P
 
 
@@ -66,10 +67,11 @@ def main():
     ap.add_argument("--only", nargs="*", default=None, help="subset of: " + ", ".join(plan([0], 2)))
     ap.add_argument("--tag-rule", default="first_end_after", choices=["first_end_after", "nearest_start", "contain_or_next"],
                     help="phrase-start -> sign assignment; pick it from the ORACLE_CEILING block of data_audit.py")
+    ap.add_argument("--end-rule", default="last_sign_end", choices=["last_sign_end", "next_start"])
     ap.add_argument("--run", action="store_true")
     a = ap.parse_args()
-    global TAG_RULE
-    TAG_RULE = a.tag_rule
+    global TAG_RULE, END_RULE
+    TAG_RULE, END_RULE = a.tag_rule, a.end_rule
     P = plan(a.seeds, a.folds)
     keys = a.only or list(P)
     for k in keys:

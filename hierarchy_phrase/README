@@ -67,13 +67,24 @@ python aggregate.py results/sa_s*__main_s*.json             # mean ± std over s
 
 ## Label alignment finding (read this before trusting any number)
 
-On the real data, only ~57% of gold phrase STARTS and ~30% of gold phrase ENDS fall exactly on a gold sign edge (~80% within
-±5 frames at 25 fps), so the brief's premise "phrase edges coincide with sign edges" holds only approximately for the labels
-in `processed_data/BIO_tags_phrase`. Suspected cause: `create_phrase_bio_tags.py` snaps to the first/last non-Outside frame
-inside `[raw_start-15, raw_end+15]`, which lands mid-sign whenever the window edge cuts a sign. Consequences: (1) a ceiling on
-how well gold signs can reproduce gold phrases (reported by `data_audit.py` under `ORACLE_CEILING_gold_signs_to_gold_phrases`);
-(2) the training tags depend on how a mid-sign label is assigned to a sign: choose `--tag-rule` by that ceiling
-(`first_end_after`, `nearest_start`, `contain_or_next`; also `pipeline.py --tag-rule`). Evaluation always uses the raw gold.
+On the real data only ~57% of gold phrase STARTS and ~30% of ENDS fall exactly on a gold sign edge; ~42% of starts and ~42% of ends
+lie strictly INSIDE a sign (identical shares, because one cut point inside one sign is simultaneously the previous phrase's end and
+the next phrase's start). Cause (read from `create_phrase_bio_tags.py`): `snap_to_gloss_boundaries` takes the first/last non-Outside
+FRAME inside `[raw_start-15, raw_end+15]` -- not the first/last SIGN -- and translation units are contiguous, so every boundary is cut
+at a window edge, usually mid-sign; and `build_phrase_bio_array` lets a later B overwrite the earlier phrase's tail, so consecutive
+phrases TOUCH and a phrase's end becomes the next phrase's start. The simulation behind this reasoning reproduces the effects
+qualitatively, not your exact percentages.
+
+Consequences for the hierarchy: (1) a ceiling on how well gold signs reproduce gold phrases, reported by `data_audit.py` as
+`ORACLE_CEILING_gold_signs_to_gold_phrases` for every combination of `--tag-rule` (how a mid-sign start is given to a sign) and
+`--end-rule` (`last_sign_end` = paper wording, `next_start` = phrase runs up to the next phrase, matching touching labels);
+`share_of_consecutive_gold_phrases_that_touch` says which regime your labels are in. (2) Choose both rules by that ceiling, apply them
+with `stage_c.py` / `evaluate.py` / `pipeline.py --tag-rule ... --end-rule ...`. Evaluation always uses the raw gold.
+
+**Alternative: fix the labels.** `relabel_phrases.py` rebuilds phrase labels so every edge is a sign edge ("start of the first sign to
+the end of the last sign", the paper's wording) into `processed_data/BIO_tags_phrase_signaligned/` without touching the old ones;
+`HP_PHRASE_DIR=BIO_tags_phrase_signaligned python <script>` makes every script here use them. On aligned labels use
+`--end-rule last_sign_end`. Report both label sets: they are different gold standards.
 
 ## Ablations → commands (`pipeline.py --only <name>`)
 

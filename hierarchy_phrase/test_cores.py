@@ -105,6 +105,39 @@ check("on the artifact, contain_or_next and nearest_start tag signs more accurat
       a["contain_or_next"] > a["first_end_after"] and a["nearest_start"] > a["first_end_after"],
       " ".join(f"{r}={v:.4f}" for r, v in a.items()))
 
+# ------------------------------------------------------------------ end rules
+sgE = [(0, 10), (14, 24), (30, 50), (55, 60)]
+tgE = np.array([1, 0, 1, 0])
+check("end rule last_sign_end ends a phrase at its last sign", S.phrases_from_tags(sgE, tgE, "last_sign_end") == [(0, 24), (30, 60)])
+check("end rule next_start ends a phrase at the next B sign's start (last phrase: its last sign end)",
+      S.phrases_from_tags(sgE, tgE, "next_start") == [(0, 30), (30, 60)])
+S.set_end_rule("next_start")
+check("set_end_rule changes the default used by phrases_from_tags", S.phrases_from_tags(sgE, tgE) == [(0, 30), (30, 60)])
+S.set_end_rule("last_sign_end")
+check("default restored", S.phrases_from_tags(sgE, tgE) == [(0, 24), (30, 60)])
+try:
+    S.set_end_rule("bogus"); check("unknown end rule rejected", False)
+except ValueError:
+    check("unknown end rule rejected", True)
+
+# ------------------------------------------------------------------ sign-aligned relabeling
+import relabel_phrases as RP
+ok = True
+for seed in range(60):
+    r_ = np.random.default_rng(seed)
+    sg_ = random_signs(3000, r_, mean_len=12, gap_p=0.6)
+    cuts_ = sorted(r_.choice(np.arange(3, len(sg_) - 3), size=len(sg_) // 8, replace=False).tolist())
+    bnd = [sg_[0][0]] + [int(r_.integers(sg_[c][0] - 5, sg_[c][1] + 5)) for c in cuts_] + [sg_[-1][1]]
+    spans, _ = RP.sign_aligned_spans(list(zip(bnd[:-1], bnd[1:])), sg_)
+    st, en = {s for s, _ in sg_}, {e for _, e in sg_}
+    ok &= all(s in st and e in en for s, e in spans) and all(spans[i][1] <= spans[i + 1][0] for i in range(len(spans) - 1))
+    ok &= len(spans) <= len(bnd) - 1 and spans[0][0] == sg_[0][0] and spans[-1][1] == sg_[-1][1]
+check("sign-aligned spans start/end on sign edges, never overlap, cover first/last sign", ok)
+sp, dr = RP.sign_aligned_spans([(0, 30), (30, 60)], [(0, 10), (12, 28), (29, 40), (45, 58)])
+check("a sign straddling a boundary goes to the span it overlaps most", sp == [(0, 28), (29, 58)], str(sp))
+sp, dr = RP.sign_aligned_spans([(100, 200)], [(0, 10), (95, 105), (300, 310)], tolerance=15)
+check("signs far from every span are dropped, near ones attached", sp == [(95, 105)] and dr == 2, f"{sp} dropped {dr}")
+
 # ------------------------------------------------------------------ jitter
 ok = True
 for seed in range(200):

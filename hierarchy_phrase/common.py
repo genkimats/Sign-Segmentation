@@ -21,7 +21,7 @@ if HERE not in sys.path:
 from segments import bio_to_segments, resample_segments, working_length  # noqa: E402
 
 SIGN_LABELS_DIR = os.path.join(PROJECT_ROOT, "processed_data", "BIO_tags")
-PHRASE_LABELS_DIR = os.path.join(PROJECT_ROOT, "processed_data", "BIO_tags_phrase")
+PHRASE_LABELS_DIR = os.path.join(PROJECT_ROOT, "processed_data", os.environ.get("HP_PHRASE_DIR", "BIO_tags_phrase"))   # HP_PHRASE_DIR=BIO_tags_phrase_signaligned to use relabel_phrases.py output
 KIN_DIR = os.path.join(PROJECT_ROOT, "processed_data", "kinematic_features")
 SPLIT_FILE = os.path.join(PROJECT_ROOT, "dataset_splits.json")
 RUNS_DIR = os.path.join(HERE, "runs")

@@ -25,6 +25,7 @@ from common import RUNS_DIR, HERE
 from metrics import evaluate_videos
 from sign_tokens import greedy_decode
 from stage_c import Bundle, load_items, phrases_from_pB, stage_c_dir
+from segments import set_end_rule
 
 GRID = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 
@@ -77,7 +78,9 @@ def main():
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--tune-metric", default="frame_f1", choices=["frame_f1", "start_f1@5", "seg_f1@0.5", "mF1S"])
     ap.add_argument("--limit", type=int, default=None)
+    ap.add_argument("--end-rule", choices=["last_sign_end", "next_start"], default="last_sign_end")
     a = ap.parse_args()
+    set_end_rule(a.end_rule)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     base = os.path.join(RUNS_DIR, a.stage_a, "cache")
     val, test = load_items([os.path.join(base, "val")], a.limit), load_items([os.path.join(base, "test")], a.limit)
@@ -109,7 +112,7 @@ def main():
         rows["sign_stage_tuned"] = sg
         return rows
 
-    out = {"stage_a": a.stage_a, "tag": a.tag, "seed": a.seed, "tune_metric": a.tune_metric,
+    out = {"stage_a": a.stage_a, "tag": a.tag, "seed": a.seed, "tune_metric": a.tune_metric, "end_rule": a.end_rule,
            "thresholds": {"flat": [fb, fo], "sign_decoder": [sb, so], "phrase_thr": thr_tuned, "phrase_thr_oracle": thr_oracle},
            "stage_c_config": {k: bundle.cfg[k] for k in ("arch", "source", "groups", "n_params")},
            "val": run(val), "test": run(test)}

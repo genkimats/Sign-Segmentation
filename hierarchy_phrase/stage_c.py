@@ -34,7 +34,7 @@ import torch.nn.functional as F
 
 from common import RUNS_DIR, arr_to_segs, fps_of, load_cache_video
 from metrics import evaluate_videos
-from segments import (jitter_segments, phrase_tags_over_signs, phrases_from_tags, plan_windows, stitch_probs)
+from segments import (jitter_segments, phrase_tags_over_signs, phrases_from_tags, plan_windows, set_end_rule, stitch_probs)
 from sign_tokens import build_tokens, greedy_decode, logits_to_probs
 
 ALL_GROUPS = ("h_pool", "sign_probs", "prosody")
@@ -221,6 +221,7 @@ def stage_c_dir(stage_a, tag, seed):
 
 
 def train(a):
+    set_end_rule(getattr(a, "end_rule", "last_sign_end"))       # validation reconstructs phrases with the SAME rule as evaluation
     torch.manual_seed(a.seed); np.random.seed(a.seed)
     rng = np.random.default_rng(a.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -338,6 +339,8 @@ def main():
     t.add_argument("--focal-gamma", type=float, default=0.0, help="0 = weighted CE; 2 = focal loss")
     t.add_argument("--tag-rule", choices=["first_end_after", "nearest_start", "contain_or_next"], default="first_end_after",
                    help="how a gold phrase start that falls inside a sign is assigned to a sign (run data_audit.py to pick the rule with the highest ceiling)")
+    t.add_argument("--end-rule", choices=["last_sign_end", "next_start"], default="last_sign_end",
+                   help="how a phrase's END is placed when rebuilding phrases from tags (used for model selection; run data_audit.py)")
     t.add_argument("--ramp", type=int, default=20, help="epochs over which the gold->noisy schedule ramps")
     t.add_argument("--jitter", type=float, default=1.0)
     t.add_argument("--b-thr", type=float, default=0.5)

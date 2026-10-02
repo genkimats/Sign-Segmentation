@@ -103,13 +103,32 @@ def phrase_tags_over_signs(sign_segs, phrase_segs, rule="first_end_after"):
     return tags
 
 
-def phrases_from_tags(sign_segs, tags):
-    """B sign opens a phrase; it lasts to the end of the last sign before the next B."""
+END_RULES = ("last_sign_end", "next_start")
+END_RULE = "last_sign_end"          # global default; evaluate.py / stage_c.py set it with --end-rule
+
+
+def set_end_rule(rule):
+    global END_RULE
+    if rule not in END_RULES:
+        raise ValueError(f"end rule must be one of {END_RULES}")
+    END_RULE = rule
+
+
+def phrases_from_tags(sign_segs, tags, end_rule=None):
+    """B sign opens a phrase. It starts at that sign's start and ends
+         last_sign_end : at the end of the last sign before the next B           (the paper's wording)
+         next_start    : at the START of the next B sign when there is one (the phrase absorbs the pause up to the next
+                         phrase), else at the end of its last sign. This reproduces labels in which consecutive phrases touch
+                         -- the project's phrase labels do, because build_phrase_bio_array lets a later B overwrite the
+                         earlier phrase's tail. data_audit.py reports the ceiling of both rules."""
+    rule = end_rule or END_RULE
+    if rule not in END_RULES:
+        raise ValueError(f"end rule must be one of {END_RULES}")
     phr, cur = [], None
     for k, (s, e) in enumerate(sign_segs):
         if tags[k] == 1 or cur is None:
             if cur is not None:
-                phr.append(tuple(cur))
+                phr.append((cur[0], s if rule == "next_start" else cur[1]))
             cur = [s, e]
         else:
             cur[1] = e
