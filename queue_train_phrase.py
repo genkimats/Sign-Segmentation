@@ -232,27 +232,7 @@ EXPERIMENTS_TO_RUN = [
         "use_dinov2_features": True,
         "tolerance_window": 1,
         "description": "overlap ratio (0/256), tolerance=1, hamer + dinov2"
-    },
-    {
-        "basename": "stgcn_bimamba",
-        "window_size": 128,
-        "overlap": 0,
-        "loss_function": "weighted_ce",
-        "use_hamer_features": True,
-        "use_dinov2_features": True,
-        "tolerance_window": 1,
-        "description": "overlap ratio (0/128), tolerance=1, hamer + dinov2"
-    },
-    {
-        "basename": "stgcn_bimamba",
-        "window_size": 256,
-        "overlap": 0,
-        "loss_function": "weighted_ce",
-        "use_hamer_features": True,
-        "use_dinov2_features": True,
-        "tolerance_window": 1,
-        "description": "overlap ratio (0/256), tolerance=1, hamer + dinov2"
-    },
+    }
 ]
 
 if CHOSEN_TYPE == 'mamba':
