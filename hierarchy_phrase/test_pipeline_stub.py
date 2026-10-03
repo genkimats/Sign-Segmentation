@@ -134,7 +134,7 @@ np.savez_compressed(os.path.join(exp_dir, "val.npz"), **arrays)
 IM.load_gold_segments = lambda vid, stride=2: gold_imp.get(vid)
 IM.load_keypoints = lambda vid, stride=2: np.zeros((gold_imp[vid]["T"], 65, 3), np.float32)
 IM.RUNS_DIR = os.path.join(tmp, "runs")
-n = IM.import_split("ext_run", "val", "imp", 2, exports_dir=os.path.join(tmp, "exports"))
+n = IM.import_split("ext_run", "val", "imp", 2, exports_dir=os.path.join(tmp, "exports"), pool="sub")
 check("importer converts matching videos and skips a length mismatch", n == 2)
 imp = SC.load_items([os.path.join(tmp, "runs", "imp", "cache", "val")])
 lg0 = arrays["logits__x0_A"][::2]
@@ -144,6 +144,29 @@ check("imported logits are sub-sampled like the keypoints and marked as having n
 ex_imp = SC.make_examples(imp, SC.SourcePolicy("gold", 1, 0, .5, .5, 0), 1, ("sign_probs", "prosody"))
 check("Stage C examples build from an imported cache without encoder features",
       len(ex_imp) == 2 and ex_imp[0][0].shape[1] == SIGN_PROB_DIM + PROSODY_DIM)
+
+# ---- importing a flat phrase model's logits alongside the sign model
+ph_dir = os.path.join(tmp, "exports", "phr_run"); os.makedirs(ph_dir)
+ph_arrays = {k: rng.normal(size=v.shape).astype(np.float32) for k, v in arrays.items() if k.startswith("logits__") and k != "logits__x1_A"}
+np.savez_compressed(os.path.join(ph_dir, "val.npz"), **ph_arrays)
+n2 = IM.import_split("ext_run", "val", "imp2", 2, exports_dir=os.path.join(tmp, "exports"), phrase_run="phr_run", pool="sub")
+imp2 = SC.load_items([os.path.join(tmp, "runs", "imp2", "cache", "val")])
+check("phrase-model import: videos missing from the phrase export are skipped, the rest carry a phrase head",
+      n2 == 1 and len(imp2) == 1 and imp2[0]["has_phrase_head"] == 1
+      and np.allclose(imp2[0]["phrase_probs"], SC.logits_to_probs(ph_arrays["logits__x0_A"][::2][:imp2[0]["T"]]), atol=1e-6))
+try:
+    IM.import_split("ext_run", "test", "imp3", 2, exports_dir=os.path.join(tmp, "exports"), phrase_run="phr_run")
+    check("a missing val/test phrase export is an error", False)
+except FileNotFoundError:
+    check("a missing val/test phrase export is an error", True)
+
+lgB = np.full((20, 3), -4.0, np.float32); lgB[:, 0] = 2.0; lgB[7, 2] = 4.0              # a single-frame Begin peak on an ODD frame
+pB_sub = SC.logits_to_probs(IM.downsample_logits(lgB, 2, "sub"))[:, 2].max()
+pB_mean = SC.logits_to_probs(IM.downsample_logits(lgB, 2, "mean"))[:, 2]
+check("mean pooling keeps a 1-frame Begin peak that sub-sampling drops", pB_sub < 0.05 and pB_mean[3] > 0.4 and len(pB_mean) == 10,
+      f"sub max P(B)={pB_sub:.3f}  mean P(B) at frame 3={pB_mean[3]:.3f}")
+P7 = SC.logits_to_probs(IM.downsample_logits(np.random.default_rng(1).normal(size=(7, 3)).astype(np.float32), 2, "mean"))
+check("pooled output has ceil(T/2) frames and valid probabilities", P7.shape == (4, 3) and np.allclose(P7.sum(1), 1, atol=1e-5))
 
 print(f"\n{sum(results)}/{len(results)} checks passed   (torch: {'real' if REAL_TORCH else 'stub'})")
 import shutil; shutil.rmtree(tmp)
