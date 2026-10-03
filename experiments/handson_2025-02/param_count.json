@@ -1,0 +1,14 @@
+{
+    "run": "handson_2025-02",
+    "trainable": 5422597,
+    "frozen": 0,
+    "total": 5422597,
+    "by_module": {
+        "hamer_adapter": 676352,
+        "pose_adapter": 664576,
+        "mixer": 921344,
+        "transformer_encoder": 3159040,
+        "classifier": 771,
+        "ctc_head": 514
+    }
+}
