@@ -202,7 +202,7 @@ EXPERIMENTS_TO_RUN = [
         "base_features": ["pure_hamer"],
         "tolerance_window": 1,
         "description": "overlap ratio (0/128), tolerance=1, pure_hamer"
-    }
+    },
     {
         "basename": "transformer_baseline",
         "window_size": 128,
