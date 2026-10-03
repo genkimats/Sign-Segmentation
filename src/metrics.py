@@ -46,25 +46,42 @@ def extract_segments(bio_sequence, start_on_i_after_o=True):
       Without this, a predicted run that the model began with I instead of B
       would vanish entirely, which artificially lowers the segment count.
       The same rule is applied to gold and prediction, so it is symmetric.
+
+    Vectorized with numpy (no per-frame Python loop).
     """
     seq = np.asarray(bio_sequence).astype(np.int64)
-    segments = []
-    start = -1
-    for i, tag in enumerate(seq):
-        if tag == B_TAG:
-            if start != -1:
-                segments.append((start, i - 1))
-            start = i
-        elif tag == O_TAG:
-            if start != -1:
-                segments.append((start, i - 1))
-                start = -1
-        else:  # I
-            if start == -1 and start_on_i_after_o:
-                start = i
-    if start != -1:
-        segments.append((start, len(seq) - 1))
-    return segments
+    T = len(seq)
+    if T == 0:
+        return []
+    prev = np.empty(T, dtype=np.int64)
+    prev[0] = O_TAG
+    prev[1:] = seq[:-1]
+
+    is_b = seq == B_TAG
+    is_i = seq == I_TAG
+    if start_on_i_after_o:
+        starts = is_b | (is_i & (prev == O_TAG))
+        inside = seq != O_TAG
+    else:
+        # I with no open segment is ignored: a frame is "inside" only if a B opened
+        # the current run of non-O frames.
+        b_count = np.cumsum(is_b)
+        last_o = np.maximum.accumulate(np.where(seq == O_TAG, np.arange(T), -1))
+        b_before_run = np.where(last_o >= 0, b_count[np.clip(last_o, 0, None)], 0)
+        inside = (seq != O_TAG) & ((b_count - b_before_run) > 0)
+        starts = is_b & inside
+
+    start_idx = np.flatnonzero(starts)
+    if len(start_idx) == 0:
+        return []
+    # A segment ends at the last inside frame before the next start or the next non-inside frame.
+    nxt_start = np.zeros(T, dtype=bool)
+    nxt_start[:-1] = starts[1:]
+    nxt_outside = np.ones(T, dtype=bool)
+    nxt_outside[:-1] = ~inside[1:]
+    ends = inside & (nxt_start | nxt_outside)
+    end_idx = np.flatnonzero(ends)
+    return list(zip(start_idx.tolist(), end_idx.tolist()))
 
 
 def decode_threshold_2023(probs, b_threshold=0.5, o_threshold=0.5):
@@ -83,9 +100,9 @@ def decode_threshold_2023(probs, b_threshold=0.5, o_threshold=0.5):
     The 2023 paper's E1s* / E4s* rows use thresholds tuned on validation; with
     default 0.5/0.5 this corresponds to their untuned rows.
     """
-    p_o = probs[O_TAG]
-    p_b = probs[B_TAG]
-    T = probs.shape[1]
+    p_o = np.asarray(probs[O_TAG], dtype=np.float64).tolist()   # plain Python floats:
+    p_b = np.asarray(probs[B_TAG], dtype=np.float64).tolist()   # ~10x faster loop
+    T = len(p_b)
     segments = []
     start = None
     passed_start = False
@@ -145,17 +162,37 @@ def _interval_iou(a, b):
 
 
 def segment_f1_at(pred_segments, gold_segments, iou_threshold=0.5):
-    """One-to-one greedy matching by IoU (highest first); F1 over matched pairs."""
-    if len(pred_segments) == 0 and len(gold_segments) == 0:
+    """
+    One-to-one greedy matching by IoU (highest first); F1 over matched pairs.
+
+    Segments within each list are sorted and disjoint, so only overlapping
+    (pred, gold) pairs can reach the threshold. They are found with a two-pointer
+    sweep in O(P + G) instead of comparing every pred with every gold, which was
+    the main cost when a model over-segments into thousands of short pieces.
+    """
+    P, G = len(pred_segments), len(gold_segments)
+    if P == 0 and G == 0:
         return 1.0
-    if len(pred_segments) == 0 or len(gold_segments) == 0:
+    if P == 0 or G == 0:
         return 0.0
     pairs = []
-    for pi, p in enumerate(pred_segments):
-        for gi, g in enumerate(gold_segments):
-            iou = _interval_iou(p, g)
+    i = j = 0
+    while i < P and j < G:
+        p, g = pred_segments[i], gold_segments[j]
+        if p[1] < g[0]:
+            i += 1
+            continue
+        if g[1] < p[0]:
+            j += 1
+            continue
+        # p and g overlap; also check g against later preds / p against later golds
+        k = i
+        while k < P and pred_segments[k][0] <= g[1]:
+            iou = _interval_iou(pred_segments[k], g)
             if iou >= iou_threshold:
-                pairs.append((iou, pi, gi))
+                pairs.append((iou, k, j))
+            k += 1
+        j += 1
     pairs.sort(reverse=True)
     used_p, used_g, tp = set(), set(), 0
     for _, pi, gi in pairs:
@@ -163,8 +200,8 @@ def segment_f1_at(pred_segments, gold_segments, iou_threshold=0.5):
             used_p.add(pi)
             used_g.add(gi)
             tp += 1
-    precision = tp / len(pred_segments)
-    recall = tp / len(gold_segments)
+    precision = tp / P
+    recall = tp / G
     if precision + recall == 0:
         return 0.0
     return 2 * precision * recall / (precision + recall)
@@ -180,7 +217,8 @@ def pct_score(pct):
 # ==============================================================================
 # Split-level evaluation
 # ==============================================================================
-def evaluate_videos(video_probs, video_gold, decoder="argmax", b_threshold=0.5, o_threshold=0.5):
+def evaluate_videos(video_probs, video_gold, decoder="argmax", b_threshold=0.5, o_threshold=0.5,
+                    light=False, gold_segments_cache=None):
     """
     video_probs: dict vid -> (3, T) numpy array of stitched class probabilities (O, I, B)
     video_gold:  dict vid -> (T,) numpy int array of HARD gold labels (0/1/2)
@@ -192,6 +230,10 @@ def evaluate_videos(video_probs, video_gold, decoder="argmax", b_threshold=0.5, 
     Frame F1 is always computed on the argmax prediction (decoding thresholds only
     change segments, exactly like in the 2023 paper, where tuned decoding leaves F1
     unchanged).
+
+    light=True: only IoU and % (what a threshold sweep needs); Frame F1 and
+    Segment F1@0.5 are skipped (returned as NaN). Same IoU/% values as the full mode.
+    gold_segments_cache: optional dict vid -> gold segments, filled/reused across calls.
     """
     all_true, all_pred = [], []
     ious, pcts, seg_f1s = [], [], []
@@ -203,11 +245,17 @@ def evaluate_videos(video_probs, video_gold, decoder="argmax", b_threshold=0.5, 
         gold = gold[:T]
         probs = probs[:, :T]
 
-        argmax_pred = probs.argmax(axis=0)
-        all_true.append(gold)
-        all_pred.append(argmax_pred)
+        argmax_pred = probs.argmax(axis=0) if (decoder == "argmax" or not light) else None
+        if not light:
+            all_true.append(gold)
+            all_pred.append(argmax_pred)
 
-        gold_segments = extract_segments(gold)
+        if gold_segments_cache is not None and vid in gold_segments_cache:
+            gold_segments = gold_segments_cache[vid]
+        else:
+            gold_segments = extract_segments(gold)
+            if gold_segments_cache is not None:
+                gold_segments_cache[vid] = gold_segments
         if decoder == "argmax":
             pred_segments = extract_segments(argmax_pred)
         elif decoder == "threshold":
@@ -217,7 +265,7 @@ def evaluate_videos(video_probs, video_gold, decoder="argmax", b_threshold=0.5, 
 
         iou = segment_iou(pred_segments, gold_segments, T)
         pct = segment_percentage(pred_segments, gold_segments)
-        sf1 = segment_f1_at(pred_segments, gold_segments, 0.5)
+        sf1 = float("nan") if light else segment_f1_at(pred_segments, gold_segments, 0.5)
 
         ious.append(iou)
         if not np.isnan(pct):
@@ -232,16 +280,21 @@ def evaluate_videos(video_probs, video_gold, decoder="argmax", b_threshold=0.5, 
             "Segment_F1_05": sf1,
         }
 
-    if not all_true:
+    if not video_probs:
         raise RuntimeError("evaluate_videos() got no videos.")
 
-    y_true = np.concatenate(all_true)
-    y_pred = np.concatenate(all_pred)
-    frame_f1 = f1_score(y_true, y_pred, labels=[0, 1, 2], average="macro", zero_division=0)
+    if light:
+        y_true = y_pred = None
+        frame_f1 = float("nan")
+        mean_seg_f1 = float("nan")
+    else:
+        y_true = np.concatenate(all_true)
+        y_pred = np.concatenate(all_pred)
+        frame_f1 = f1_score(y_true, y_pred, labels=[0, 1, 2], average="macro", zero_division=0)
+        mean_seg_f1 = float(np.mean(seg_f1s))
 
     mean_iou = float(np.mean(ious))
     mean_pct = float(np.mean(pcts)) if pcts else float("nan")
-    mean_seg_f1 = float(np.mean(seg_f1s))
 
     return {
         "Frame_F1": float(frame_f1),
@@ -249,7 +302,7 @@ def evaluate_videos(video_probs, video_gold, decoder="argmax", b_threshold=0.5, 
         "Pct": mean_pct,
         "Segment_F1_05": mean_seg_f1,
         # Model-selection score: all three 2023 metrics, % mapped so that 1.0 is best.
-        "Combined": float(frame_f1) + mean_iou + pct_score(mean_pct),
+        "Combined": (float("nan") if light else float(frame_f1) + mean_iou + pct_score(mean_pct)),
         "frame_true": y_true,
         "frame_pred": y_pred,
         "per_video": per_video,

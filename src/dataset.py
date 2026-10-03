@@ -142,6 +142,9 @@ class SignSegmentationDataset(Dataset):
             "dinov2_frame_mismatch": 0,
         }
 
+        # reason -> [(video_id, detail_or_None), ...] -- WHICH videos were skipped, not just how many.
+        skipped_videos = {}
+
         print(f"[{split.upper()}] Loading {len(self.video_ids)} videos into RAM Cache (Bypassing Disk I/O)...")
         
         # Load everything into RAM exactly ONCE
@@ -151,6 +154,7 @@ class SignSegmentationDataset(Dataset):
             
             if not os.path.exists(label_path) or not os.path.exists(kinetic_path):
                 skip_counts["missing_label_or_kinetic"] += 1
+                skipped_videos.setdefault("missing_label_or_kinetic", []).append((vid, "kinematic file missing" if os.path.exists(label_path) else "label file missing"))
                 continue
                 
             labels = np.load(label_path)
@@ -166,6 +170,7 @@ class SignSegmentationDataset(Dataset):
                     kin_data = kin_data["mediapipe"]
             except Exception:
                 skip_counts["kinetic_load_error"] += 1
+                skipped_videos.setdefault("kinetic_load_error", []).append((vid, None))
                 continue
 
             if self.pure_hamer:
@@ -194,11 +199,13 @@ class SignSegmentationDataset(Dataset):
                 face_path = os.path.join(self.face_dir, f"{vid}.npy")
                 if not os.path.exists(face_path):
                     skip_counts["missing_face"] += 1
+                    skipped_videos.setdefault("missing_face", []).append((vid, None))
                     continue  # keep vertex layout consistent across the whole split; don't silently zero-fill a missing video
 
                 face_raw = torch.from_numpy(np.load(face_path)).float()  # (T_face, NUM_FACE_VERTICES, 3)
                 if face_raw.shape[0] != num_frames:
                     skip_counts["face_frame_mismatch"] += 1
+                    skipped_videos.setdefault("face_frame_mismatch", []).append((vid, f"face frames={face_raw.shape[0]}, label frames={num_frames}"))
                     continue  # frame count doesn't match labels/body -- skip rather than risk misaligning them
 
                 face_selected = face_raw[:, :, base_indices] if base_indices else face_raw
@@ -229,6 +236,7 @@ class SignSegmentationDataset(Dataset):
                 hamer_path = os.path.join(self.hamer_dir, f"{vid}_hamer.pt")
                 if not os.path.exists(hamer_path):
                     skip_counts["missing_hamer"] += 1
+                    skipped_videos.setdefault("missing_hamer", []).append((vid, None))
                     continue
 
                 try:
@@ -238,11 +246,13 @@ class SignSegmentationDataset(Dataset):
                     ham_downsample = hamer_data.get("temporal_downsample_factor", 1)
                 except Exception:
                     skip_counts["hamer_load_error"] += 1
+                    skipped_videos.setdefault("hamer_load_error", []).append((vid, None))
                     continue
 
                 T_ham = hand_pose.shape[0]
                 if T_ham == 0:
                     skip_counts["hamer_empty"] += 1
+                    skipped_videos.setdefault("hamer_empty", []).append((vid, None))
                     continue
 
                 # Flatten each hand's (15,3,3) pose + (3,3) orientation into 144 values,
@@ -283,6 +293,7 @@ class SignSegmentationDataset(Dataset):
                 dinov2_path = os.path.join(self.dinov2_dir, f"{vid}_dinov2.pt")
                 if not os.path.exists(dinov2_path):
                     skip_counts["missing_dinov2"] += 1
+                    skipped_videos.setdefault("missing_dinov2", []).append((vid, None))
                     continue
 
                 try:
@@ -290,10 +301,12 @@ class SignSegmentationDataset(Dataset):
                     dinov2_feats = dinov2_data["features"]  # (T_dino, 2, D)
                 except Exception:
                     skip_counts["dinov2_load_error"] += 1
+                    skipped_videos.setdefault("dinov2_load_error", []).append((vid, None))
                     continue
 
                 if dinov2_feats.shape[0] != num_frames:
                     skip_counts["dinov2_frame_mismatch"] += 1
+                    skipped_videos.setdefault("dinov2_frame_mismatch", []).append((vid, f"dinov2 frames={dinov2_feats.shape[0]}, label frames={num_frames}"))
                     continue  # extracted at full frame rate by default -- a mismatch here means
                               # something upstream (frame count, video decode) doesn't line up;
                               # skip rather than risk silently misaligning it with labels/body
@@ -352,6 +365,13 @@ class SignSegmentationDataset(Dataset):
         if total_cached < total_attempted:
             print(f"[{split.upper()}] Cached {total_cached}/{total_attempted} videos "
                   f"({total_attempted - total_cached} skipped). Skip reasons: {skip_counts}")
+            for reason, items in skipped_videos.items():
+                print(f"[{split.upper()}]   {reason} ({len(items)}):")
+                for vid_skipped, detail in items:
+                    print(f"[{split.upper()}]     - {vid_skipped}" + (f"  ({detail})" if detail else ""))
+
+        self.skip_counts = skip_counts
+        self.skipped_videos = skipped_videos
 
         if len(self.windows) == 0:
             raise RuntimeError(

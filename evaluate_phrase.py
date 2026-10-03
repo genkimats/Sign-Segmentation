@@ -27,6 +27,7 @@ import csv
 import json
 import os
 import re
+import time
 
 import numpy as np
 import torch
@@ -103,9 +104,25 @@ def dataset_key(config):
     }, sort_keys=True)
 
 
+def report_skipped(dataset, split):
+    """Prints which videos of the split failed to load, and why."""
+    skipped = getattr(dataset, "skipped_videos", {}) or {}
+    total = sum(len(v) for v in skipped.values())
+    if total == 0:
+        print(f"  All {len(dataset.video_cache)} {split} videos loaded.")
+        return
+    print(f"  ⚠️  {total} {split} video(s) failed to load "
+          f"({len(dataset.video_cache)} loaded) -- they are NOT in the metrics:")
+    for reason, items in skipped.items():
+        print(f"    {reason} ({len(items)}):")
+        for vid, detail in items:
+            print(f"      - {vid}" + (f"  ({detail})" if detail else ""))
+
+
 def get_dataset(config, split):
     key = (split, dataset_key(config))
     if key not in _DATASET_CACHE:
+        t0 = time.time()
         _DATASET_CACHE[key] = SignSegmentationDataset(
             keypoints_dir=KEYPOINTS_DIR,
             labels_dir=LABELS_DIR,
@@ -125,6 +142,9 @@ def get_dataset(config, split):
             use_dinov2_features=config.get("use_dinov2_features", False),
             dinov2_dir=config.get("dinov2_dir", "processed_data/dinov2_features"),
         )
+        print(f"  [time] loading {split} data: {time.time() - t0:.1f}s "
+              f"(reused for later runs with the same input features)")
+        report_skipped(_DATASET_CACHE[key], split)
     return _DATASET_CACHE[key]
 
 
@@ -132,18 +152,28 @@ def get_dataset(config, split):
 # Evaluation of one run
 # ==============================================================================
 def sweep_thresholds(video_probs, video_gold, grid):
-    """Tunes (b, o) thresholds on THIS split by IoU + %-score. Results on the same split are optimistic."""
+    """
+    Tunes (b, o) thresholds on THIS split by IoU + %-score. Results on the same split
+    are optimistic. Each grid point only computes IoU and % (light mode, gold segments
+    computed once); full metrics are computed once for the best pair.
+    """
+    gold_cache = {}
     best = None
     for b in grid:
         for o in grid:
-            m = evaluate_videos(video_probs, video_gold, decoder="threshold", b_threshold=b, o_threshold=o)
+            m = evaluate_videos(video_probs, video_gold, decoder="threshold", b_threshold=b,
+                                o_threshold=o, light=True, gold_segments_cache=gold_cache)
             score = m["IoU"] + pct_score(m["Pct"])
             if best is None or score > best[0]:
-                best = (score, b, o, m)
-    return best
+                best = (score, b, o)
+    _, b_best, o_best = best
+    m_best = evaluate_videos(video_probs, video_gold, decoder="threshold",
+                             b_threshold=b_best, o_threshold=o_best)
+    return best[0], b_best, o_best, m_best
 
 
-def evaluate_run(run_name, split, device, b_threshold, o_threshold, do_sweep, batch_size_override):
+def evaluate_run(run_name, split, device, b_threshold, o_threshold, do_sweep, batch_size_override,
+                 sweep_step=0.1):
     cfg_path = os.path.join(EXP_DIR, run_name, "hyperparameters.json")
     ckpt_path = os.path.join(MODEL_DIR, f"{run_name}.pth")
     with open(cfg_path) as f:
@@ -161,21 +191,32 @@ def evaluate_run(run_name, split, device, b_threshold, o_threshold, do_sweep, ba
     model.eval()
 
     batch_size = batch_size_override or config.get("batch_size", 16)
+    t0 = time.time()
     video_probs, video_gold = predict_split(model, config, dataset, device, batch_size=batch_size)
+    if device.type == "cuda":
+        torch.cuda.synchronize()
+    print(f"  [time] model inference: {time.time() - t0:.1f}s "
+          f"({len(video_probs)} videos, batch size {batch_size})")
 
+    t0 = time.time()
     results = {
         "argmax": evaluate_videos(video_probs, video_gold, decoder="argmax"),
         "threshold": evaluate_videos(video_probs, video_gold, decoder="threshold",
                                      b_threshold=b_threshold, o_threshold=o_threshold),
     }
+    print(f"  [time] metrics: {time.time() - t0:.1f}s")
+
     best_thresholds = None
     if do_sweep:
-        grid = [round(x, 2) for x in np.arange(0.3, 0.91, 0.1)]
+        t0 = time.time()
+        grid = [round(x, 4) for x in np.arange(0.3, 0.9 + 1e-9, sweep_step)]
         _, b_best, o_best, m_best = sweep_thresholds(video_probs, video_gold, grid)
         results["swept"] = m_best
         best_thresholds = (b_best, o_best)
+        print(f"  [time] threshold sweep ({len(grid)}x{len(grid)} = {len(grid) ** 2} pairs): "
+              f"{time.time() - t0:.1f}s")
 
-    return config, results, best_thresholds
+    return config, results, best_thresholds, dataset
 
 
 # ==============================================================================
@@ -189,7 +230,12 @@ def main():
     parser.add_argument("--b-threshold", type=float, default=0.5, help="B threshold for 2023-style decoding.")
     parser.add_argument("--o-threshold", type=float, default=0.5, help="O threshold for 2023-style decoding.")
     parser.add_argument("--sweep", action="store_true", help="Also tune thresholds on this split (0.3..0.9).")
-    parser.add_argument("--batch-size", type=int, default=None, help="Override inference batch size.")
+    parser.add_argument("--batch-size", type=int, default=None,
+                        help="Inference batch size (default: the run's training batch_size). "
+                             "Larger = faster, more GPU memory; results are identical.")
+    parser.add_argument("--sweep-step", type=float, default=0.1,
+                        help="Threshold grid step for --sweep over 0.3..0.9 (default 0.1 = 7x7 pairs). "
+                             "Smaller = finer tuning but slower (0.05 = 13x13).")
     args = parser.parse_args()
 
     runs = discover_runs(EXP_DIR, MODEL_DIR)
@@ -218,9 +264,10 @@ def main():
     for prefix, run_name in selected:
         print(f"\n--- {run_name} ---")
         try:
-            config, results, best_thr = evaluate_run(
+            t_run = time.time()
+            config, results, best_thr, dataset = evaluate_run(
                 run_name, args.split, device, args.b_threshold, args.o_threshold,
-                args.sweep, args.batch_size)
+                args.sweep, args.batch_size, args.sweep_step)
         except Exception as e:
             print(f"⚠️  Skipped {run_name}: {type(e).__name__}: {e}")
             continue
@@ -248,6 +295,8 @@ def main():
                 "iou": round(m["IoU"], 4),
                 "segment_pct": round(m["Pct"], 4),
                 "segment_f1_05": round(m["Segment_F1_05"], 4),
+                "videos_evaluated": len(dataset.video_cache),
+                "videos_skipped": sum(len(v) for v in getattr(dataset, "skipped_videos", {}).values()),
                 "window_size": config["window_size"],
                 "seed": config.get("seed", ""),
                 "description": config.get("description", ""),
@@ -255,7 +304,12 @@ def main():
 
         per_video_path = os.path.join(OUT_DIR, f"{run_name}_{args.split}_per_video.json")
         with open(per_video_path, "w") as f:
-            json.dump({k: v["per_video"] for k, v in results.items()}, f, indent=2)
+            json.dump({
+                "decoders": {k: v["per_video"] for k, v in results.items()},
+                "skipped_videos": {reason: [{"video": v, "detail": d} for v, d in items]
+                                   for reason, items in getattr(dataset, "skipped_videos", {}).items()},
+            }, f, indent=2)
+        print(f"  [time] total for {run_name}: {time.time() - t_run:.1f}s")
 
     if not rows:
         print("\nNothing was evaluated.")
