@@ -72,7 +72,25 @@ class SignSegmentationDataset(Dataset):
         
         self.base_features = base_features if base_features is not None else ["x-cord", "y-cord", "z-cord"]
         self.kinematic_features = kinematic_features if kinematic_features is not None else []
+
+        # PURE HAMER MODE: base_features=["pure_hamer"] makes the 288-dim HaMeR vector
+        # the MAIN feature tensor, shaped (T, 1, 288) -> (288, T, 1) per window, so the
+        # graph-free baselines (bilstm_baseline / transformer_baseline) can train on it
+        # directly. No MediaPipe keypoints, kinematics or face are loaded in this mode.
+        # Keep use_hamer_features=False here: HaMeR is the main input, not a side branch.
+        # DINOv2 (use_dinov2_features=True) still works as a separate side stream.
         self.pure_hamer = "pure_hamer" in self.base_features
+        if self.pure_hamer:
+            if use_hamer_features:
+                raise ValueError(
+                    "base_features contains 'pure_hamer' AND use_hamer_features=True. In pure "
+                    "HaMeR mode HaMeR is already the main input -- set use_hamer_features=False."
+                )
+            if use_face_keypoints:
+                raise ValueError("use_face_keypoints=True is not supported in pure_hamer mode.")
+            if self.kinematic_features:
+                print(f"[{split.upper()}] pure_hamer mode: ignoring kinematic_features "
+                      f"{self.kinematic_features} (they are MediaPipe-based).")
 
         if self.use_face_keypoints:
             # IMPORTANT: this changes the vertex axis (65 -> 65 + NUM_FACE_VERTICES), not the
@@ -151,15 +169,16 @@ class SignSegmentationDataset(Dataset):
                 continue
 
             if self.pure_hamer:
-                final_tensor = None
+                final_tensor = None  # filled from the HaMeR stream below
+                base_indices = []
             else:
                 channels = []
                 base_indices = [self.feature_map[f] for f in self.base_features if f in self.feature_map]
                 if base_indices:
                     channels.append(kin_data["base"][:, :, base_indices])
-                    
-                deriv_indices = base_indices if base_indices else [0, 1, 2]
                 
+                deriv_indices = base_indices if base_indices else [0, 1, 2]
+            
                 if "velocity" in self.kinematic_features: channels.append(kin_data["velocity"][:, :, deriv_indices])
                 if "acceleration" in self.kinematic_features: channels.append(kin_data["acceleration"][:, :, deriv_indices])
                 if "jerk" in self.kinematic_features: channels.append(kin_data["jerk"][:, :, deriv_indices])
@@ -167,7 +186,7 @@ class SignSegmentationDataset(Dataset):
                 if "angular-vel" in self.kinematic_features: channels.append(kin_data["angular-vel"])
                 if "spatial_angles" in self.kinematic_features: channels.append(kin_data["spatial_angles"])
                 if "temporal_angles" in self.kinematic_features: channels.append(kin_data["temporal_angles"])
-                    
+                
                 final_tensor = torch.cat(channels, dim=-1)  # (T, 65, K) -- defer FP16 cast until after optional face concat
 
             # --- OPTIONAL: FACE KEYPOINTS (from extract_face_keypoints.py) ---
@@ -249,8 +268,9 @@ class SignSegmentationDataset(Dataset):
                 if self.detected_hamer_dim is None:
                     self.detected_hamer_dim = hamer_full.shape[-1]
 
+            # --- PURE HAMER: HaMeR becomes the main feature tensor ---
             if self.pure_hamer:
-                final_tensor = hamer_full.to(torch.float32).unsqueeze(1)  # (T, 1, 288)
+                final_tensor = hamer_full.to(torch.float32).unsqueeze(1)  # (num_frames, 1, 288)
 
             # --- OPTIONAL: DINOV2 VISUAL HAND-CROP FEATURES (from extract_dinov2_features.py) ---
             # Same treatment as HaMeR -- kept as a SEPARATE (num_frames, 2*D) stream, fused

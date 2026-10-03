@@ -266,7 +266,9 @@ def train_model(config):
 
     # Same 13 models support a second, independent optional branch for DINOv2 visual
     # hand-crop embeddings (SHuBERT/SignMusketeers-style) -- combinable with HaMeR.
-    DINOV2_SUPPORTED_MODELS = HAMER_SUPPORTED_MODELS
+    # Own list (not an alias of HAMER_SUPPORTED_MODELS, so appending can't mutate it):
+    # the graph-free baselines also accept DINOv2, e.g. for pure_hamer + DINOv2 runs.
+    DINOV2_SUPPORTED_MODELS = list(HAMER_SUPPORTED_MODELS) + ["bilstm_baseline", "transformer_baseline"]
     if USE_DINOV2_FEATURES:
         if MODEL_NAME not in DINOV2_SUPPORTED_MODELS:
             raise ValueError(

@@ -135,13 +135,30 @@ class TransformerBaseline(nn.Module):
     A pure Multi-Head Self-Attention model. 
     Flattens the spatial graph entirely and relies purely on standard Transformer 
     Encoders and Positional Encodings to map temporal dependencies.
+    Also used for pure-HaMeR training (input (288, T, 1) -> 288 features/frame).
+
+    Optional DINOv2 side branch (dinov2_dim): own Linear+LayerNorm projection,
+    concatenated with the main per-frame features before the shared projection.
     """
-    def __init__(self, in_channels, num_vertices, num_classes=3, d_model=256, n_layers=4, nhead=8, dim_feedforward=1024, dropout=0.2):
+    def __init__(self, in_channels, num_vertices, num_classes=3, d_model=256, n_layers=4, nhead=8,
+                 dim_feedforward=1024, dropout=0.2, dinov2_dim=None, dinov2_proj_dim=128):
         super().__init__()
         
         self.feature_dim = in_channels * num_vertices
+
+        self.dinov2_dim = dinov2_dim
+        proj_in_dim = self.feature_dim
+        if dinov2_dim is not None:
+            self.dinov2_encoder = nn.Sequential(
+                nn.Linear(dinov2_dim, dinov2_proj_dim),
+                nn.LayerNorm(dinov2_proj_dim),
+                nn.ReLU(),
+                nn.Dropout(dropout)
+            )
+            proj_in_dim += dinov2_proj_dim
+
         self.projection = nn.Sequential(
-            nn.Linear(self.feature_dim, d_model),
+            nn.Linear(proj_in_dim, d_model),
             nn.LayerNorm(d_model),
             nn.ReLU(),
             nn.Dropout(dropout)
@@ -159,9 +176,17 @@ class TransformerBaseline(nn.Module):
         self.transformer_encoder = nn.TransformerEncoder(encoder_layers, num_layers=n_layers)
         self.classifier = nn.Linear(d_model, num_classes)
 
-    def forward(self, x):
+    def forward(self, x, dinov2=None):
         B, C, T, V = x.shape
         x = x.permute(0, 2, 1, 3).reshape(B, T, C * V) 
+
+        if self.dinov2_dim is not None:
+            if dinov2 is None:
+                raise ValueError("This model was built with dinov2_dim set, but forward() "
+                                 "was called without a `dinov2` tensor.")
+            dinov2_feat = self.dinov2_encoder(dinov2.permute(0, 2, 1))  # (B, T, dinov2_proj_dim)
+            x = torch.cat([x, dinov2_feat], dim=-1)
+
         features = self.projection(x + 1e-5) # Epsilon addition prevents NaN
         
         features = self.pos_encoder(features)
@@ -602,35 +627,61 @@ class STGCN_BiLSTM(nn.Module):
 
 
 class BiLSTM_Baseline(nn.Module):
-    def __init__(self, in_channels, num_vertices, num_classes=3, d_model=256, n_layers=4,
-                 dropout=0.2, dinov2_dim=None, dinov2_proj_dim=128):
-        super().__init__()
+    """
+    Graph-free BiLSTM baseline. Flattens (C, V) per frame and runs a BiLSTM.
+    Also used for pure-HaMeR training (input (288, T, 1) -> 288 features/frame).
+
+    Optional DINOv2 side branch (dinov2_dim): DINOv2 hand-crop embeddings get their
+    own Linear+LayerNorm projection (to dinov2_proj_dim) and are concatenated with the
+    main per-frame features BEFORE the shared projection -- same fusion design as the
+    graph models' DINOv2 branch, so a large unnormalized appearance vector can't
+    dominate the smaller main input.
+    """
+    def __init__(self, in_channels, num_vertices, num_classes=3, d_model=256, n_layers=4, dropout=0.2,
+                 dinov2_dim=None, dinov2_proj_dim=128):
+        super(BiLSTM_Baseline, self).__init__()
         self.feature_dim = in_channels * num_vertices
+
         self.dinov2_dim = dinov2_dim
-        in_dim = self.feature_dim
+        proj_in_dim = self.feature_dim
         if dinov2_dim is not None:
             self.dinov2_encoder = nn.Sequential(
                 nn.Linear(dinov2_dim, dinov2_proj_dim),
                 nn.LayerNorm(dinov2_proj_dim),
                 nn.ReLU(),
-                nn.Dropout(dropout),
+                nn.Dropout(dropout)
             )
-            in_dim += dinov2_proj_dim
+            proj_in_dim += dinov2_proj_dim
+
+        # Matches the 2023 paper's spec: project to d_model (256), not d_model*2 --
+        # see STGCN_BiLSTM's comment for the full reasoning.
         self.projection = nn.Sequential(
-            nn.Linear(in_dim, d_model), nn.LayerNorm(d_model), nn.ReLU(), nn.Dropout(dropout)
+            nn.Linear(proj_in_dim, d_model),
+            nn.LayerNorm(d_model),
+            nn.ReLU(),
+            nn.Dropout(dropout)
         )
-        self.lstm = nn.LSTM(input_size=d_model, hidden_size=d_model, num_layers=n_layers,
-                            batch_first=True, dropout=dropout if n_layers > 1 else 0,
-                            bidirectional=True)
+        self.lstm = nn.LSTM(
+            input_size=d_model,
+            hidden_size=d_model,
+            num_layers=n_layers,
+            batch_first=True,
+            dropout=dropout if n_layers > 1 else 0,
+            bidirectional=True
+        )
         self.classifier = nn.Linear(d_model * 2, num_classes)
 
     def forward(self, x, dinov2=None):
         B, C, T, V = x.shape
         x = x.permute(0, 2, 1, 3).reshape(B, T, C * V)
+
         if self.dinov2_dim is not None:
             if dinov2 is None:
-                raise ValueError("Built with dinov2_dim but called without a `dinov2` tensor.")
-            x = torch.cat([x, self.dinov2_encoder(dinov2.permute(0, 2, 1))], dim=-1)
+                raise ValueError("This model was built with dinov2_dim set, but forward() "
+                                 "was called without a `dinov2` tensor.")
+            dinov2_feat = self.dinov2_encoder(dinov2.permute(0, 2, 1))  # (B, T, dinov2_proj_dim)
+            x = torch.cat([x, dinov2_feat], dim=-1)
+
         features = self.projection(x + 1e-5)
         lstm_out, _ = self.lstm(features)
         logits = self.classifier(lstm_out)
