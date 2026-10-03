@@ -18,12 +18,10 @@ from sklearn.metrics import confusion_matrix
 
 # Import our custom modules
 from src.dataset import SignSegmentationDataset
-from src.models import (PureMambaBaseline, BiMambaBaseline, STGCN_Mamba, STGCN_MLP_Mamba, 
-                        STGCN_BiMamba, Decoupled_STGCN_Mamba, BiLSTM_Baseline, STGCN_BiLSTM, 
-                        TransformerBaseline, STGCN_Transformer, Latent_STGCN_Mamba,
-                        CTRGCN_Mamba, InfoGCN_Mamba, ShiftGCN_Mamba, SpatialTransformer_Mamba,
-                        HDGCN_Mamba, HyperSign_Mamba, STGCN_HybridSequential, STGCN_HybridParallel)
-from src.metrics import evaluate_batch
+from src.model_factory import MODEL_REGISTRY, build_model_kwargs
+# Full-video validation: same windows as training, probabilities stitched per video,
+# metrics against HARD gold labels (never the tolerance-smoothed ones).
+from src.evaluation import evaluate_model_on_split
 from src.loss import CombinedBoundaryLoss, FocalLoss, StandardCrossEntropyLoss, WeightedCrossEntropyLoss, UnifiedCTCLoss, WeightedCE_TMSE_Loss, WeightedNLLLoss
 # (Removed decoder import since we no longer use it in training/validation)
 
@@ -42,30 +40,7 @@ train_queue.json).
 """
 QUEUE_FILE = "train_queue_phrase.json"
 
-# ==============================================================================
-# Model Registry Mapping
-# ==============================================================================
-MODEL_REGISTRY = {
-    "pure_mamba": PureMambaBaseline,
-    "bi_mamba": BiMambaBaseline,
-    "stgcn_mamba": STGCN_Mamba,
-    "stgcn_mlp_mamba": STGCN_MLP_Mamba,
-    "stgcn_bimamba": STGCN_BiMamba,
-    "decoupled_stgcn_mamba": Decoupled_STGCN_Mamba,
-    "bilstm_baseline": BiLSTM_Baseline,
-    "stgcn_bilstm": STGCN_BiLSTM,
-    "transformer_baseline": TransformerBaseline,
-    "stgcn_transformer": STGCN_Transformer,
-    "latent_stgcn_mamba": Latent_STGCN_Mamba,
-    "ctrgcn_mamba": CTRGCN_Mamba,
-    "infogcn_mamba": InfoGCN_Mamba,
-    "shiftgcn_mamba": ShiftGCN_Mamba,
-    "spatial_transformer_mamba": SpatialTransformer_Mamba,
-    "hdgcn_mamba": HDGCN_Mamba,
-    "hypersign_mamba": HyperSign_Mamba,
-    "stgcn_hybrid_seq": STGCN_HybridSequential,
-    "stgcn_hybrid_parallel": STGCN_HybridParallel
-}
+# MODEL_REGISTRY now lives in src/model_factory.py (shared with evaluate_phrase.py).
 
 def get_next_job():
     if not os.path.exists(QUEUE_FILE):
@@ -208,85 +183,18 @@ def train_model(config):
     val_loader = DataLoader(val_dataset, batch_size=loader_batch_size, shuffle=False, num_workers=4, pin_memory=True)
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model_class = MODEL_REGISTRY.get(MODEL_NAME)
-    
-    if not model_class:
+
+    if MODEL_NAME not in MODEL_REGISTRY:
         print(f"❌ Error: Model '{MODEL_NAME}' not found in registry. Skipping.")
         return
-        
-    model_kwargs = {
-        "in_channels": IN_CHANNELS,
-        "num_vertices": NUM_VERTICES,
-        "num_classes": 3,
-        "d_model": D_MODEL,
-        "n_layers": N_LAYERS
-    }
-    
-    if MODEL_NAME in ["transformer_baseline", "stgcn_transformer"]:
-        model_kwargs["nhead"] = config.get("nhead", 8)
-        model_kwargs["dim_feedforward"] = config.get("dim_feedforward", D_MODEL * 4)
-        
-    if MODEL_NAME == "stgcn_mlp_mamba":
-        model_kwargs["mlp_expansion_factor"] = config.get("mlp_expansion_factor", 4)
-        
-    if MODEL_NAME in ["latent_stgcn_mamba", "ctrgcn_mamba", "infogcn_mamba", "shiftgcn_mamba", "spatial_transformer_mamba", "hdgcn_mamba", "hypersign_mamba"]:
-        model_kwargs["latent_dim"] = config.get("latent_dim", 128)
 
-    MAMBA_BASED_MODELS = ["pure_mamba", "bi_mamba", "stgcn_mamba", "stgcn_mlp_mamba", "stgcn_bimamba",
-                          "decoupled_stgcn_mamba", "latent_stgcn_mamba", "ctrgcn_mamba", "infogcn_mamba",
-                          "shiftgcn_mamba", "spatial_transformer_mamba", "hdgcn_mamba", "hypersign_mamba",
-                          "stgcn_hybrid_seq", "stgcn_hybrid_parallel"]
-    if MODEL_NAME in MAMBA_BASED_MODELS:
-        model_kwargs["mamba_d_state"] = config.get("mamba_d_state", 16)
-        model_kwargs["mamba_d_conv"] = config.get("mamba_d_conv", 4)
-        model_kwargs["mamba_expand"] = config.get("mamba_expand", 2)
-
-    HAMER_SUPPORTED_MODELS = ["stgcn_mamba", "latent_stgcn_mamba", "ctrgcn_mamba", "infogcn_mamba",
-                               "shiftgcn_mamba", "spatial_transformer_mamba", "hdgcn_mamba", "hypersign_mamba",
-                               "stgcn_bilstm", "stgcn_transformer",
-                               "stgcn_mlp_mamba", "stgcn_bimamba", "decoupled_stgcn_mamba",
-                               "stgcn_hybrid_seq", "stgcn_hybrid_parallel"]
-    if USE_HAMER_FEATURES:
-        if MODEL_NAME not in HAMER_SUPPORTED_MODELS:
-            raise ValueError(
-                f"use_hamer_features=True but model '{MODEL_NAME}' doesn't have a hamer_dim "
-                f"argument implemented yet. Supported models: {HAMER_SUPPORTED_MODELS}."
-            )
-        # Read the ACTUAL dimension observed in the data (set by SignSegmentationDataset
-        # while caching train_dataset) rather than hardcoding a guess -- hamer's dimension
-        # is fixed by construction (2 hands x (15x3x3 hand_pose + 1x3x3 global_orient) =
-        # 288) so this should never actually differ, but detecting it from the data is
-        # free insurance and keeps hamer/dinov2 handled the same way. An explicit
-        # "hamer_dim" in config still overrides, if you ever have a real reason to.
-        if train_dataset.detected_hamer_dim is None:
-            raise RuntimeError("use_hamer_features=True but no video's hamer_dim was detected "
-                                "during caching -- this shouldn't be possible if train_dataset "
-                                "is non-empty; investigate before proceeding.")
-        model_kwargs["hamer_dim"] = config.get("hamer_dim", train_dataset.detected_hamer_dim)
-
-    # Same 13 models support a second, independent optional branch for DINOv2 visual
-    # hand-crop embeddings (SHuBERT/SignMusketeers-style) -- combinable with HaMeR.
-    # Own list (not an alias of HAMER_SUPPORTED_MODELS, so appending can't mutate it):
-    # the graph-free baselines also accept DINOv2, e.g. for pure_hamer + DINOv2 runs.
-    DINOV2_SUPPORTED_MODELS = list(HAMER_SUPPORTED_MODELS) + ["bilstm_baseline", "transformer_baseline"]
-    if USE_DINOV2_FEATURES:
-        if MODEL_NAME not in DINOV2_SUPPORTED_MODELS:
-            raise ValueError(
-                f"use_dinov2_features=True but model '{MODEL_NAME}' doesn't have a dinov2_dim "
-                f"argument implemented yet. Supported models: {DINOV2_SUPPORTED_MODELS}."
-            )
-        # Read the ACTUAL dimension observed in the data, rather than hardcoding a guess
-        # matched to whatever extraction settings happened to be current when this line
-        # was written. This is the fix for exactly the kind of bug a hardcoded default
-        # invites: it can silently drift out of sync the moment you change the DINOv2
-        # model variant, run PCA reduction, or point dinov2_dir at a different folder --
-        # this way the model ALWAYS matches whatever's actually on disk.
-        if train_dataset.detected_dinov2_dim is None:
-            raise RuntimeError("use_dinov2_features=True but no video's dinov2_dim was detected "
-                                "during caching -- this shouldn't be possible if train_dataset "
-                                "is non-empty; investigate before proceeding.")
-        model_kwargs["dinov2_dim"] = config.get("dinov2_dim", train_dataset.detected_dinov2_dim)
-
+    # Shared with evaluate_phrase.py, so evaluation rebuilds EXACTLY this model.
+    # hamer_dim / dinov2_dim come from the data (config values still override).
+    model_class, model_kwargs = build_model_kwargs(
+        config,
+        detected_hamer_dim=train_dataset.detected_hamer_dim,
+        detected_dinov2_dim=train_dataset.detected_dinov2_dim,
+    )
     MAX_REDOS = 5
     redo_count = 0
     total_nan_this_run = 0
@@ -342,7 +250,8 @@ def train_model(config):
         metrics_log_path = os.path.join(exp_dir, "training_metrics.csv")
         with open(metrics_log_path, mode='w', newline='') as file:
             writer = csv.writer(file)
-            writer.writerow(['epoch', 'train_loss', 'val_loss', 'frame_f1', 'mean_iou', 'segment_f1', 'epoch_time', 'epoch_nan_count'])
+            writer.writerow(['epoch', 'train_loss', 'val_loss', 'frame_f1', 'iou', 'segment_pct',
+                             'segment_f1_05', 'combined_score', 'epoch_time', 'epoch_nan_count'])
         
         best_combined_score = -1.0
         best_epoch = 0
@@ -443,9 +352,6 @@ def train_model(config):
                 
             model.eval()
             val_loss = 0.0
-            val_frame_f1, val_iou, val_seg_f1 = [], [], []
-            epoch_val_true = []
-            epoch_val_pred = []
             
             with torch.no_grad():
                 val_loop = tqdm(val_loader, desc=f"Epoch {epoch}/{EPOCHS} [Val]", leave=False)
@@ -488,45 +394,30 @@ def train_model(config):
                     except Exception:
                         pass
                     
-                    for i in range(features.size(0)):
-                        valid_len = labels.size(-1) 
-                        if valid_len == 0: continue
-                        
-                        true_seq = torch.argmax(labels[i, :, :valid_len], dim=0).cpu().numpy().astype(float)
-                        pred_logits_tensor = logits[i:i+1, :, :valid_len]
-                        
-                        # --- REMOVED DECODER - USING PURE RAW ARGMAX FOR VALIDATION EVAL ---
-                        pred_seq_tensor = torch.argmax(pred_logits_tensor, dim=1)
-                        
-                        pred_seq = pred_seq_tensor[0].cpu().numpy().astype(float)
-                        epoch_val_true.extend(true_seq.tolist())
-                        epoch_val_pred.extend(pred_seq.tolist())
-                        
-                        try:
-                            metrics_out = evaluate_batch(np.array([pred_seq.tolist()]), np.array([true_seq.tolist()]))
-                            if isinstance(metrics_out, dict):
-                                vals = list(metrics_out.values())
-                                val_frame_f1.append(float(vals[0]))
-                                val_iou.append(float(vals[1]))
-                                val_seg_f1.append(float(vals[2]))
-                            else:
-                                f_f1, iou, s_f1 = metrics_out
-                                val_frame_f1.append(float(f_f1))
-                                val_iou.append(float(iou))
-                                val_seg_f1.append(float(s_f1))
-                        except Exception as e:
-                            pass
-                        
+
             avg_val_loss = val_loss / len(val_loader)
             
-            epoch_f1 = float(np.mean(val_frame_f1)) if val_frame_f1 else 0.0
-            epoch_iou = float(np.mean(val_iou)) if val_iou else 0.0
-            epoch_seg = float(np.mean(val_seg_f1)) if val_seg_f1 else 0.0
+
+            # --- FULL-VIDEO VALIDATION METRICS (2023-style) ---
+            # Each val video is predicted with the same windows used in training,
+            # probabilities are stitched per video, and metrics are computed against the
+            # HARD gold labels at the raw frame rate -- independent of tolerance_window.
+            # Decoding is plain argmax (thresholds can be tuned afterwards with
+            # evaluate_phrase.py --sweep).
+            val_metrics = evaluate_model_on_split(model, config, val_dataset, device,
+                                                  batch_size=BATCH_SIZE, decoder="argmax")
+            epoch_f1 = val_metrics["Frame_F1"]
+            epoch_iou = val_metrics["IoU"]
+            epoch_pct = val_metrics["Pct"]
+            epoch_seg_f1 = val_metrics["Segment_F1_05"]
+            epoch_val_true = val_metrics["frame_true"]
+            epoch_val_pred = val_metrics["frame_pred"]
             
             epoch_end_time = time.time()
             epoch_duration = round(epoch_end_time - epoch_start_time, 2)
             
-            combined_score = epoch_f1 + epoch_iou + epoch_seg
+            # Frame F1 + IoU + %-score, where %-score = max(0, 1 - |% - 1|) (1.0 = perfect count)
+            combined_score = val_metrics["Combined"]
             
             if combined_score > best_combined_score:
                 best_combined_score = combined_score
@@ -569,13 +460,15 @@ def train_model(config):
                   f"Train Loss: {avg_train_loss:.4f} | "
                   f"Val Loss: {avg_val_loss:.4f} | "
                   f"Frame F1: {epoch_f1:.4f} | "
-                  f"Mean IoU: {epoch_iou:.4f} | "
-                  f"Seg F1: {epoch_seg:.4f} | "
+                  f"IoU: {epoch_iou:.4f} | "
+                  f"%: {epoch_pct:.4f} | "
+                  f"SegF1@0.5: {epoch_seg_f1:.4f} | "
                   f"Time: {epoch_duration}s{nan_string}" + (" 🌟 (New Best!)" if is_best else f" (No improvement x{epochs_without_improvement})"))
                   
             with open(metrics_log_path, mode='a', newline='') as file:
                 writer = csv.writer(file)
-                writer.writerow([epoch, avg_train_loss, avg_val_loss, epoch_f1, epoch_iou, epoch_seg, epoch_duration, epoch_nan_count])
+                writer.writerow([epoch, avg_train_loss, avg_val_loss, epoch_f1, epoch_iou, epoch_pct,
+                                 epoch_seg_f1, combined_score, epoch_duration, epoch_nan_count])
 
             if EARLY_STOPPING and epochs_without_improvement >= PATIENCE and epoch >= MIN_EPOCHS:
                 print(f"\n🛑 Early stopping triggered! No improvement in combined score for {PATIENCE} epochs (Minimum {MIN_EPOCHS} epochs met).")

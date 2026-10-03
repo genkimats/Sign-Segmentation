@@ -216,18 +216,28 @@ _PURE_HAMER = {
 
 EXPERIMENTS_TO_RUN = [
     # --- Pure HaMeR ---
-    {**_PURE_HAMER, "basename": "bilstm_baseline", "window_size": 128, "d_model": 512,
-     "description": "overlap ratio (0/128), d_model=512, pure_hamer"},
-    {**_PURE_HAMER, "basename": "transformer_baseline", "window_size": 128, "d_model": 512,
-     "description": "overlap ratio (0/128), d_model=512, pure_hamer"},
+    {**_PURE_HAMER, "basename": "bilstm_baseline", "window_size": 128,
+     "description": "pure HaMeR, BiLSTM, window 128, tolerance=1"},
+    {**_PURE_HAMER, "basename": "bilstm_baseline", "window_size": 256,
+     "description": "pure HaMeR, BiLSTM, window 256, tolerance=1"},
+    {**_PURE_HAMER, "basename": "transformer_baseline", "window_size": 128,
+     "description": "pure HaMeR, Transformer, window 128, tolerance=1"},
+    {**_PURE_HAMER, "basename": "transformer_baseline", "window_size": 256,
+     "description": "pure HaMeR, Transformer, window 256, tolerance=1"},
 
     # --- Pure HaMeR + DINOv2 (separate side branch; dinov2_dim auto-detected) ---
-    # {**_PURE_HAMER, "basename": "bilstm_baseline", "window_size": 128,
-    #  "use_dinov2_features": True,
-    #  "description": "overlap ratio (0/128), tolerance=1, pure_hamer + DINOv2"},
-    # {**_PURE_HAMER, "basename": "transformer_baseline", "window_size": 128,
-    #  "use_dinov2_features": True,
-    #  "description": "overlap ratio (0/128), tolerance=1, pure_hamer + DINOv2"}
+    {**_PURE_HAMER, "basename": "bilstm_baseline", "window_size": 128,
+     "use_dinov2_features": True,
+     "description": "pure HaMeR + DINOv2, BiLSTM, window 128, tolerance=1"},
+    {**_PURE_HAMER, "basename": "bilstm_baseline", "window_size": 256,
+     "use_dinov2_features": True,
+     "description": "pure HaMeR + DINOv2, BiLSTM, window 256, tolerance=1"},
+    {**_PURE_HAMER, "basename": "transformer_baseline", "window_size": 128,
+     "use_dinov2_features": True,
+     "description": "pure HaMeR + DINOv2, Transformer, window 128, tolerance=1"},
+    {**_PURE_HAMER, "basename": "transformer_baseline", "window_size": 256,
+     "use_dinov2_features": True,
+     "description": "pure HaMeR + DINOv2, Transformer, window 256, tolerance=1"},
 ]
 
 if CHOSEN_TYPE == 'mamba':

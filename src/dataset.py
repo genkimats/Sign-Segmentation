@@ -324,7 +324,11 @@ class SignSegmentationDataset(Dataset):
             
             self.video_cache[vid] = {
                 'features': final_tensor,
-                'labels': soft_labels
+                'labels': soft_labels,
+                # Raw, HARD per-frame labels at the RAW frame rate. Used only for
+                # evaluation (src/evaluation.py): ground truth never depends on
+                # tolerance_window smoothing or temporal_downsample_factor.
+                'hard_labels': np.asarray(labels).astype(np.int64)
             }
             if self.use_hamer_features:
                 self.video_cache[vid]['hamer_features'] = hamer_full

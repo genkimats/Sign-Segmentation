@@ -1,0 +1,273 @@
+"""
+evaluate_phrase.py -- evaluates every saved run of ONE model on a split (default: val)
+with the 2023-style full-video metrics: Frame F1, IoU and % of segments
+(plus Segment F1@0.5).
+
+Usage (from the repo root, same place you run train_phrase.py):
+    python evaluate_phrase.py                       # asks which model, evaluates all its prefixes
+    python evaluate_phrase.py --model stgcn_bilstm  # all stgcn_bilstm-XX runs
+    python evaluate_phrase.py --model stgcn_bilstm --prefixes 10 12
+    python evaluate_phrase.py --model stgcn_bilstm --sweep   # also tune decoding thresholds on this split
+
+What it guarantees:
+  - Each run is rebuilt from ITS OWN experiments_phrase/<run>/hyperparameters.json via the
+    same factory train_phrase.py uses (window_size, overlap, d_model, n_layers, nhead,
+    dim_feedforward, mamba/latent settings, hamer/dinov2 dims, features, downsampling ...).
+    The checkpoint is loaded with strict=True, so any mismatch fails loudly instead of
+    silently evaluating a different model.
+  - Inference uses the same windows as training, stitched per full video.
+  - Ground truth = raw hard labels at the raw frame rate. tolerance_window is ignored for
+    evaluation (the dataset is built with tolerance_window=1 and hard labels are used anyway).
+
+Only phrase runs are looked up: experiments_phrase/ and saved_models_phrase/ (an older,
+same-named run elsewhere in the repo is never picked up).
+"""
+import argparse
+import csv
+import json
+import os
+import re
+
+import numpy as np
+import torch
+
+from src.dataset import SignSegmentationDataset
+from src.model_factory import build_model_kwargs
+from src.evaluation import predict_split
+from src.metrics import evaluate_videos, pct_score
+
+EXP_DIR = "experiments_phrase"
+MODEL_DIR = "saved_models_phrase"
+OUT_DIR = "evaluation_phrase"
+KEYPOINTS_DIR = "processed_data/keypoints"
+LABELS_DIR = "processed_data/BIO_tags_phrase"
+SPLIT_FILE = "dataset_splits.json"
+
+RUN_RE = re.compile(r"^(?P<model>.+)-(?P<prefix>\d+)$")
+
+
+# ==============================================================================
+# Run discovery
+# ==============================================================================
+def discover_runs(exp_dir, model_dir):
+    """Returns {model_name: [(prefix_str, run_name), ...]} for runs that have BOTH a config and a checkpoint."""
+    runs = {}
+    if not os.path.isdir(exp_dir):
+        return runs
+    for name in sorted(os.listdir(exp_dir)):
+        m = RUN_RE.match(name)
+        if not m:
+            continue
+        has_cfg = os.path.exists(os.path.join(exp_dir, name, "hyperparameters.json"))
+        has_ckpt = os.path.exists(os.path.join(model_dir, f"{name}.pth"))
+        if has_cfg and has_ckpt:
+            runs.setdefault(m.group("model"), []).append((m.group("prefix"), name))
+    for model in runs:
+        runs[model].sort(key=lambda x: int(x[0]))
+    return runs
+
+
+def choose_model_interactively(runs):
+    names = sorted(runs)
+    print("\nModels with saved phrase runs:")
+    for i, n in enumerate(names):
+        prefixes = ", ".join(p for p, _ in runs[n])
+        print(f"  [{i}] {n}  (prefixes: {prefixes})")
+    while True:
+        choice = input("Choose a model (number or name): ").strip()
+        if choice.isdigit() and 0 <= int(choice) < len(names):
+            return names[int(choice)]
+        if choice in runs:
+            return choice
+        print("Not a valid choice, try again.")
+
+
+# ==============================================================================
+# Dataset cache (one dataset per distinct FEATURE configuration)
+# ==============================================================================
+_DATASET_CACHE = {}
+
+
+def dataset_key(config):
+    # Window size, overlap, tolerance and downsampling don't change what is cached
+    # (windowing/downsampling happen at inference time), so they are not in the key.
+    return json.dumps({
+        "base_features": config.get("base_features"),
+        "kinematic_features": config.get("kinematic_features", []),
+        "use_face_keypoints": config.get("use_face_keypoints", False),
+        "face_dir": config.get("face_dir"),
+        "use_hamer_features": config.get("use_hamer_features", False),
+        "hamer_dir": config.get("hamer_dir"),
+        "use_dinov2_features": config.get("use_dinov2_features", False),
+        "dinov2_dir": config.get("dinov2_dir"),
+    }, sort_keys=True)
+
+
+def get_dataset(config, split):
+    key = (split, dataset_key(config))
+    if key not in _DATASET_CACHE:
+        _DATASET_CACHE[key] = SignSegmentationDataset(
+            keypoints_dir=KEYPOINTS_DIR,
+            labels_dir=LABELS_DIR,
+            split_file=SPLIT_FILE,
+            split=split,
+            window_size=config["window_size"],
+            overlap=config.get("overlap", 0),
+            tolerance_window=1,  # evaluation never uses smoothed labels
+            use_full_length=False,
+            base_features=config["base_features"],
+            kinematic_features=config.get("kinematic_features", []),
+            temporal_downsample_factor=config.get("temporal_downsample_factor", 1),
+            use_face_keypoints=config.get("use_face_keypoints", False),
+            face_dir=config.get("face_dir", "processed_data/face_keypoints_normalized"),
+            use_hamer_features=config.get("use_hamer_features", False),
+            hamer_dir=config.get("hamer_dir", "processed_data/hamer_features"),
+            use_dinov2_features=config.get("use_dinov2_features", False),
+            dinov2_dir=config.get("dinov2_dir", "processed_data/dinov2_features"),
+        )
+    return _DATASET_CACHE[key]
+
+
+# ==============================================================================
+# Evaluation of one run
+# ==============================================================================
+def sweep_thresholds(video_probs, video_gold, grid):
+    """Tunes (b, o) thresholds on THIS split by IoU + %-score. Results on the same split are optimistic."""
+    best = None
+    for b in grid:
+        for o in grid:
+            m = evaluate_videos(video_probs, video_gold, decoder="threshold", b_threshold=b, o_threshold=o)
+            score = m["IoU"] + pct_score(m["Pct"])
+            if best is None or score > best[0]:
+                best = (score, b, o, m)
+    return best
+
+
+def evaluate_run(run_name, split, device, b_threshold, o_threshold, do_sweep, batch_size_override):
+    cfg_path = os.path.join(EXP_DIR, run_name, "hyperparameters.json")
+    ckpt_path = os.path.join(MODEL_DIR, f"{run_name}.pth")
+    with open(cfg_path) as f:
+        config = json.load(f)
+
+    dataset = get_dataset(config, split)
+    model_class, model_kwargs = build_model_kwargs(
+        config,
+        detected_hamer_dim=dataset.detected_hamer_dim,
+        detected_dinov2_dim=dataset.detected_dinov2_dim,
+    )
+    model = model_class(**model_kwargs).to(device)
+    state = torch.load(ckpt_path, map_location=device)
+    model.load_state_dict(state, strict=True)
+    model.eval()
+
+    batch_size = batch_size_override or config.get("batch_size", 16)
+    video_probs, video_gold = predict_split(model, config, dataset, device, batch_size=batch_size)
+
+    results = {
+        "argmax": evaluate_videos(video_probs, video_gold, decoder="argmax"),
+        "threshold": evaluate_videos(video_probs, video_gold, decoder="threshold",
+                                     b_threshold=b_threshold, o_threshold=o_threshold),
+    }
+    best_thresholds = None
+    if do_sweep:
+        grid = [round(x, 2) for x in np.arange(0.3, 0.91, 0.1)]
+        _, b_best, o_best, m_best = sweep_thresholds(video_probs, video_gold, grid)
+        results["swept"] = m_best
+        best_thresholds = (b_best, o_best)
+
+    return config, results, best_thresholds
+
+
+# ==============================================================================
+# Main
+# ==============================================================================
+def main():
+    parser = argparse.ArgumentParser(description="Evaluate all saved phrase runs of one model.")
+    parser.add_argument("--model", help="Model basename, e.g. stgcn_bilstm (asks if omitted).")
+    parser.add_argument("--prefixes", nargs="*", help="Only these prefixes (default: all).")
+    parser.add_argument("--split", default="val", help="Split in dataset_splits.json (default: val).")
+    parser.add_argument("--b-threshold", type=float, default=0.5, help="B threshold for 2023-style decoding.")
+    parser.add_argument("--o-threshold", type=float, default=0.5, help="O threshold for 2023-style decoding.")
+    parser.add_argument("--sweep", action="store_true", help="Also tune thresholds on this split (0.3..0.9).")
+    parser.add_argument("--batch-size", type=int, default=None, help="Override inference batch size.")
+    args = parser.parse_args()
+
+    runs = discover_runs(EXP_DIR, MODEL_DIR)
+    if not runs:
+        print(f"No runs found (need {EXP_DIR}/<run>/hyperparameters.json AND {MODEL_DIR}/<run>.pth).")
+        return
+
+    model_name = args.model or choose_model_interactively(runs)
+    if model_name not in runs:
+        print(f"No saved runs for '{model_name}'. Available: {sorted(runs)}")
+        return
+
+    selected = runs[model_name]
+    if args.prefixes:
+        wanted = {int(p) for p in args.prefixes}
+        selected = [(p, r) for p, r in selected if int(p) in wanted]
+        if not selected:
+            print(f"None of the prefixes {sorted(wanted)} exist for '{model_name}'.")
+            return
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    os.makedirs(OUT_DIR, exist_ok=True)
+    print(f"\nEvaluating {len(selected)} run(s) of '{model_name}' on '{args.split}' ({device}).")
+
+    rows = []
+    for prefix, run_name in selected:
+        print(f"\n--- {run_name} ---")
+        try:
+            config, results, best_thr = evaluate_run(
+                run_name, args.split, device, args.b_threshold, args.o_threshold,
+                args.sweep, args.batch_size)
+        except Exception as e:
+            print(f"⚠️  Skipped {run_name}: {type(e).__name__}: {e}")
+            continue
+
+        print(f"  {config.get('description', '')}")
+        print(f"  window={config['window_size']} overlap={config.get('overlap', 0)} "
+              f"d_model={config['d_model']} n_layers={config['n_layers']} "
+              f"downsample={config.get('temporal_downsample_factor', 1)} "
+              f"(trained with tolerance_window={config.get('tolerance_window')}; ignored for evaluation)")
+
+        decoders = [("argmax", "argmax", None),
+                    ("threshold", f"thr b={args.b_threshold} o={args.o_threshold}", None)]
+        if best_thr:
+            decoders.append(("swept", f"swept b={best_thr[0]} o={best_thr[1]}", best_thr))
+
+        for key, label, _ in decoders:
+            m = results[key]
+            print(f"  [{label:<22}] Frame F1 {m['Frame_F1']:.4f} | IoU {m['IoU']:.4f} | "
+                  f"% {m['Pct']:.4f} | SegF1@0.5 {m['Segment_F1_05']:.4f}")
+            rows.append({
+                "run": run_name,
+                "prefix": prefix,
+                "decoder": label,
+                "frame_f1": round(m["Frame_F1"], 4),
+                "iou": round(m["IoU"], 4),
+                "segment_pct": round(m["Pct"], 4),
+                "segment_f1_05": round(m["Segment_F1_05"], 4),
+                "window_size": config["window_size"],
+                "seed": config.get("seed", ""),
+                "description": config.get("description", ""),
+            })
+
+        per_video_path = os.path.join(OUT_DIR, f"{run_name}_{args.split}_per_video.json")
+        with open(per_video_path, "w") as f:
+            json.dump({k: v["per_video"] for k, v in results.items()}, f, indent=2)
+
+    if not rows:
+        print("\nNothing was evaluated.")
+        return
+
+    csv_path = os.path.join(OUT_DIR, f"{model_name}_{args.split}_metrics.csv")
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+        writer.writeheader()
+        writer.writerows(rows)
+    print(f"\n✅ Summary saved to {csv_path} (per-video details in {OUT_DIR}/).")
+
+
+if __name__ == "__main__":
+    main()
