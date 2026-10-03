@@ -72,6 +72,7 @@ class SignSegmentationDataset(Dataset):
         
         self.base_features = base_features if base_features is not None else ["x-cord", "y-cord", "z-cord"]
         self.kinematic_features = kinematic_features if kinematic_features is not None else []
+        self.pure_hamer = "pure_hamer" in self.base_features
 
         if self.use_face_keypoints:
             # IMPORTANT: this changes the vertex axis (65 -> 65 + NUM_FACE_VERTICES), not the
@@ -149,25 +150,28 @@ class SignSegmentationDataset(Dataset):
                 skip_counts["kinetic_load_error"] += 1
                 continue
 
-            channels = []
-            base_indices = [self.feature_map[f] for f in self.base_features if f in self.feature_map]
-            if base_indices:
-                channels.append(kin_data["base"][:, :, base_indices])
+            if self.pure_hamer:
+                final_tensor = None
+            else:
+                channels = []
+                base_indices = [self.feature_map[f] for f in self.base_features if f in self.feature_map]
+                if base_indices:
+                    channels.append(kin_data["base"][:, :, base_indices])
+                    
+                deriv_indices = base_indices if base_indices else [0, 1, 2]
                 
-            deriv_indices = base_indices if base_indices else [0, 1, 2]
-            
-            if "velocity" in self.kinematic_features: channels.append(kin_data["velocity"][:, :, deriv_indices])
-            if "acceleration" in self.kinematic_features: channels.append(kin_data["acceleration"][:, :, deriv_indices])
-            if "jerk" in self.kinematic_features: channels.append(kin_data["jerk"][:, :, deriv_indices])
-            if "velocity-mag" in self.kinematic_features: channels.append(kin_data["velocity-mag"])
-            if "angular-vel" in self.kinematic_features: channels.append(kin_data["angular-vel"])
-            if "spatial_angles" in self.kinematic_features: channels.append(kin_data["spatial_angles"])
-            if "temporal_angles" in self.kinematic_features: channels.append(kin_data["temporal_angles"])
-                
-            final_tensor = torch.cat(channels, dim=-1)  # (T, 65, K) -- defer FP16 cast until after optional face concat
+                if "velocity" in self.kinematic_features: channels.append(kin_data["velocity"][:, :, deriv_indices])
+                if "acceleration" in self.kinematic_features: channels.append(kin_data["acceleration"][:, :, deriv_indices])
+                if "jerk" in self.kinematic_features: channels.append(kin_data["jerk"][:, :, deriv_indices])
+                if "velocity-mag" in self.kinematic_features: channels.append(kin_data["velocity-mag"])
+                if "angular-vel" in self.kinematic_features: channels.append(kin_data["angular-vel"])
+                if "spatial_angles" in self.kinematic_features: channels.append(kin_data["spatial_angles"])
+                if "temporal_angles" in self.kinematic_features: channels.append(kin_data["temporal_angles"])
+                    
+                final_tensor = torch.cat(channels, dim=-1)  # (T, 65, K) -- defer FP16 cast until after optional face concat
 
             # --- OPTIONAL: FACE KEYPOINTS (from extract_face_keypoints.py) ---
-            if self.use_face_keypoints:
+            if self.use_face_keypoints and not self.pure_hamer:
                 face_path = os.path.join(self.face_dir, f"{vid}.npy")
                 if not os.path.exists(face_path):
                     skip_counts["missing_face"] += 1
@@ -202,7 +206,7 @@ class SignSegmentationDataset(Dataset):
             # model itself via a dedicated MLP branch (see models.py's hamer_dim support),
             # matching the 2025 Hands-On paper's own architecture for this feature.
             hamer_full = None
-            if self.use_hamer_features:
+            if self.use_hamer_features or self.pure_hamer:
                 hamer_path = os.path.join(self.hamer_dir, f"{vid}_hamer.pt")
                 if not os.path.exists(hamer_path):
                     skip_counts["missing_hamer"] += 1
@@ -244,6 +248,9 @@ class SignSegmentationDataset(Dataset):
                 hamer_full = hamer_flat[frame_to_hamer_idx].to(torch.float16)  # (num_frames, 288)
                 if self.detected_hamer_dim is None:
                     self.detected_hamer_dim = hamer_full.shape[-1]
+
+            if self.pure_hamer:
+                final_tensor = hamer_full.to(torch.float32).unsqueeze(1)  # (T, 1, 288)
 
             # --- OPTIONAL: DINOV2 VISUAL HAND-CROP FEATURES (from extract_dinov2_features.py) ---
             # Same treatment as HaMeR -- kept as a SEPARATE (num_frames, 2*D) stream, fused

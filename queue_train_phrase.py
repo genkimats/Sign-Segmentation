@@ -194,44 +194,24 @@ def expand_experiments_with_seeds(experiments, seed_indices, seeds=(42, 123, 202
 
 EXPERIMENTS_TO_RUN = [
     {
-        "basename": "stgcn_bilstm",
+        "basename": "bilstm_baseline",
         "window_size": 128,
         "overlap": 0,
         "loss_function": "weighted_ce",
         "use_hamer_features": True,
-        "use_dinov2_features": True,
+        "base_features": ["pure_hamer"],
         "tolerance_window": 1,
-        "description": "overlap ratio (0/128), tolerance=1, hamer + dinov2"
-    },
+        "description": "overlap ratio (0/128), tolerance=1, pure_hamer"
+    }
     {
-        "basename": "stgcn_bilstm",
-        "window_size": 256,
-        "overlap": 0,
-        "loss_function": "weighted_ce",
-        "use_hamer_features": True,
-        "use_dinov2_features": True,
-        "tolerance_window": 1,
-        "description": "overlap ratio (0/256), tolerance=1, hamer + dinov2"
-    },
-    {
-        "basename": "stgcn_transformer",
+        "basename": "transformer_baseline",
         "window_size": 128,
         "overlap": 0,
         "loss_function": "weighted_ce",
         "use_hamer_features": True,
-        "use_dinov2_features": True,
+        "base_features": ["pure_hamer"],
         "tolerance_window": 1,
-        "description": "overlap ratio (0/128), tolerance=1, hamer + dinov2"
-    },
-    {
-        "basename": "stgcn_transformer",
-        "window_size": 256,
-        "overlap": 0,
-        "loss_function": "weighted_ce",
-        "use_hamer_features": True,
-        "use_dinov2_features": True,
-        "tolerance_window": 1,
-        "description": "overlap ratio (0/256), tolerance=1, hamer + dinov2"
+        "description": "overlap ratio (0/128), tolerance=1, pure_hamer"
     }
 ]
 
