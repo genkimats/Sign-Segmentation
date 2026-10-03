@@ -113,6 +113,27 @@ hurt it most. A stronger encoder (`stgcn_*`) must be compared against its OWN fl
 `stage_a.py export --as NEW` writes a cache under a new run name (the checkpoint is copied) so inference modes never overwrite each other.
 ST-GCN encoders are not length-aware (zero padding leaks into the last ~8 frames of padded crops; rare, only for videos shorter than the crop).
 
+## Soft sign inputs to a frame-level phrase model (`soft_phrase.py`)
+
+Follow-up to the hierarchy results: gold signs + Stage C beat the flat head by ~0.2 frame F1, but committing to PREDICTED sign
+segments lost all of it. `soft_phrase.py` keeps the sign information without the cascade: a frame-level BiLSTM phrase segmenter
+(E1s size) sees, per frame, the pose, the sign model's soft P(O), P(I), P(B) and optional prosody (hand/nose speed, wrist height).
+It trains on any existing hierarchy cache (e.g. `al_imp_sb44m`, your HaMeR sign model imported with mean-pooled probabilities).
+
+| run            | inputs                                       | question                                                                |
+| -------------- | -------------------------------------------- | ----------------------------------------------------------------------- |
+| `pose`         | pose                                         | control: flat phrase model trained in exactly the same regime           |
+| `soft`         | pose + signprobs                             | the method: does the sign model's soft output help?                     |
+| `soft_pros`    | pose + signprobs + prosody                   | do explicit prosody cues add anything?                                  |
+| `sp_only`      | signprobs + prosody                          | is sign structure alone enough (no pose)?                               |
+| `oracle`       | pose + gold sign tags (`--oracle-signs`)     | ceiling of this idea                                                    |
+| `soft_nonoise` | pose + signprobs, `--sp-noise 0 --sp-drop 0` | does the train-time robustness matter? (train sign probs are in-sample) |
+
+Every run: `python soft_phrase.py train --cache-run <cache> --tag <tag> --inputs ...`, then `python soft_phrase.py eval --cache-run <cache> --tag <tag>`
+(decoding thresholds tuned on val with mF1S, applied unchanged to test; rows `soft_default` / `soft_tuned`), then
+`python compare_results.py results/<cache>__soft_*_s42.json results/al_sa_s42__pp_s42.json --split val`. Decide on val; Stage C noise
+taught us that single-seed differences below ~0.04 are not evidence, so repeat the winner with 3 seeds before claiming anything.
+
 ## Ablations → commands (`pipeline.py --only <name>`)
 
 | brief                        | name                          | what                                                                              |
