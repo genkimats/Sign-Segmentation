@@ -192,61 +192,42 @@ def expand_experiments_with_seeds(experiments, seed_indices, seeds=(42, 123, 202
     return final
 
 
+# ------------------------------------------------------------------------------
+# PURE HAMER: HaMeR (288 = 2 hands x (15x3x3 + 3x3)) is the ONLY main input.
+#   - base_features=["pure_hamer"] -> dataset.py puts HaMeR in the main tensor (288, T, 1)
+#   - use_hamer_features=False     -> HaMeR is NOT also passed as a side branch
+#   - num_vertices=1               -> calculate_num_vertices() keeps this as-is
+#   - hamer_dim=288                -> calculate_in_channels() returns 288
+#   - only graph-free models: bilstm_baseline / transformer_baseline
+# Add "use_dinov2_features": True to fuse DINOv2 as a separate side branch.
+# ------------------------------------------------------------------------------
+_PURE_HAMER = {
+    "base_features": ["pure_hamer"],
+    "kinematic_features": [],
+    "use_hamer_features": False,
+    "use_face_keypoints": False,
+    "use_dinov2_features": False,
+    "num_vertices": 1,
+    "hamer_dim": 288,
+    "overlap": 0,
+    "loss_function": "weighted_ce",
+    "tolerance_window": 1,
+}
+
 EXPERIMENTS_TO_RUN = [
-    {
-        "basename": "stgcn_bilstm",
-        "window_size": 128,
-        "overlap": 0,
-        "loss_function": "weighted_ce",
-        "use_hamer_features": True,
-        "tolerance_window": 1,
-        "description": "overlap ratio (0/128), tolerance=1, hamer"
-    },
-    {
-        "basename": "stgcn_bilstm",
-        "window_size": 256,
-        "overlap": 0,
-        "loss_function": "weighted_ce",
-        "use_hamer_features": True,
-        "tolerance_window": 1,
-        "description": "overlap ratio (0/256), tolerance=1, hamer"
-    },
-    {
-        "basename": "stgcn_transformer",
-        "window_size": 128,
-        "overlap": 0,
-        "loss_function": "weighted_ce",
-        "use_hamer_features": True,
-        "tolerance_window": 1,
-        "description": "overlap ratio (0/128), tolerance=1, hamer"
-    },
-    {
-        "basename": "stgcn_transformer",
-        "window_size": 256,
-        "overlap": 0,
-        "loss_function": "weighted_ce",
-        "use_hamer_features": True,
-        "tolerance_window": 1,
-        "description": "overlap ratio (0/256), tolerance=1, hamer"
-    },
-    {
-        "basename": "stgcn_bimamba",
-        "window_size": 128,
-        "overlap": 0,
-        "loss_function": "weighted_ce",
-        "use_hamer_features": True,
-        "tolerance_window": 1,
-        "description": "overlap ratio (0/128), tolerance=1, hamer"
-    },
-    {
-        "basename": "stgcn_bimamba",
-        "window_size": 256,
-        "overlap": 0,
-        "loss_function": "weighted_ce",
-        "use_hamer_features": True,
-        "tolerance_window": 1,
-        "description": "overlap ratio (0/256), tolerance=1, hamer"
-    },
+    # --- Pure HaMeR ---
+    {**_PURE_HAMER, "basename": "bilstm_baseline", "window_size": 128,
+     "description": "overlap ratio (0/128), tolerance=1, pure_hamer"},
+    {**_PURE_HAMER, "basename": "transformer_baseline", "window_size": 128,
+     "description": "overlap ratio (0/128), tolerance=1, pure_hamer"},
+
+    # --- Pure HaMeR + DINOv2 (separate side branch; dinov2_dim auto-detected) ---
+    {**_PURE_HAMER, "basename": "bilstm_baseline", "window_size": 128,
+     "use_dinov2_features": True,
+     "description": "overlap ratio (0/128), tolerance=1, pure_hamer + DINOv2"},
+    {**_PURE_HAMER, "basename": "transformer_baseline", "window_size": 128,
+     "use_dinov2_features": True,
+     "description": "overlap ratio (0/128), tolerance=1, pure_hamer + DINOv2"}
 ]
 
 if CHOSEN_TYPE == 'mamba':

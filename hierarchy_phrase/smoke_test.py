@@ -25,6 +25,7 @@ import segments as S
 import stage_a as A
 import stage_c as SC
 import evaluate as EV
+import soft_phrase as SP
 
 fails = []
 
@@ -36,9 +37,10 @@ def check(name, ok, detail=""):
 
 
 tmp = tempfile.mkdtemp()
-for m in (C, A, SC, EV):
+for m in (C, A, SC, EV, SP):
     m.RUNS_DIR = os.path.join(tmp, "runs")
-EV.HERE = tmp                                                       # results/ goes to the temp dir
+EV.HERE = tmp
+SP.HERE = tmp                                                       # results/ goes to the temp dir
 rng = np.random.default_rng(0)
 CACHE = {}
 
@@ -166,6 +168,23 @@ check("evaluate.py wrote every row for val and test", {"flat_default", "flat_tun
       "hier_oracle_default", "hier_oracle_tuned", "sign_stage_tuned"} <= rows and set(res["val"]) == rows)
 check("metrics are finite and in range", all(0 <= res["test"][r]["frame_f1"] <= 1 for r in rows) and
       all(np.isfinite(res["test"][r]["ratio"]) for r in rows))
+
+# ---------------------------------------------------------------- soft_phrase.py (frame-level phrase model, soft sign inputs)
+soft_base = dict(cache_run="sa_t", seed=0, inputs=["pose", "signprobs", "prosody"], oracle_signs=False, sp_noise=0.5, sp_drop=0.2,
+                 hidden=16, layers=1, dropout=0.1, lr=1e-3, crop=128, batch=2, crops_per_video=1, epochs=2, patience=5,
+                 weight_power=0.5, limit=None)
+for tag, extra in (("soft", {}), ("pose", {"inputs": ["pose"]}), ("oracle", {"inputs": ["pose", "signprobs"], "oracle_signs": True})):
+    SP.train(SimpleNamespace(**{**soft_base, "tag": tag, **extra}))
+    SP.evaluate(SimpleNamespace(cache_run="sa_t", tag=tag, seed=0, tune_metric="mF1S", limit=None))
+sres = json.load(open(os.path.join(tmp, "results", "sa_t__soft_soft_s0.json")))
+check("soft_phrase trains and evaluates (soft / pose-only control / oracle)",
+      all(os.path.exists(os.path.join(tmp, "results", f"sa_t__soft_{t}_s0.json")) for t in ("soft", "pose", "oracle"))
+      and {"soft_default", "soft_tuned"} <= set(sres["test"]) and 0 <= sres["test"]["soft_tuned"]["frame_f1"] <= 1)
+try:
+    SP.train(SimpleNamespace(**{**soft_base, "tag": "bad", "inputs": ["pose"], "oracle_signs": True}))
+    check("--oracle-signs without signprobs is refused", False)
+except SystemExit:
+    check("--oracle-signs without signprobs is refused", True)
 
 print("\n" + ("ALL CHECKS PASSED" if not fails else f"{len(fails)} FAILED: {fails}"))
 sys.exit(1 if fails else 0)

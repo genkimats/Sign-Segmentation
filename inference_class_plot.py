@@ -11,14 +11,15 @@ from src.models import (
     PureMambaBaseline, 
     BiMambaBaseline, 
     STGCN_Mamba, 
-    STGCN_BiMamba
+    STGCN_BiMamba,
+    STGCN_Transformer
 )
 
 # ==============================================================================
 # 🎛️ CONFIGURATION
 # ==============================================================================
-CHOSEN_MODEL = "stgcn_mamba"
-PREFIX = "135"
+CHOSEN_MODEL = "stgcn_transformer"  # Options: "pure_mamba", "bi_mamba", "stgcn_mamba", "stgcn_bimamba"
+PREFIX = "46"
 WEIGHTS_PATH = f"saved_models/{CHOSEN_MODEL}-{PREFIX}.pth"
 HYPERPARAMETER_PATH = f"experiments/{CHOSEN_MODEL}-{PREFIX}/hyperparameters.json"
 
@@ -35,7 +36,8 @@ MODEL_REGISTRY = {
     "pure_mamba": PureMambaBaseline,
     "bi_mamba": BiMambaBaseline,
     "stgcn_mamba": STGCN_Mamba,
-    "stgcn_bimamba": STGCN_BiMamba
+    "stgcn_bimamba": STGCN_BiMamba,
+    "stgcn_transformer": STGCN_Transformer
 }
 
 # ==============================================================================
@@ -66,7 +68,9 @@ class InteractiveViewer:
         self.draw_graph()
 
     def run_inference(self):
-        inputs, targets, vid, start_idx, end_idx = self.dataset[self.current_idx]
+        inputs, targets, *extras, vid, start_idx, end_idx = self.dataset[self.current_idx]
+        hamer = extras.pop(0) if self.hp.get("use_hamer_features", False) else None
+        dinov2 = extras.pop(0) if self.hp.get("use_dinov2_features", False) else None
         
         seq_len = inputs.shape[1] 
         all_logits = []
@@ -76,7 +80,12 @@ class InteractiveViewer:
                 end_i = min(i + self.chunk_size, seq_len)
                 chunk_inputs = inputs[:, i:end_i, :].unsqueeze(0).to(DEVICE)
                 
-                outputs = self.model(chunk_inputs)
+                kwargs = {}
+                if hamer is not None:
+                    kwargs["hamer"] = torch.nan_to_num(hamer[:, i:end_i].unsqueeze(0).to(DEVICE), nan=0.0, posinf=0.0, neginf=0.0)
+                if dinov2 is not None:
+                    kwargs["dinov2"] = torch.nan_to_num(dinov2[:, i:end_i].unsqueeze(0).to(DEVICE), nan=0.0, posinf=0.0, neginf=0.0)
+                outputs = self.model(chunk_inputs, **kwargs)
                 
                 if isinstance(outputs, tuple):
                     chunk_logits = outputs[0]
@@ -202,6 +211,13 @@ def main():
         use_full_length=False, 
         base_features=hp.get("base_features"),
         kinematic_features=hp.get("kinematic_features"),
+        temporal_downsample_factor=hp.get("temporal_downsample_factor", 1),
+        use_face_keypoints=hp.get("use_face_keypoints", False),
+        face_dir=hp.get("face_dir", "processed_data/face_keypoints_normalized"),
+        use_hamer_features=hp.get("use_hamer_features", False),
+        hamer_dir=hp.get("hamer_dir", "processed_data/hamer_features"),
+        use_dinov2_features=hp.get("use_dinov2_features", False),
+        dinov2_dir=hp.get("dinov2_dir", "processed_data/dinov2_features"),
         split=TARGET_SPLIT  
     )
     
@@ -209,12 +225,25 @@ def main():
         raise ValueError(f"❌ Error: Dataset initialized with 0 slices for split '{TARGET_SPLIT}'.")
 
     model_class = MODEL_REGISTRY[CHOSEN_MODEL]
-    model = model_class(
-        num_vertices=hp.get("num_vertices"),
-        in_channels=hp.get("in_channels"),
-        d_model=hp.get("d_model"),
-        n_layers=hp.get("n_layers")
-    ).to(DEVICE)
+    model_kwargs = {
+        "num_vertices": hp.get("num_vertices"),
+        "in_channels": hp.get("in_channels"),
+        "num_classes": 3,
+        "d_model": hp.get("d_model"),
+        "n_layers": hp.get("n_layers"),
+    }
+    if CHOSEN_MODEL in ("transformer_baseline", "stgcn_transformer"):
+        model_kwargs["nhead"] = hp.get("nhead", 8)
+        model_kwargs["dim_feedforward"] = hp.get("dim_feedforward", hp.get("d_model") * 4)
+    if "mamba" in CHOSEN_MODEL:
+        model_kwargs["mamba_d_state"] = hp.get("mamba_d_state", 16)
+        model_kwargs["mamba_d_conv"] = hp.get("mamba_d_conv", 4)
+        model_kwargs["mamba_expand"] = hp.get("mamba_expand", 2)
+    if hp.get("use_hamer_features", False):
+        model_kwargs["hamer_dim"] = hp.get("hamer_dim", dataset.detected_hamer_dim)
+    if hp.get("use_dinov2_features", False):
+        model_kwargs["dinov2_dim"] = hp.get("dinov2_dim", dataset.detected_dinov2_dim)
+    model = model_class(**model_kwargs).to(DEVICE)
     
     print(f"Loading weights from {WEIGHTS_PATH}...")
     model.load_state_dict(torch.load(WEIGHTS_PATH, map_location=DEVICE))

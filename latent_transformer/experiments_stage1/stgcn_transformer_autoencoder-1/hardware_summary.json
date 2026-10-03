@@ -1,0 +1,11 @@
+{
+    "seed": 42,
+    "machine_hostname": "z790",
+    "best_epoch": 28,
+    "best_val_mse": 0.009238775484845974,
+    "d_model": 256,
+    "n_layers": 4,
+    "nhead": 8,
+    "total_training_seconds": 8984.17,
+    "total_training_time": "149m 44s"
+}

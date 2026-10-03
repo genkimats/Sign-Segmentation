@@ -1,7 +1,7 @@
 import json
 import os
 
-QUEUE_FILE = "train_queue.json"
+QUEUE_FILE = "train_queue_phrase.json"
 
 def dequeue_jobs():
     if not os.path.exists(QUEUE_FILE):

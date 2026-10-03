@@ -7,3 +7,7 @@ train_queue.json
 
 saved_models/stgcn_bilstm-36.pth
 saved_models/stgcn_bimamba-46.pth
+
+hierarchy_phrase/runs/
+
+decoder_study/exports/stgcn_bilstm-44/train.npz

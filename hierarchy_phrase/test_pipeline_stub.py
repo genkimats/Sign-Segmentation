@@ -134,7 +134,7 @@ np.savez_compressed(os.path.join(exp_dir, "val.npz"), **arrays)
 IM.load_gold_segments = lambda vid, stride=2: gold_imp.get(vid)
 IM.load_keypoints = lambda vid, stride=2: np.zeros((gold_imp[vid]["T"], 65, 3), np.float32)
 IM.RUNS_DIR = os.path.join(tmp, "runs")
-n = IM.import_split("ext_run", "val", "imp", 2, exports_dir=os.path.join(tmp, "exports"))
+n = IM.import_split("ext_run", "val", "imp", 2, exports_dir=os.path.join(tmp, "exports"), pool="sub")
 check("importer converts matching videos and skips a length mismatch", n == 2)
 imp = SC.load_items([os.path.join(tmp, "runs", "imp", "cache", "val")])
 lg0 = arrays["logits__x0_A"][::2]
@@ -144,6 +144,61 @@ check("imported logits are sub-sampled like the keypoints and marked as having n
 ex_imp = SC.make_examples(imp, SC.SourcePolicy("gold", 1, 0, .5, .5, 0), 1, ("sign_probs", "prosody"))
 check("Stage C examples build from an imported cache without encoder features",
       len(ex_imp) == 2 and ex_imp[0][0].shape[1] == SIGN_PROB_DIM + PROSODY_DIM)
+
+# ---- importing a flat phrase model's logits alongside the sign model
+ph_dir = os.path.join(tmp, "exports", "phr_run"); os.makedirs(ph_dir)
+ph_arrays = {k: rng.normal(size=v.shape).astype(np.float32) for k, v in arrays.items() if k.startswith("logits__") and k != "logits__x1_A"}
+np.savez_compressed(os.path.join(ph_dir, "val.npz"), **ph_arrays)
+n2 = IM.import_split("ext_run", "val", "imp2", 2, exports_dir=os.path.join(tmp, "exports"), phrase_run="phr_run", pool="sub")
+imp2 = SC.load_items([os.path.join(tmp, "runs", "imp2", "cache", "val")])
+check("phrase-model import: videos missing from the phrase export are skipped, the rest carry a phrase head",
+      n2 == 1 and len(imp2) == 1 and imp2[0]["has_phrase_head"] == 1
+      and np.allclose(imp2[0]["phrase_probs"], SC.logits_to_probs(ph_arrays["logits__x0_A"][::2][:imp2[0]["T"]]), atol=1e-6))
+try:
+    IM.import_split("ext_run", "test", "imp3", 2, exports_dir=os.path.join(tmp, "exports"), phrase_run="phr_run")
+    check("a missing val/test phrase export is an error", False)
+except FileNotFoundError:
+    check("a missing val/test phrase export is an error", True)
+
+lgB = np.full((20, 3), -4.0, np.float32); lgB[:, 0] = 2.0; lgB[7, 2] = 4.0              # a single-frame Begin peak on an ODD frame
+pB_sub = SC.logits_to_probs(IM.downsample_logits(lgB, 2, "sub"))[:, 2].max()
+pB_mean = SC.logits_to_probs(IM.downsample_logits(lgB, 2, "mean"))[:, 2]
+check("mean pooling keeps a 1-frame Begin peak that sub-sampling drops", pB_sub < 0.05 and pB_mean[3] > 0.4 and len(pB_mean) == 10,
+      f"sub max P(B)={pB_sub:.3f}  mean P(B) at frame 3={pB_mean[3]:.3f}")
+P7 = SC.logits_to_probs(IM.downsample_logits(np.random.default_rng(1).normal(size=(7, 3)).astype(np.float32), 2, "mean"))
+check("pooled output has ceil(T/2) frames and valid probabilities", P7.shape == (4, 3) and np.allclose(P7.sum(1), 1, atol=1e-5))
+
+# ---- soft_phrase.py: soft sign-probability inputs to a frame-level phrase model
+import soft_phrase as SP
+it0 = items[0]
+vd = SP.VideoData(it0, ["pose", "signprobs", "prosody"])
+f = vd.features()
+check("soft features: layout pose(195) + signprobs(3) + prosody(4), finite", f.shape == (it0["T"], 195 + 3 + SP.PROSODY_FRAME_DIM) and np.isfinite(f).all())
+check("soft features: sign channels are the cache's sign probabilities, pose is the xyz",
+      np.allclose(f[:, 195:198], it0["sign_probs"]) and np.allclose(f[:, :195], it0["xyz"].reshape(it0["T"], -1).astype(np.float32)))
+check("input order given on the command line does not change the layout",
+      np.allclose(SP.VideoData(it0, ["prosody", "signprobs", "pose"]).features(), f))
+vo = SP.VideoData(it0, ["pose", "signprobs"], oracle=True)
+gold_bio = S.segments_to_bio(it0["gold_sign"], it0["T"])
+check("oracle sign channels are one-hot gold sign tags", np.array_equal(vo.features()[:, 195:].argmax(1), gold_bio)
+      and np.allclose(vo.features()[:, 195:].sum(1), 1))
+ra = np.random.default_rng(3)
+fa = vd.features(0, 300, ra, sp_noise=0.5, sp_drop=0.0)
+check("training noise perturbs only the sign channels and keeps them valid probabilities",
+      np.allclose(fa[:, :195], f[:300, :195]) and np.allclose(fa[:, 198:], f[:300, 198:]) and not np.allclose(fa[:, 195:198], f[:300, 195:198])
+      and np.allclose(fa[:, 195:198].sum(1), 1, atol=1e-5))
+fd = vd.features(0, 300, np.random.default_rng(0), sp_noise=0.0, sp_drop=1.0)
+check("sign-channel dropout makes them uninformative (1/3 each)", np.allclose(fd[:, 195:198], 1 / 3))
+check("no rng -> no augmentation (evaluation is deterministic)", np.allclose(vd.features(0, 300), f[:300]))
+vds = [SP.VideoData(x, ["pose", "signprobs", "prosody"]) for x in items]
+mu, sd = SP.feature_stats(vds)
+allf = np.concatenate([v.features() for v in vds]).astype(np.float64)
+check("streaming feature statistics equal the direct mean/std", np.allclose(mu, allf.mean(0), atol=1e-4) and np.allclose(sd, allf.std(0) + 1e-6, atol=1e-3))
+wv = SP.class_weights(vds)
+check("phrase class weights: O = 1, B largest", wv[0] == 1 and wv[2] > wv[1], str(np.round(wv, 2)))
+perfect = [np.eye(3, dtype=np.float32)[v.y] * 0.9 + 0.1 / 3 for v in vds]
+sc_, b_, o_ = SP.best_decoding(perfect, vds, [0.3, 0.5], "mF1S")
+check("decoding search recovers the gold phrases from perfect probabilities", abs(sc_ - 1.0) < 1e-9, f"mF1S {sc_:.3f} at b/o {b_}/{o_}")
 
 print(f"\n{sum(results)}/{len(results)} checks passed   (torch: {'real' if REAL_TORCH else 'stub'})")
 import shutil; shutil.rmtree(tmp)

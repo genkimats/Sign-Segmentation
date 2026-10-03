@@ -1,0 +1,23 @@
+{
+    "window_size": 64,
+    "overlap": 0,
+    "batch_size": 16,
+    "epochs": 100,
+    "early_stopping": true,
+    "patience": 10,
+    "learning_rate": 0.0001,
+    "num_vertices": 65,
+    "base_features": [
+        "x-cord",
+        "y-cord",
+        "z-cord"
+    ],
+    "kinematic_features": [],
+    "in_channels": 3,
+    "d_model": 256,
+    "n_layers": 4,
+    "nhead": 8,
+    "description": "first stage 1 pretraining run, coords only",
+    "prefix": "1",
+    "resolved_model_path": "/home/vine/Genki_GR/Sign-Segmentation/latent_transformer/saved_models_stage1/stgcn_transformer_autoencoder-1.pth"
+}

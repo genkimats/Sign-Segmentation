@@ -1,0 +1,12 @@
+{
+    "seed": 42,
+    "machine_hostname": "z790",
+    "best_epoch": 25,
+    "best_f1": 0.5474686471232797,
+    "freeze_encoder": false,
+    "pretrained_checkpoint": "/home/vine/Genki_GR/Sign-Segmentation/latent_transformer/saved_models_stage1/stgcn_transformer_autoencoder-1.pth",
+    "n_trainable_params": 4304579,
+    "n_total_params": 4313029,
+    "total_training_seconds": 5927.63,
+    "total_training_time": "98m 47s"
+}

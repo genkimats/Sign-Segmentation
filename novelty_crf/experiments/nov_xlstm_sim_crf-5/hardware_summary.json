@@ -1,0 +1,9 @@
+{
+    "seed": 42,
+    "machine_hostname": "z790",
+    "best_epoch": 19,
+    "best_score": 0.6602500091398242,
+    "n_parameters": 6345048,
+    "total_training_seconds": 33520.69,
+    "total_training_time": "9h 18m"
+}
