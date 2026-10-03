@@ -602,33 +602,38 @@ class STGCN_BiLSTM(nn.Module):
 
 
 class BiLSTM_Baseline(nn.Module):
-    def __init__(self, in_channels, num_vertices, num_classes=3, d_model=256, n_layers=4, dropout=0.2):
-        super(BiLSTM_Baseline, self).__init__()
+    def __init__(self, in_channels, num_vertices, num_classes=3, d_model=256, n_layers=4,
+                 dropout=0.2, dinov2_dim=None, dinov2_proj_dim=128):
+        super().__init__()
         self.feature_dim = in_channels * num_vertices
-        # Matches the 2023 paper's spec: project to d_model (256), not d_model*2 --
-        # see STGCN_BiLSTM's comment for the full reasoning.
+        self.dinov2_dim = dinov2_dim
+        in_dim = self.feature_dim
+        if dinov2_dim is not None:
+            self.dinov2_encoder = nn.Sequential(
+                nn.Linear(dinov2_dim, dinov2_proj_dim),
+                nn.LayerNorm(dinov2_proj_dim),
+                nn.ReLU(),
+                nn.Dropout(dropout),
+            )
+            in_dim += dinov2_proj_dim
         self.projection = nn.Sequential(
-            nn.Linear(self.feature_dim, d_model),
-            nn.LayerNorm(d_model),
-            nn.ReLU(),
-            nn.Dropout(dropout)
+            nn.Linear(in_dim, d_model), nn.LayerNorm(d_model), nn.ReLU(), nn.Dropout(dropout)
         )
-        self.lstm = nn.LSTM(
-            input_size=d_model,
-            hidden_size=d_model,
-            num_layers=n_layers,
-            batch_first=True,
-            dropout=dropout if n_layers > 1 else 0,
-            bidirectional=True
-        )
+        self.lstm = nn.LSTM(input_size=d_model, hidden_size=d_model, num_layers=n_layers,
+                            batch_first=True, dropout=dropout if n_layers > 1 else 0,
+                            bidirectional=True)
         self.classifier = nn.Linear(d_model * 2, num_classes)
 
-    def forward(self, x):
+    def forward(self, x, dinov2=None):
         B, C, T, V = x.shape
         x = x.permute(0, 2, 1, 3).reshape(B, T, C * V)
-        features = self.projection(x + 1e-5) 
+        if self.dinov2_dim is not None:
+            if dinov2 is None:
+                raise ValueError("Built with dinov2_dim but called without a `dinov2` tensor.")
+            x = torch.cat([x, self.dinov2_encoder(dinov2.permute(0, 2, 1))], dim=-1)
+        features = self.projection(x + 1e-5)
         lstm_out, _ = self.lstm(features)
-        logits = self.classifier(lstm_out) 
+        logits = self.classifier(lstm_out)
         return logits.permute(0, 2, 1), lstm_out.permute(0, 2, 1)
 
 
