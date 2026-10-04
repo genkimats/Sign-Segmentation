@@ -251,12 +251,12 @@ EXPERIMENTS_TO_RUN = [
     #     "tolerance_window": 5,
     #     "description": "overlap ratio (0/128), tolerance=5, no kinetic"
     # },
-    # {
-    #     "basename": "stgcn_transformer",
-    #     "window_size": 128,
-    #     "class_weights": [1.0, 1.1, 12.4],
-    #     "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], no kinetic"
-    # },
+    {
+        "basename": "stgcn_bilstm",
+        "window_size": 128,
+        "class_weights": [1.0, 1.1, 15.0],
+        "description": "overlap ratio (0/128), weights=[1.0, 1.1, 15.0], no kinetic"
+    },
     # {
     #     "basename": "stgcn_bilstm",
     #     "window_size": 128,
