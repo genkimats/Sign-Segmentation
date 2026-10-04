@@ -59,7 +59,8 @@ def main():
         splits = json.load(f)
 
     for split in ("train", "val", "test"):
-        vids = splits.get(split, [])
+        # The split file lists file names ("1247641_A.npy"); strip the extension to get the video id.
+        vids = [os.path.splitext(os.path.basename(v))[0] for v in splits.get(split, [])]
         infos, missing = [], []
         for vid in vids:
             info = audit_video(vid)
