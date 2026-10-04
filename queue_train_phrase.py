@@ -244,18 +244,9 @@ EXPERIMENTS_TO_RUN = [
     # },
     {
         "basename": "stgcn_bilstm",
-        "window_size": 128,
+        "window_size": 512,
         "class_weights": [1.0, 1.1, 12.4],
-        "tolerance_window": 3,
         "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe only"
-    },
-    {
-        "basename": "stgcn_bilstm",
-        "window_size": 128,
-        "class_weights": [1.0, 1.1, 12.4],
-        "use_hamer_features": True,
-        "tolerance_window": 5,
-        "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + hamer"
     },
 
     # {
