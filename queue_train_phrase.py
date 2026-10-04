@@ -22,7 +22,7 @@ MAMBA_DEFAULTS = {
     "patience": 10,
     "learning_rate": 0.0001,
     "num_vertices": 65,
-    "tolerance_window": 5,
+    "tolerance_window": 1,
     "temporal_downsample_factor": 1, 
     "loss_function": "weighted_ce",  
     "ctc_weight": 0.5,             
@@ -218,14 +218,20 @@ EXPERIMENTS_TO_RUN = [
     # --- Pure HaMeR ---
     {**_PURE_HAMER, "basename": "bilstm_baseline", "window_size": 128,
      "description": "METRIC FIX: overlap ratio (0/128), tolerance=1, pure_hamer"},
-    {
-        "basename": "stgcn_bilstm",
-        "window_size": 128,
-        "description": "METRIC FIX: overlap ratio (0/128), tolerance=1, stgcn_bilstm"
-    },
     {**_PURE_HAMER, "basename": "transformer_baseline", "window_size": 128,
      "description": "METRIC FIX: overlap ratio (0/128), tolerance=1, pure_hamer"},
+
     
+    # {
+    #     "basename": "stgcn_bilstm",
+    #     "window_size": 128,
+    #     "description": "METRIC FIX: overlap ratio (0/128), tolerance=1, no kinetic"
+    # },
+    # {
+    #     "basename": "stgcn_transformer",
+    #     "window_size": 128,
+    #     "description": "METRIC FIX: overlap ratio (0/128), tolerance=1, no kinetic"
+    # }
 ]
 
 if CHOSEN_TYPE == 'mamba':
