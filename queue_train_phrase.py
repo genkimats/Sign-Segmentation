@@ -225,13 +225,27 @@ EXPERIMENTS_TO_RUN = [
     {
         "basename": "stgcn_bilstm",
         "window_size": 128,
-        "description": "METRIC FIX: overlap ratio (0/128), tolerance=1, no kinetic"
+        "class_weights": [1.0, 1.1, 12.4],
+        "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], no kinetic"
     },
     {
         "basename": "stgcn_transformer",
         "window_size": 128,
-        "description": "METRIC FIX: overlap ratio (0/128), tolerance=1, no kinetic"
-    }
+        "class_weights": [1.0, 1.1, 12.4],
+        "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], no kinetic"
+    },
+    # {
+    #     "basename": "stgcn_bilstm",
+    #     "window_size": 128,
+    #     "class_weights": [1.0, 1.0, 30.0],
+    #     "description": "overlap ratio (0/128), weights=[1.0, 1.0, 30.0], no kinetic"
+    # },
+    # {
+    #     "basename": "stgcn_transformer",
+    #     "window_size": 128,
+    #     "class_weights": [1.0, 1.0, 30.0],
+    #     "description": "overlap ratio (0/128), weights=[1.0, 1.0, 30.0], no kinetic"
+    # },
 ]
 
 if CHOSEN_TYPE == 'mamba':
