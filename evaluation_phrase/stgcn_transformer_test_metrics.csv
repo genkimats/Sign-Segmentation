@@ -1,0 +1,3 @@
+run,prefix,decoder,frame_f1,iou,segment_pct,segment_f1_05,videos_evaluated,videos_skipped,window_size,seed,description
+stgcn_transformer-15,15,argmax,0.6354,0.8554,1.0187,0.1129,14,3,128,,"overlap ratio (0/128), weights=[1.0, 1.1, 12.4], no kinetic"
+stgcn_transformer-15,15,thr b=0.5 o=0.5,0.6354,0.3766,0.1062,0.087,14,3,128,,"overlap ratio (0/128), weights=[1.0, 1.1, 12.4], no kinetic"

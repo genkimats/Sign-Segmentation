@@ -34,7 +34,7 @@ from src.metrics import (extract_segments, decode_threshold_2023, segment_iou,
 # 🎛️ CONFIGURATION
 # ==============================================================================
 CHOSEN_MODEL = "stgcn_bilstm"
-PREFIX = "10"
+PREFIX = "15"
 TARGET_SPLIT = "val"            # "train", "val", "test" or "all"
 
 DISPLAY_WINDOW = 512            # frames shown per page (display only; inference always
