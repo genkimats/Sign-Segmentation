@@ -239,11 +239,6 @@ EXPERIMENTS_TO_RUN = [
         "window_size": 128,
         "description": "overlap ratio (0/128), tolerance=1, no kinetic"
     },
-    {
-        "basename": "stgcn_bilstm",
-        "window_size": 128,
-        "description": "overlap ratio (0/128), tolerance=1, no kinetic"
-    },
     # {
     #     "basename": "stgcn_bilstm",
     #     "window_size": 128,
