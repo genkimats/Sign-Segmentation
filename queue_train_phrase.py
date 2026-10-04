@@ -235,13 +235,13 @@ EXPERIMENTS_TO_RUN = [
     #     "description": "overlap ratio (0/128), hamer + mediapipe"
     # },
     {
-        "basename": "stgcn_transformer",
+        "basename": "stgcn_bilstm",
         "window_size": 128,
         "tolerance_window": 3,
         "description": "overlap ratio (0/128), tolerance=3, no kinetic"
     },
     {
-        "basename": "stgcn_transformer",
+        "basename": "stgcn_bilstm",
         "window_size": 128,
         "tolerance_window": 5,
         "description": "overlap ratio (0/128), tolerance=5, no kinetic"
