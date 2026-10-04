@@ -237,15 +237,25 @@ EXPERIMENTS_TO_RUN = [
     {
         "basename": "stgcn_bilstm",
         "window_size": 128,
-        "tolerance_window": 3,
-        "description": "overlap ratio (0/128), tolerance=3, no kinetic"
+        "description": "overlap ratio (0/128), tolerance=1, no kinetic"
     },
     {
         "basename": "stgcn_bilstm",
         "window_size": 128,
-        "tolerance_window": 5,
-        "description": "overlap ratio (0/128), tolerance=5, no kinetic"
+        "description": "overlap ratio (0/128), tolerance=1, no kinetic"
     },
+    # {
+    #     "basename": "stgcn_bilstm",
+    #     "window_size": 128,
+    #     "tolerance_window": 3,
+    #     "description": "overlap ratio (0/128), tolerance=3, no kinetic"
+    # },
+    # {
+    #     "basename": "stgcn_bilstm",
+    #     "window_size": 128,
+    #     "tolerance_window": 5,
+    #     "description": "overlap ratio (0/128), tolerance=5, no kinetic"
+    # },
     # {
     #     "basename": "stgcn_transformer",
     #     "window_size": 128,
