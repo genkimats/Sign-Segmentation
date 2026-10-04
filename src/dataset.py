@@ -365,10 +365,6 @@ class SignSegmentationDataset(Dataset):
         if total_cached < total_attempted:
             print(f"[{split.upper()}] Cached {total_cached}/{total_attempted} videos "
                   f"({total_attempted - total_cached} skipped). Skip reasons: {skip_counts}")
-            for reason, items in skipped_videos.items():
-                print(f"[{split.upper()}]   {reason} ({len(items)}):")
-                for vid_skipped, detail in items:
-                    print(f"[{split.upper()}]     - {vid_skipped}" + (f"  ({detail})" if detail else ""))
 
         self.skip_counts = skip_counts
         self.skipped_videos = skipped_videos
