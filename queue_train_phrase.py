@@ -218,12 +218,8 @@ EXPERIMENTS_TO_RUN = [
     # --- Pure HaMeR ---
     {**_PURE_HAMER, "basename": "bilstm_baseline", "window_size": 128,
      "description": "pure HaMeR, BiLSTM, window 128, tolerance=1"},
-    {**_PURE_HAMER, "basename": "bilstm_baseline", "window_size": 256,
-     "description": "pure HaMeR, BiLSTM, window 256, tolerance=1"},
     {**_PURE_HAMER, "basename": "transformer_baseline", "window_size": 128,
      "description": "pure HaMeR, Transformer, window 128, tolerance=1"},
-    {**_PURE_HAMER, "basename": "transformer_baseline", "window_size": 256,
-     "description": "pure HaMeR, Transformer, window 256, tolerance=1"},
 
     # --- Pure HaMeR + DINOv2 (separate side branch; dinov2_dim auto-detected) ---
     {**_PURE_HAMER, "basename": "bilstm_baseline", "window_size": 128,

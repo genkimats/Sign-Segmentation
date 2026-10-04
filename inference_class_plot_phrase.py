@@ -121,7 +121,11 @@ class PhraseViewer:
 
         self.fig, (self.ax1, self.ax2) = plt.subplots(
             2, 1, figsize=(15, 9), sharex=True, gridspec_kw={"height_ratios": [2.5, 1]})
-        self.fig.canvas.mpl_connect("key_press_event", self.on_press)
+        # Matplotlib only keeps a WEAK reference to bound-method callbacks, so the
+        # viewer must stay referenced or its key handler silently disappears.
+        # Attaching it to the figure keeps it alive as long as the window is open.
+        self.fig._phrase_viewer = self
+        self._cid = self.fig.canvas.mpl_connect("key_press_event", self.on_press)
         self.fig.canvas.manager.set_window_title(
             f"Phrase Confidence Viewer - {RUN_NAME} [{TARGET_SPLIT.upper()}]")
         self.draw()
@@ -255,7 +259,17 @@ class PhraseViewer:
 # ==============================================================================
 # MAIN
 # ==============================================================================
+def free_default_keys():
+    """
+    Matplotlib's toolbar binds Left/Right to view back/forward by default. Remove
+    those bindings so the arrow keys only do this viewer's navigation.
+    """
+    for name in ("keymap.back", "keymap.forward"):
+        plt.rcParams[name] = [k for k in plt.rcParams[name] if k not in ("left", "right")]
+
+
 def main():
+    free_default_keys()
     if not os.path.exists(HYPERPARAMETER_PATH):
         raise FileNotFoundError(f"Could not find {HYPERPARAMETER_PATH}")
     if not os.path.exists(WEIGHTS_PATH):
@@ -286,7 +300,7 @@ def main():
     model.load_state_dict(torch.load(WEIGHTS_PATH, map_location=DEVICE), strict=True)
     model.eval()
 
-    PhraseViewer(model, hp, videos)
+    viewer = PhraseViewer(model, hp, videos)  # keep a reference (see PhraseViewer.__init__)
     plt.show()
 
 
