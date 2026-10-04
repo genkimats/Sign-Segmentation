@@ -297,7 +297,20 @@ def print_per_video(per_video):
 # Main
 # ==============================================================================
 def main():
-    parser = argparse.ArgumentParser(description="Evaluate all saved phrase runs of one model.")
+    parser = argparse.ArgumentParser(
+        description="Evaluate all saved phrase runs of one model (Frame F1, IoU, % of segments, "
+                    "Segment F1@0.5) on full videos against the hard gold labels.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "examples:\n"
+            "  python evaluate_phrase.py                                  # choose a model interactively, val split\n"
+            "  python evaluate_phrase.py --model stgcn_bilstm             # all stgcn_bilstm-XX runs on val\n"
+            "  python evaluate_phrase.py --model stgcn_bilstm --prefixes 10 12\n"
+            "  python evaluate_phrase.py --model stgcn_bilstm --sweep     # tune thresholds on val\n"
+            "  python evaluate_phrase.py --model stgcn_bilstm --split test --b-threshold 0.6 --o-threshold 0.5\n"
+            "  python evaluate_phrase.py --model stgcn_bilstm --per-video --diagnose\n"
+        ),
+    )
     parser.add_argument("--model", help="Model basename, e.g. stgcn_bilstm (asks if omitted).")
     parser.add_argument("--prefixes", nargs="*", help="Only these prefixes (default: all).")
     parser.add_argument("--split", choices=["val", "test"], default="val",
