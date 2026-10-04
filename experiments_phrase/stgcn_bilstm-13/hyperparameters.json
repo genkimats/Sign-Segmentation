@@ -28,9 +28,9 @@
     "in_channels": 3,
     "use_face_keypoints": false,
     "face_dir": "processed_data/face_keypoints_normalized",
-    "use_hamer_features": true,
+    "use_hamer_features": false,
     "hamer_dir": "processed_data/hamer_features",
-    "use_dinov2_features": true,
+    "use_dinov2_features": false,
     "dinov2_dir": "processed_data/dinov2_features",
     "d_model": 256,
     "n_layers": 4,
@@ -39,6 +39,6 @@
     "mamba_expand": 2,
     "optimizer": "AdamW",
     "scheduler": "CosineAnnealingLR",
-    "description": "overlap ratio (0/128), tolerance=1, hamer + dinov2",
+    "description": "METRIC FIX: overlap ratio (0/128), tolerance=1, no kinetic",
     "prefix": "13"
 }

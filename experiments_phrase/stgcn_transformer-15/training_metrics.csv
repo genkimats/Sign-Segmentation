@@ -1,0 +1,1 @@
+epoch,train_loss,val_loss,frame_f1,iou,segment_pct,segment_f1_05,combined_score,epoch_time,epoch_nan_count
