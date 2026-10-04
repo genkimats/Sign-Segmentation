@@ -4,6 +4,7 @@ processed_data/
 **/__pycache__/**
 *.pyc
 train_queue.json
+train_queue_phrase.json
 
 saved_models/stgcn_bilstm-36.pth
 saved_models/stgcn_bimamba-46.pth
