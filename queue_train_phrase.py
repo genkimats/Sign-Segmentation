@@ -242,19 +242,12 @@ EXPERIMENTS_TO_RUN = [
     #     "window_size": 128,
     #     "description": "overlap ratio (0/128), tolerance=1, no kinetic"
     # },
-    {
-        "basename": "stgcn_bilstm",
-        "window_size": 128,
-        "class_weights": [1.0, 1.1, 12.4],
-        "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe only"
-    },
-    {
-        "basename": "stgcn_bilstm",
-        "window_size": 128,
-        "class_weights": [1.0, 1.1, 12.4],
-        "use_hamer_features": True,
-        "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + hamer"
-    },
+    # {
+    #     "basename": "stgcn_bilstm",
+    #     "window_size": 128,
+    #     "class_weights": [1.0, 1.1, 12.4],
+    #     "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe only"
+    # },
     # {
     #     "basename": "stgcn_bilstm",
     #     "window_size": 128,
@@ -262,6 +255,34 @@ EXPERIMENTS_TO_RUN = [
     #     "use_hamer_features": True,
     #     "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + hamer"
     # },
+    {
+        "basename": "stgcn_bilstm",
+        "window_size": 128,
+        "class_weights": [1.0, 1.1, 12.4],
+        "face_subset": "full",
+        "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + full face"
+    },
+    {
+        "basename": "stgcn_bilstm",
+        "window_size": 128,
+        "class_weights": [1.0, 1.1, 12.4],
+        "face_subset": "compact",
+        "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + compact face"
+    },
+    {
+        "basename": "stgcn_bilstm",
+        "window_size": 128,
+        "class_weights": [1.0, 1.1, 12.4],
+        "face_subset": "eyes_brows",
+        "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + eyes brows"
+    },
+    {
+        "basename": "stgcn_bilstm",
+        "window_size": 128,
+        "class_weights": [1.0, 1.1, 12.4],
+        "face_subset": "minimal",
+        "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + minimal face"
+    },
 
     # {
     #     "basename": "stgcn_bilstm",
