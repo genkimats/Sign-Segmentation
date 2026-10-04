@@ -1,0 +1,168 @@
+{
+  "decoders": {
+    "argmax": {
+      "1247641_A": {
+        "num_frames": 28528,
+        "num_gold_segments": 61,
+        "num_pred_segments": 8515,
+        "IoU": 0.8461625028134143,
+        "Pct": 139.59016393442624,
+        "Segment_F1_05": 0.0
+      },
+      "1247641_B": {
+        "num_frames": 28528,
+        "num_gold_segments": 125,
+        "num_pred_segments": 17398,
+        "IoU": 0.8817728592560127,
+        "Pct": 139.184,
+        "Segment_F1_05": 0.0
+      },
+      "1582841_B": {
+        "num_frames": 22006,
+        "num_gold_segments": 101,
+        "num_pred_segments": 20634,
+        "IoU": 0.9631478839752734,
+        "Pct": 204.2970297029703,
+        "Segment_F1_05": 0.0
+      },
+      "1429910-16075041-16115817_A": {
+        "num_frames": 12376,
+        "num_gold_segments": 22,
+        "num_pred_segments": 4174,
+        "IoU": 0.1861737037847298,
+        "Pct": 189.72727272727272,
+        "Segment_F1_05": 0.0
+      },
+      "1414123_A": {
+        "num_frames": 34237,
+        "num_gold_segments": 51,
+        "num_pred_segments": 5048,
+        "IoU": 0.8941445737173374,
+        "Pct": 98.98039215686275,
+        "Segment_F1_05": 0.0
+      },
+      "1414123_B": {
+        "num_frames": 34237,
+        "num_gold_segments": 165,
+        "num_pred_segments": 29168,
+        "IoU": 0.954611757522304,
+        "Pct": 176.77575757575758,
+        "Segment_F1_05": 0.0
+      },
+      "1413236_B": {
+        "num_frames": 3160,
+        "num_gold_segments": 24,
+        "num_pred_segments": 3045,
+        "IoU": 0.954351395730706,
+        "Pct": 126.875,
+        "Segment_F1_05": 0.0
+      },
+      "1212402_A": {
+        "num_frames": 51129,
+        "num_gold_segments": 19,
+        "num_pred_segments": 1166,
+        "IoU": 0.6016696481812761,
+        "Pct": 61.36842105263158,
+        "Segment_F1_05": 0.0
+      },
+      "1212402_B": {
+        "num_frames": 51129,
+        "num_gold_segments": 339,
+        "num_pred_segments": 49099,
+        "IoU": 0.9618101280976894,
+        "Pct": 144.83480825958702,
+        "Segment_F1_05": 0.0
+      }
+    },
+    "threshold": {
+      "1247641_A": {
+        "num_frames": 28528,
+        "num_gold_segments": 61,
+        "num_pred_segments": 41,
+        "IoU": 0.8445491251682369,
+        "Pct": 0.6721311475409836,
+        "Segment_F1_05": 0.411764705882353
+      },
+      "1247641_B": {
+        "num_frames": 28528,
+        "num_gold_segments": 125,
+        "num_pred_segments": 44,
+        "IoU": 0.8817574961698402,
+        "Pct": 0.352,
+        "Segment_F1_05": 0.21301775147928995
+      },
+      "1582841_B": {
+        "num_frames": 22006,
+        "num_gold_segments": 101,
+        "num_pred_segments": 12,
+        "IoU": 0.9631583951321544,
+        "Pct": 0.1188118811881188,
+        "Segment_F1_05": 0.053097345132743355
+      },
+      "1429910-16075041-16115817_A": {
+        "num_frames": 12376,
+        "num_gold_segments": 22,
+        "num_pred_segments": 26,
+        "IoU": 0.18589464518937746,
+        "Pct": 1.1818181818181819,
+        "Segment_F1_05": 0.12499999999999997
+      },
+      "1414123_A": {
+        "num_frames": 34237,
+        "num_gold_segments": 51,
+        "num_pred_segments": 24,
+        "IoU": 0.893305439330544,
+        "Pct": 0.47058823529411764,
+        "Segment_F1_05": 0.4533333333333333
+      },
+      "1414123_B": {
+        "num_frames": 34237,
+        "num_gold_segments": 165,
+        "num_pred_segments": 25,
+        "IoU": 0.9544976774149798,
+        "Pct": 0.15151515151515152,
+        "Segment_F1_05": 0.0631578947368421
+      },
+      "1413236_B": {
+        "num_frames": 3160,
+        "num_gold_segments": 24,
+        "num_pred_segments": 4,
+        "IoU": 0.9534120734908137,
+        "Pct": 0.16666666666666666,
+        "Segment_F1_05": 0.0
+      },
+      "1212402_A": {
+        "num_frames": 51129,
+        "num_gold_segments": 19,
+        "num_pred_segments": 21,
+        "IoU": 0.6017751479289941,
+        "Pct": 1.105263157894737,
+        "Segment_F1_05": 0.5500000000000002
+      },
+      "1212402_B": {
+        "num_frames": 51129,
+        "num_gold_segments": 339,
+        "num_pred_segments": 42,
+        "IoU": 0.9622566230450048,
+        "Pct": 0.12389380530973451,
+        "Segment_F1_05": 0.05774278215223097
+      }
+    }
+  },
+  "skipped_videos": {
+    "missing_label_or_kinetic": [
+      {
+        "video": "1582841_A",
+        "detail": "label file missing"
+      },
+      {
+        "video": "1429910-16075041-16115817_B",
+        "detail": "label file missing"
+      },
+      {
+        "video": "1413236_A",
+        "detail": "label file missing"
+      }
+    ]
+  }
+}
