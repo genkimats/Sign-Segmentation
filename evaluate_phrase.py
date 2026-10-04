@@ -277,6 +277,22 @@ def evaluate_run(run_name, split, device, b_threshold, o_threshold, do_sweep, ba
     return config, results, best_thresholds, dataset
 
 
+def print_per_video(per_video):
+    """Per-video table: frame F1 (argmax), IoU, %, segment F1@0.5 and segment counts."""
+    name_w = max(10, max(len(v) for v in per_video))
+    header = (f"      {'video':<{name_w}}  {'frames':>7}  {'gold':>5}  {'pred':>6}  "
+              f"{'F1':>6}  {'IoU':>6}  {'%':>8}  {'SegF1':>6}")
+    print(header)
+    print("      " + "-" * (len(header) - 6))
+    for vid in sorted(per_video):
+        d = per_video[vid]
+        pct = d["Pct"]
+        pct_str = f"{pct:8.3f}" if not np.isnan(pct) else f"{'n/a':>8}"
+        print(f"      {vid:<{name_w}}  {d['num_frames']:>7}  {d['num_gold_segments']:>5}  "
+              f"{d['num_pred_segments']:>6}  {d['Frame_F1']:>6.3f}  {d['IoU']:>6.3f}  "
+              f"{pct_str}  {d['Segment_F1_05']:>6.3f}")
+
+
 # ==============================================================================
 # Main
 # ==============================================================================
@@ -284,7 +300,10 @@ def main():
     parser = argparse.ArgumentParser(description="Evaluate all saved phrase runs of one model.")
     parser.add_argument("--model", help="Model basename, e.g. stgcn_bilstm (asks if omitted).")
     parser.add_argument("--prefixes", nargs="*", help="Only these prefixes (default: all).")
-    parser.add_argument("--split", default="val", help="Split in dataset_splits.json (default: val).")
+    parser.add_argument("--split", choices=["val", "test"], default="val",
+                        help="Dataset split to evaluate on: 'val' (default) or 'test'.")
+    parser.add_argument("--per-video", action="store_true",
+                        help="Also print the metrics for every video (each decoder).")
     parser.add_argument("--b-threshold", type=float, default=0.5, help="B threshold for 2023-style decoding.")
     parser.add_argument("--o-threshold", type=float, default=0.5, help="O threshold for 2023-style decoding.")
     parser.add_argument("--sweep", action="store_true", help="Also tune thresholds on this split (0.3..0.9).")
@@ -350,6 +369,8 @@ def main():
             m = results[key]
             print(f"  [{label:<22}] Frame F1 {m['Frame_F1']:.4f} | IoU {m['IoU']:.4f} | "
                   f"% (ratio) {m['Pct']:.4f} | SegF1@0.5 {m['Segment_F1_05']:.4f}")
+            if args.per_video:
+                print_per_video(m["per_video"])
             rows.append({
                 "run": run_name,
                 "prefix": prefix,

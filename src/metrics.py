@@ -271,8 +271,11 @@ def evaluate_videos(video_probs, video_gold, decoder="argmax", b_threshold=0.5, 
         if not np.isnan(pct):
             pcts.append(pct)
         seg_f1s.append(sf1)
+        video_f1 = (float("nan") if light else
+                    float(f1_score(gold, argmax_pred, labels=[0, 1, 2], average="macro", zero_division=0)))
         per_video[vid] = {
             "num_frames": int(T),
+            "Frame_F1": video_f1,
             "num_gold_segments": len(gold_segments),
             "num_pred_segments": len(pred_segments),
             "IoU": iou,
