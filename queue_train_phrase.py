@@ -220,6 +220,11 @@ EXPERIMENTS_TO_RUN = [
      "description": "METRIC FIX: overlap ratio (0/128), tolerance=1, pure_hamer"},
     {**_PURE_HAMER, "basename": "transformer_baseline", "window_size": 128,
      "description": "METRIC FIX: overlap ratio (0/128), tolerance=1, pure_hamer"},
+    {
+        "basename": "stgcn_bilstm",
+        "window_size": 128,
+        "description": "METRIC FIX: overlap ratio (0/128), tolerance=1, stgcn_bilstm"
+    }
 ]
 
 if CHOSEN_TYPE == 'mamba':

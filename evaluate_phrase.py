@@ -35,7 +35,7 @@ import torch
 from src.dataset import SignSegmentationDataset
 from src.model_factory import build_model_kwargs
 from src.evaluation import predict_split
-from src.metrics import evaluate_videos, pct_score
+from src.metrics import evaluate_videos, pct_score, extract_segments, decode_threshold_2023, segment_iou
 
 EXP_DIR = "experiments_phrase"
 MODEL_DIR = "saved_models_phrase"
@@ -172,8 +172,59 @@ def sweep_thresholds(video_probs, video_gold, grid):
     return best[0], b_best, o_best, m_best
 
 
+def diagnose(video_probs, video_gold, b_threshold, o_threshold):
+    """
+    Sanity checks that explain odd metric values:
+      - gold vs predicted class distribution (is the model predicting ~one class?
+        does the label file use the expected 0=O, 1=I, 2=B encoding?)
+      - segment counts and lengths (flicker -> thousands of 1-2 frame segments)
+      - a trivial "everything is Inside" baseline, to see what IoU / F1 you get for free
+    """
+    from sklearn.metrics import f1_score
+    gold_all = np.concatenate([np.asarray(video_gold[v]) for v in video_probs])
+    pred_all = np.concatenate([video_probs[v].argmax(axis=0) for v in video_probs])
+    names = {0: "O", 1: "I", 2: "B"}
+
+    def dist(a):
+        c = np.bincount(a.astype(np.int64), minlength=3)
+        return "  ".join(f"{names[i]}={c[i]} ({c[i] / max(1, len(a)):.1%})" for i in range(3))
+
+    print("  [diag] gold classes : " + dist(gold_all))
+    print("  [diag] argmax pred  : " + dist(pred_all))
+    unexpected = sorted(set(np.unique(gold_all).tolist()) - {0, 1, 2})
+    if unexpected:
+        print(f"  [diag] ⚠️ gold contains unexpected label values {unexpected}")
+
+    n_gold = n_arg = n_thr = 0
+    len_gold, len_arg, len_thr = [], [], []
+    trivial_ious = []
+    max_pb = []
+    for v, probs in video_probs.items():
+        gold = np.asarray(video_gold[v])[:probs.shape[1]]
+        gs = extract_segments(gold)
+        a = extract_segments(probs.argmax(axis=0))
+        t = decode_threshold_2023(probs, b_threshold, o_threshold)
+        n_gold += len(gs); n_arg += len(a); n_thr += len(t)
+        len_gold += [e - s + 1 for s, e in gs]
+        len_arg += [e - s + 1 for s, e in a]
+        len_thr += [e - s + 1 for s, e in t]
+        trivial_ious.append(segment_iou([(0, len(gold) - 1)], gs, len(gold)))
+        max_pb.append(float(probs[2].max()))
+
+    def med(x):
+        return f"{np.median(x):.0f}" if x else "-"
+
+    print(f"  [diag] segments    : gold={n_gold} (median len {med(len_gold)} fr) | "
+          f"argmax={n_arg} (median len {med(len_arg)} fr) | "
+          f"thr={n_thr} (median len {med(len_thr)} fr)")
+    print(f"  [diag] P(B)        : max over each video = "
+          + ", ".join(f"{x:.2f}" for x in max_pb))
+    trivial_f1 = f1_score(gold_all, np.ones_like(gold_all), labels=[0, 1, 2], average="macro", zero_division=0)
+    print(f"  [diag] trivial 'all Inside' baseline: Frame F1 {trivial_f1:.4f} | IoU {np.mean(trivial_ious):.4f}")
+
+
 def evaluate_run(run_name, split, device, b_threshold, o_threshold, do_sweep, batch_size_override,
-                 sweep_step=0.1):
+                 sweep_step=0.1, do_diagnose=False, swap_ib=False):
     cfg_path = os.path.join(EXP_DIR, run_name, "hyperparameters.json")
     ckpt_path = os.path.join(MODEL_DIR, f"{run_name}.pth")
     with open(cfg_path) as f:
@@ -197,6 +248,11 @@ def evaluate_run(run_name, split, device, b_threshold, o_threshold, do_sweep, ba
         torch.cuda.synchronize()
     print(f"  [time] model inference: {time.time() - t0:.1f}s "
           f"({len(video_probs)} videos, batch size {batch_size})")
+    if swap_ib:
+        # DIAGNOSTIC ONLY: reinterpret the model's class 1 as B and class 2 as I, i.e. test
+        # whether the checkpoint was trained on label files with I and B swapped.
+        video_probs = {v: p[[0, 2, 1]] for v, p in video_probs.items()}
+        print("  ⚠️  --swap-ib: model outputs reinterpreted (1<->2). Diagnostic only, don't report these.")
 
     t0 = time.time()
     results = {
@@ -205,6 +261,8 @@ def evaluate_run(run_name, split, device, b_threshold, o_threshold, do_sweep, ba
                                      b_threshold=b_threshold, o_threshold=o_threshold),
     }
     print(f"  [time] metrics: {time.time() - t0:.1f}s")
+    if do_diagnose:
+        diagnose(video_probs, video_gold, b_threshold, o_threshold)
 
     best_thresholds = None
     if do_sweep:
@@ -233,6 +291,11 @@ def main():
     parser.add_argument("--batch-size", type=int, default=None,
                         help="Inference batch size (default: the run's training batch_size). "
                              "Larger = faster, more GPU memory; results are identical.")
+    parser.add_argument("--swap-ib", action="store_true",
+                        help="DIAGNOSTIC: swap the model's I and B outputs, to test whether a checkpoint "
+                             "was trained on labels with I/B swapped.")
+    parser.add_argument("--diagnose", action="store_true",
+                        help="Print class distributions, segment counts/lengths and a trivial baseline.")
     parser.add_argument("--sweep-step", type=float, default=0.1,
                         help="Threshold grid step for --sweep over 0.3..0.9 (default 0.1 = 7x7 pairs). "
                              "Smaller = finer tuning but slower (0.05 = 13x13).")
@@ -267,7 +330,7 @@ def main():
             t_run = time.time()
             config, results, best_thr, dataset = evaluate_run(
                 run_name, args.split, device, args.b_threshold, args.o_threshold,
-                args.sweep, args.batch_size, args.sweep_step)
+                args.sweep, args.batch_size, args.sweep_step, args.diagnose, args.swap_ib)
         except Exception as e:
             print(f"⚠️  Skipped {run_name}: {type(e).__name__}: {e}")
             continue
@@ -286,7 +349,7 @@ def main():
         for key, label, _ in decoders:
             m = results[key]
             print(f"  [{label:<22}] Frame F1 {m['Frame_F1']:.4f} | IoU {m['IoU']:.4f} | "
-                  f"% {m['Pct']:.4f} | SegF1@0.5 {m['Segment_F1_05']:.4f}")
+                  f"% (ratio) {m['Pct']:.4f} | SegF1@0.5 {m['Segment_F1_05']:.4f}")
             rows.append({
                 "run": run_name,
                 "prefix": prefix,
