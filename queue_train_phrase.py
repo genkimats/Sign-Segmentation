@@ -216,22 +216,22 @@ _PURE_HAMER = {
 
 EXPERIMENTS_TO_RUN = [
     # --- Pure HaMeR ---
-    {**_PURE_HAMER, "basename": "bilstm_baseline", "window_size": 128,
-     "description": "METRIC FIX: overlap ratio (0/128), tolerance=1, pure_hamer"},
-    {**_PURE_HAMER, "basename": "transformer_baseline", "window_size": 128,
-     "description": "METRIC FIX: overlap ratio (0/128), tolerance=1, pure_hamer"},
+    # {**_PURE_HAMER, "basename": "bilstm_baseline", "window_size": 128,
+    #  "description": "METRIC FIX: overlap ratio (0/128), tolerance=1, pure_hamer"},
+    # {**_PURE_HAMER, "basename": "transformer_baseline", "window_size": 128,
+    #  "description": "METRIC FIX: overlap ratio (0/128), tolerance=1, pure_hamer"},
 
     
-    # {
-    #     "basename": "stgcn_bilstm",
-    #     "window_size": 128,
-    #     "description": "METRIC FIX: overlap ratio (0/128), tolerance=1, no kinetic"
-    # },
-    # {
-    #     "basename": "stgcn_transformer",
-    #     "window_size": 128,
-    #     "description": "METRIC FIX: overlap ratio (0/128), tolerance=1, no kinetic"
-    # }
+    {
+        "basename": "stgcn_bilstm",
+        "window_size": 128,
+        "description": "METRIC FIX: overlap ratio (0/128), tolerance=1, no kinetic"
+    },
+    {
+        "basename": "stgcn_transformer",
+        "window_size": 128,
+        "description": "METRIC FIX: overlap ratio (0/128), tolerance=1, no kinetic"
+    }
 ]
 
 if CHOSEN_TYPE == 'mamba':
