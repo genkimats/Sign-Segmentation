@@ -234,18 +234,18 @@ EXPERIMENTS_TO_RUN = [
     #     "use_hamer_features": True,
     #     "description": "overlap ratio (0/128), hamer + mediapipe"
     # },
-    # {
-    #     "basename": "stgcn_bilstm",
-    #     "window_size": 128,
-    #     "class_weights": [1.0, 1.1, 12.4],
-    #     "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], no kinetic"
-    # },
     {
-        "basename": "stgcn_transformer",
-        "window_size": 128,
+        "basename": "stgcn_bilstm",
+        "window_size": 256,
         "class_weights": [1.0, 1.1, 12.4],
-        "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], no kinetic"
+        "description": "overlap ratio (0/256), weights=[1.0, 1.1, 12.4], no kinetic"
     },
+    # {
+    #     "basename": "stgcn_transformer",
+    #     "window_size": 256,
+    #     "class_weights": [1.0, 1.1, 12.4],
+    #     "description": "overlap ratio (0/256), weights=[1.0, 1.1, 12.4], no kinetic"
+    # },
     # {
     #     "basename": "stgcn_bilstm",
     #     "window_size": 128,
