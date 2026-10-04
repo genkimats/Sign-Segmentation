@@ -34,7 +34,7 @@ from src.metrics import (extract_segments, decode_threshold_2023, segment_iou,
 # 🎛️ CONFIGURATION
 # ==============================================================================
 CHOSEN_MODEL = "stgcn_bilstm"
-PREFIX = "15"
+PREFIX = "10"
 TARGET_SPLIT = "val"            # "train", "val", "test" or "all"
 
 DISPLAY_WINDOW = 512            # frames shown per page (display only; inference always
@@ -86,6 +86,7 @@ def build_dataset(hp, split):
         temporal_downsample_factor=hp.get("temporal_downsample_factor", 1),
         use_face_keypoints=hp.get("use_face_keypoints", False),
         face_dir=hp.get("face_dir", "processed_data/face_keypoints_normalized"),
+        face_subset=hp.get("face_subset", "full"),
         use_hamer_features=hp.get("use_hamer_features", False),
         hamer_dir=hp.get("hamer_dir", "processed_data/hamer_features"),
         use_dinov2_features=hp.get("use_dinov2_features", False),

@@ -1,21 +1,17 @@
 import numpy as np
 
+from src.face_subsets import (FACE_REGIONS, ANCHOR_LEFT_EYE_INNER, ANCHOR_RIGHT_EYE_INNER,
+                              LIPS_INDICES, LEFT_EYE_INDICES, RIGHT_EYE_INDICES,
+                              face_subset_for_vertex_count, face_subset_raw_indices)
+
+
 class SkeletonGraph:
-    # --- Must match extract_face_keypoints.py's SELECTED_INDICES construction
-    # exactly -- these determine which array position each face landmark ends
-    # up at, and therefore which local vertex id each face edge below refers to.
-    _LIPS_INDICES = [
-        61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 308, 324, 318, 402, 317, 14, 87, 178, 88, 95,
-        78, 191, 80, 81, 82, 13, 312, 311, 310, 415, 308
-    ]
-    _LEFT_EYE_INDICES = [33, 7, 163, 144, 145, 153, 154, 155, 133, 173, 157, 158, 159, 160, 161, 246]
-    _RIGHT_EYE_INDICES = [263, 249, 390, 373, 374, 380, 381, 382, 362, 398, 384, 385, 386, 387, 388, 466]
-    _LEFT_EYEBROW_INDICES = [70, 63, 105, 66, 107, 55, 65, 52, 53, 46]
-    _RIGHT_EYEBROW_INDICES = [300, 293, 334, 296, 336, 285, 295, 282, 283, 276]
-    _FACE_SELECTED_INDICES = sorted(list(set(
-        _LIPS_INDICES + _LEFT_EYE_INDICES + _RIGHT_EYE_INDICES + _LEFT_EYEBROW_INDICES + _RIGHT_EYEBROW_INDICES
-    )))
-    NUM_FACE_VERTICES = len(_FACE_SELECTED_INDICES)  # 83 -- must match queue_train.py's NUM_FACE_VERTICES
+    """
+    Body (23) + left hand (21) + right hand (21) = 65 vertices, optionally followed by
+    face vertices. The face part can be any subset defined in src/face_subsets.py
+    ("full" 83, "compact" 31, "eyes_brows" 22, "minimal" 18); the subset is inferred
+    from num_vertices - 65 (subset sizes are unique), so callers only pass num_vertices.
+    """
 
     def __init__(self, num_vertices=65):
         self.num_vertices = num_vertices
@@ -26,23 +22,17 @@ class SkeletonGraph:
         self.rh_indices = list(range(44, 65))
 
         # Face vertices, if present, always come after body+hands (65 .. num_vertices-1),
-        # matching dataset.py's face concatenation (appended along the VERTEX axis after
-        # body/hands). num_vertices > 65 is how this class detects that face is included --
-        # matches how queue_train.py's calculate_num_vertices() sets it.
+        # matching dataset.py's face concatenation (appended along the VERTEX axis).
         self.has_face = num_vertices > 65
         if self.has_face:
-            expected_face_count = num_vertices - 65
-            if expected_face_count != self.NUM_FACE_VERTICES:
-                raise ValueError(
-                    f"num_vertices={num_vertices} implies {expected_face_count} face vertices, "
-                    f"but SkeletonGraph's own face index list has {self.NUM_FACE_VERTICES}. "
-                    f"Keep _LIPS_INDICES/_LEFT_EYE_INDICES/etc. here in sync with "
-                    f"extract_face_keypoints.py's SELECTED_INDICES."
-                )
+            self.face_subset = face_subset_for_vertex_count(num_vertices - 65)
+            self.face_raw_indices = face_subset_raw_indices(self.face_subset)  # vertex order
             self.face_indices = list(range(65, num_vertices))
         else:
+            self.face_subset = None
+            self.face_raw_indices = []
             self.face_indices = []
-        
+
         # 1. Decoupled Matrices (for DecoupledSTGCNBlock)
         self.A_body = self._get_subgraph_adjacency(self.body_indices, self._get_body_edges())
         self.A_lh = self._get_subgraph_adjacency(self.lh_indices, self._get_hand_edges(offset=23))
@@ -72,37 +62,32 @@ class SkeletonGraph:
         ]
         return [(i + offset, j + offset) for i, j in hand_edges]
 
+    def _face_local_pos(self):
+        """raw MediaPipe index -> local face vertex position, for the loaded subset."""
+        return {raw: i for i, raw in enumerate(self.face_raw_indices)}
+
     def _get_face_edges(self, offset):
         """
-        Approximate face-mesh connectivity: each region (lips/eyes/eyebrows) is
-        connected as a chain following the SAME point order used to build
-        SELECTED_INDICES in extract_face_keypoints.py (which traces each
-        region's contour). Lips and eyes are closed loops (their contours
-        genuinely close on the face); eyebrows are open arcs (not closed).
-
-        NOTE: this is NOT the literal MediaPipe FACEMESH_TESSELATION graph --
-        it's a defensible approximation built from the ordering already present
-        in these index lists, chosen to avoid guessing at MediaPipe's internal
-        triangulation. Good enough for a spatial-locality prior; not a claim of
-        anatomical precision beyond "these points are on the same feature".
+        Approximate face connectivity: each region (lips / eyes / eyebrows) is a chain
+        following its contour order, keeping only the points in the loaded subset
+        (removed points are skipped, so their neighbours connect directly). Lips and
+        eyes are closed loops, eyebrows open arcs. A spatial-locality prior, not the
+        literal MediaPipe tessellation.
         """
-        pos = {raw_idx: local_pos for local_pos, raw_idx in enumerate(self._FACE_SELECTED_INDICES)}
-
-        def chain(raw_indices, close_loop):
-            edges = []
-            for k in range(len(raw_indices) - 1):
-                edges.append((pos[raw_indices[k]], pos[raw_indices[k + 1]]))
-            if close_loop:
-                edges.append((pos[raw_indices[-1]], pos[raw_indices[0]]))
-            return edges
-
+        pos = self._face_local_pos()
         edges = []
-        edges += chain(self._LIPS_INDICES, close_loop=True)
-        edges += chain(self._LEFT_EYE_INDICES, close_loop=True)
-        edges += chain(self._RIGHT_EYE_INDICES, close_loop=True)
-        edges += chain(self._LEFT_EYEBROW_INDICES, close_loop=False)
-        edges += chain(self._RIGHT_EYEBROW_INDICES, close_loop=False)
-
+        for raw_list, close_loop in FACE_REGIONS:
+            kept = []
+            for raw in raw_list:
+                if raw in pos and (not kept or kept[-1] != raw):
+                    kept.append(raw)
+            if len(kept) > 1 and kept[0] == kept[-1]:
+                kept = kept[:-1]  # contour list repeats its first point
+            for k in range(len(kept) - 1):
+                edges.append((pos[kept[k]], pos[kept[k + 1]]))
+            if close_loop and len(kept) > 2:
+                edges.append((pos[kept[-1]], pos[kept[0]]))
+        edges = sorted(set(tuple(sorted(e)) for e in edges if e[0] != e[1]))
         return [(i + offset, j + offset) for i, j in edges]
 
     def _get_all_edges(self):
@@ -116,20 +101,12 @@ class SkeletonGraph:
 
         if self.has_face:
             edges.extend(self._get_face_edges(offset=65))
-            # Anchor face to body. Body vertex 0 is the nose: BODY_LANDMARKS_KEPT
-            # preserves raw MediaPipe Pose indices 0..22 in order (confirmed by
-            # cross-checking extract_poses.py's "shoulders at index 11/12" comment
-            # and every edge in _get_body_edges against MediaPipe Pose's standard
-            # 33-point topology -- all 22 edges match exactly), and index 0 = nose
-            # in that topology. Connect nose to both inner eye corners (raw index
-            # 133 = left eye inner corner, 362 = right eye inner corner) as two
-            # symmetric anchor edges, mirroring how each hand anchors to its wrist
-            # above (15->23, 16->44).
-            face_pos = {raw_idx: local_pos for local_pos, raw_idx in enumerate(self._FACE_SELECTED_INDICES)}
-            left_eye_inner = 65 + face_pos[133]
-            right_eye_inner = 65 + face_pos[362]
-            edges.append((0, left_eye_inner))
-            edges.append((0, right_eye_inner))
+            # Anchor face to body: nose (body vertex 0) -> both inner eye corners
+            # (raw 133 / 362; every subset keeps them), mirroring how each hand
+            # anchors to its wrist above (15->23, 16->44).
+            pos = self._face_local_pos()
+            edges.append((0, 65 + pos[ANCHOR_LEFT_EYE_INNER]))
+            edges.append((0, 65 + pos[ANCHOR_RIGHT_EYE_INNER]))
 
         return edges
 
@@ -248,12 +225,16 @@ class SkeletonGraph:
         hyperedges.append([11, 12, 13, 14, 15, 16])
 
         if self.has_face:
-            face_pos = {raw_idx: local_pos for local_pos, raw_idx in enumerate(self._FACE_SELECTED_INDICES)}
+            face_pos = self._face_local_pos()
+
             def face_group(raw_indices):
+                # Same construction as before (contour order, including the repeated lips
+                # point), so the "full" subset reproduces the original hyperedges exactly.
                 return [65 + face_pos[i] for i in raw_indices if i in face_pos]
 
-            hyperedges.append(face_group(self._LIPS_INDICES))
-            hyperedges.append(face_group(self._LEFT_EYE_INDICES))
-            hyperedges.append(face_group(self._RIGHT_EYE_INDICES))
+            for group in (face_group(LIPS_INDICES), face_group(LEFT_EYE_INDICES),
+                          face_group(RIGHT_EYE_INDICES)):
+                if len(set(group)) >= 2:
+                    hyperedges.append(group)
 
         return hyperedges

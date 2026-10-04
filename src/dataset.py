@@ -5,6 +5,8 @@ import numpy as np
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
+from src.face_subsets import face_subset_positions, SAVED_FACE_INDICES
+
 def apply_label_smoothing(labels_array, window_size=5):
     """
     Converts 1D hard labels into 2D soft probability distributions.
@@ -47,7 +49,7 @@ def apply_label_smoothing(labels_array, window_size=5):
     return soft_labels
 
 class SignSegmentationDataset(Dataset):
-    def __init__(self, keypoints_dir, labels_dir, split_file="dataset_splits.json", split="train", window_size=16, overlap=0, tolerance_window=5, use_full_length=False, base_features=None, kinematic_features=None, temporal_downsample_factor=1, use_face_keypoints=False, face_dir="processed_data/face_keypoints_normalized", use_hamer_features=False, hamer_dir="processed_data/hamer_features", use_dinov2_features=False, dinov2_dir="processed_data/dinov2_features"):
+    def __init__(self, keypoints_dir, labels_dir, split_file="dataset_splits.json", split="train", window_size=16, overlap=0, tolerance_window=5, use_full_length=False, base_features=None, kinematic_features=None, temporal_downsample_factor=1, use_face_keypoints=False, face_dir="processed_data/face_keypoints_normalized", face_subset="full", use_hamer_features=False, hamer_dir="processed_data/hamer_features", use_dinov2_features=False, dinov2_dir="processed_data/dinov2_features"):
         self.labels_dir = labels_dir
         self.kinetic_dir = "processed_data/kinematic_features" 
         self.split_file = split_file
@@ -59,6 +61,11 @@ class SignSegmentationDataset(Dataset):
         self.temporal_downsample_factor = temporal_downsample_factor
         self.use_face_keypoints = use_face_keypoints
         self.face_dir = face_dir
+        # Which of the saved face points to load (src/face_subsets.py): "full" (83),
+        # "compact" (31), "eyes_brows" (22) or "minimal" (18). Selected at load time;
+        # the saved face files are not changed.
+        self.face_subset = face_subset
+        self.face_positions = face_subset_positions(face_subset) if use_face_keypoints else None
         self.use_hamer_features = use_hamer_features
         self.hamer_dir = hamer_dir
         self.use_dinov2_features = use_dinov2_features
@@ -93,18 +100,12 @@ class SignSegmentationDataset(Dataset):
                       f"{self.kinematic_features} (they are MediaPipe-based).")
 
         if self.use_face_keypoints:
-            # IMPORTANT: this changes the vertex axis (65 -> 65 + NUM_FACE_VERTICES), not the
-            # channel axis. Graph-based models (STGCN_Mamba, Decoupled_STGCN_Mamba, etc.) read
-            # their adjacency matrix from src/graph.py's SkeletonGraph, which is still hardcoded
-            # to 65 vertices -- using face keypoints with those models WILL fail with a shape
-            # mismatch in SpatialGraphConv until SkeletonGraph is extended to include face
-            # vertices/edges. Non-graph models (PureMambaBaseline, BiMambaBaseline) work as-is,
-            # since they don't depend on a fixed adjacency structure.
-            print(f"[{split.upper()}] use_face_keypoints=True -- vertex axis will be "
-                  f"65 + face-vertex-count (see processed_data/face_keypoints/*.npy shapes). "
-                  f"Make sure num_vertices in your config/queue matches, and that you're using "
-                  f"a non-graph model unless src/graph.py has been extended for face vertices.")
-        
+            # Face points are appended along the VERTEX axis: 65 + subset size. Graph models
+            # build the matching face graph from num_vertices (src/graph.py).
+            print(f"[{split.upper()}] face keypoints: subset '{face_subset}' "
+                  f"({len(self.face_positions)} of {len(SAVED_FACE_INDICES)} saved points) -> "
+                  f"{65 + len(self.face_positions)} vertices")
+
         with open(split_file, 'r') as f:
             splits = json.load(f)
             
@@ -207,6 +208,14 @@ class SignSegmentationDataset(Dataset):
                     skip_counts["face_frame_mismatch"] += 1
                     skipped_videos.setdefault("face_frame_mismatch", []).append((vid, f"face frames={face_raw.shape[0]}, label frames={num_frames}"))
                     continue  # frame count doesn't match labels/body -- skip rather than risk misaligning them
+
+                if face_raw.shape[1] != len(SAVED_FACE_INDICES):
+                    raise ValueError(
+                        f"{face_path} has {face_raw.shape[1]} face points, expected "
+                        f"{len(SAVED_FACE_INDICES)} (the layout src/face_subsets.py assumes). "
+                        f"Keep face_subsets.py in sync with extract_face_keypoints.py."
+                    )
+                face_raw = face_raw[:, self.face_positions, :]  # keep only the chosen subset
 
                 face_selected = face_raw[:, :, base_indices] if base_indices else face_raw
 

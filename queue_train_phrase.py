@@ -22,7 +22,7 @@ MAMBA_DEFAULTS = {
     "patience": 10,
     "learning_rate": 0.0001,
     "num_vertices": 65,
-    "tolerance_window": 1,
+    "tolerance_window": 5,
     "temporal_downsample_factor": 1, 
     "loss_function": "weighted_ce",  
     "ctc_weight": 0.5,             
@@ -34,6 +34,9 @@ MAMBA_DEFAULTS = {
     "in_channels": 5, 
     "use_face_keypoints": False,
     "face_dir": "processed_data/face_keypoints_normalized",
+    # Which saved face points to load when use_face_keypoints=True (see src/face_subsets.py):
+    #   "full" 83 | "compact" 31 (eyes, brows, mouth) | "eyes_brows" 22 | "minimal" 18
+    "face_subset": "full",
     "use_hamer_features": False,
     "hamer_dir": "processed_data/hamer_features",
     "use_dinov2_features": False,
@@ -87,9 +90,9 @@ def calculate_in_channels(config):
 # ==============================================================================
 # 🚦 DYNAMIC NUM_VERTICES CALCULATOR
 # ==============================================================================
-# Must match len(SELECTED_INDICES) in extract_face_keypoints.py -- update both
-# together if that index list ever changes.
-NUM_FACE_VERTICES = 83
+# Face vertex count now depends on the chosen face_subset (src/face_subsets.py is the
+# single source of truth, shared with dataset.py and graph.py).
+from src.face_subsets import face_subset_size
 BASE_BODY_HAND_VERTICES = 65
 
 def calculate_num_vertices(config):
@@ -103,7 +106,7 @@ def calculate_num_vertices(config):
 
     total = BASE_BODY_HAND_VERTICES
     if config.get("use_face_keypoints", False):
-        total += NUM_FACE_VERTICES
+        total += face_subset_size(config.get("face_subset", "full"))
     return total
 #endregion
 
@@ -234,29 +237,44 @@ EXPERIMENTS_TO_RUN = [
     #     "use_hamer_features": True,
     #     "description": "overlap ratio (0/128), hamer + mediapipe"
     # },
+    # {
+    #     "basename": "stgcn_bilstm",
+    #     "window_size": 128,
+    #     "description": "overlap ratio (0/128), tolerance=1, no kinetic"
+    # },
     {
         "basename": "stgcn_bilstm",
         "window_size": 128,
-        "description": "overlap ratio (0/128), tolerance=1, no kinetic"
+        "class_weights": [1.0, 1.1, 12.4],
+        "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe only"
+    },
+    {
+        "basename": "stgcn_bilstm",
+        "window_size": 128,
+        "class_weights": [1.0, 1.1, 12.4],
+        "use_hamer_features": True,
+        "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + hamer"
     },
     # {
     #     "basename": "stgcn_bilstm",
     #     "window_size": 128,
-    #     "tolerance_window": 3,
-    #     "description": "overlap ratio (0/128), tolerance=3, no kinetic"
+    #     "class_weights": [1.0, 1.1, 12.4],
+    #     "use_hamer_features": True,
+    #     "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + hamer"
     # },
+
     # {
     #     "basename": "stgcn_bilstm",
     #     "window_size": 128,
     #     "tolerance_window": 5,
     #     "description": "overlap ratio (0/128), tolerance=5, no kinetic"
     # },
-    {
-        "basename": "stgcn_bilstm",
-        "window_size": 128,
-        "class_weights": [1.0, 1.1, 15.0],
-        "description": "overlap ratio (0/128), weights=[1.0, 1.1, 15.0], no kinetic"
-    },
+    # {
+    #     "basename": "stgcn_bilstm",
+    #     "window_size": 128,
+    #     "class_weights": [1.0, 1.1, 15.0],
+    #     "description": "overlap ratio (0/128), weights=[1.0, 1.1, 15.0], no kinetic"
+    # },
     # {
     #     "basename": "stgcn_bilstm",
     #     "window_size": 128,

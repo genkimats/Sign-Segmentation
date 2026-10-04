@@ -114,6 +114,9 @@ def train_model(config):
     IN_CHANNELS = config["in_channels"]
     USE_FACE_KEYPOINTS = config.get("use_face_keypoints", False)
     FACE_DIR = config.get("face_dir", "processed_data/face_keypoints_normalized")
+    # Which saved face points to load: "full" (83), "compact" (31), "eyes_brows" (22), "minimal" (18).
+    # Old configs without this key load all 83 points, exactly as before.
+    FACE_SUBSET = config.get("face_subset", "full")
     USE_HAMER_FEATURES = config.get("use_hamer_features", False)
     HAMER_DIR = config.get("hamer_dir", "processed_data/hamer_features")
     USE_DINOV2_FEATURES = config.get("use_dinov2_features", False)
@@ -152,6 +155,7 @@ def train_model(config):
         temporal_downsample_factor=DOWNSAMPLE_FACTOR,
         use_face_keypoints=USE_FACE_KEYPOINTS,
         face_dir=FACE_DIR,
+        face_subset=FACE_SUBSET,
         use_hamer_features=USE_HAMER_FEATURES,
         hamer_dir=HAMER_DIR,
         use_dinov2_features=USE_DINOV2_FEATURES,
@@ -172,6 +176,7 @@ def train_model(config):
         temporal_downsample_factor=DOWNSAMPLE_FACTOR,
         use_face_keypoints=USE_FACE_KEYPOINTS,
         face_dir=FACE_DIR,
+        face_subset=FACE_SUBSET,
         use_hamer_features=USE_HAMER_FEATURES,
         hamer_dir=HAMER_DIR,
         use_dinov2_features=USE_DINOV2_FEATURES,
