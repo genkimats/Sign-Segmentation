@@ -117,6 +117,7 @@ def train_model(config):
     # Which saved face points to load: "full" (83), "compact" (31), "eyes_brows" (22), "minimal" (18).
     # Old configs without this key load all 83 points, exactly as before.
     FACE_SUBSET = config.get("face_subset", "full")
+    FACE_ONLY = config.get("face_only", False)  # True: face vertices only (body + hands dropped)
     USE_HAMER_FEATURES = config.get("use_hamer_features", False)
     HAMER_DIR = config.get("hamer_dir", "processed_data/hamer_features")
     USE_DINOV2_FEATURES = config.get("use_dinov2_features", False)
@@ -156,6 +157,7 @@ def train_model(config):
         use_face_keypoints=USE_FACE_KEYPOINTS,
         face_dir=FACE_DIR,
         face_subset=FACE_SUBSET,
+        face_only=FACE_ONLY,
         use_hamer_features=USE_HAMER_FEATURES,
         hamer_dir=HAMER_DIR,
         use_dinov2_features=USE_DINOV2_FEATURES,
@@ -177,6 +179,7 @@ def train_model(config):
         use_face_keypoints=USE_FACE_KEYPOINTS,
         face_dir=FACE_DIR,
         face_subset=FACE_SUBSET,
+        face_only=FACE_ONLY,
         use_hamer_features=USE_HAMER_FEATURES,
         hamer_dir=HAMER_DIR,
         use_dinov2_features=USE_DINOV2_FEATURES,

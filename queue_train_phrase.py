@@ -22,7 +22,7 @@ MAMBA_DEFAULTS = {
     "patience": 10,
     "learning_rate": 0.0001,
     "num_vertices": 65,
-    "tolerance_window": 1,
+    "tolerance_window": 5,
     "temporal_downsample_factor": 1, 
     "loss_function": "weighted_ce",  
     "ctc_weight": 0.5,             
@@ -37,6 +37,9 @@ MAMBA_DEFAULTS = {
     # Which saved face points to load when use_face_keypoints=True (see src/face_subsets.py):
     #   "full" 83 | "compact" 31 (eyes, brows, mouth) | "eyes_brows" 22 | "minimal" 18
     "face_subset": "full",
+    # True = face vertices ONLY (body + hands dropped); needs use_face_keypoints=True and
+    # kinematic_features=[]. Works with stgcn_bilstm / stgcn_transformer / *_baseline.
+    "face_only": False,
     "use_hamer_features": False,
     "hamer_dir": "processed_data/hamer_features",
     # Stream balancing (stgcn_bilstm / stgcn_transformer): project the flattened ST-GCN
@@ -108,6 +111,9 @@ def calculate_num_vertices(config):
         # cloud), so num_vertices isn't meaningful the same way here -- leave whatever
         # the config already specifies untouched rather than guessing.
         return config.get("num_vertices", BASE_BODY_HAND_VERTICES)
+
+    if config.get("face_only", False):
+        return face_subset_size(config.get("face_subset", "full"))
 
     total = BASE_BODY_HAND_VERTICES
     if config.get("use_face_keypoints", False):
@@ -230,56 +236,56 @@ EXPERIMENTS_TO_RUN = [
     #  "description": "METRIC FIX: overlap ratio (0/128), tolerance=1, pure_hamer"},
 
     
-    # {
-    #     "basename": "stgcn_bilstm",
-    #     "window_size": 128,
-    #     "use_hamer_features": True,
-    #     "description": "overlap ratio (0/128), hamer + mediapipe"
-    # },
-    # {
-    #     "basename": "stgcn_transformer",
-    #     "window_size": 128,
-    #     "use_hamer_features": True,
-    #     "description": "overlap ratio (0/128), hamer + mediapipe"
-    # },
-    # {
-    #     "basename": "stgcn_bilstm",
-    #     "window_size": 128,
-    #     "description": "overlap ratio (0/128), tolerance=1, no kinetic"
-    # },
+    {
+        "basename": "stgcn_bilstm",
+        "window_size": 128,
+        "description": "overlap ratio (0/128), mediapipe"
+    },
+    {
+        "basename": "stgcn_bilstm",
+        "window_size": 128,
+        "use_hamer_features": True,
+        "description": "overlap ratio (0/128), hamer + mediapipe"
+    },
+    {
+        "basename": "stgcn_bilstm",
+        "window_size": 128,
+        "use_hamer_features": True,
+        "description": "overlap ratio (0/128), hamer + mediapipe"
+    },
 
-    {
-        "basename": "stgcn_bilstm",
-        "window_size": 128,
-        "class_weights": [1.0, 1.1, 12.4],
-        "face_subset": "full",
-        "use_face_keypoints": True,
-        "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + full face"
-    },
-    {
-        "basename": "stgcn_bilstm",
-        "window_size": 128,
-        "class_weights": [1.0, 1.1, 12.4],
-        "face_subset": "compact",
-        "use_face_keypoints": True,
-        "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + compact face"
-    },
-    {
-        "basename": "stgcn_bilstm",
-        "window_size": 128,
-        "class_weights": [1.0, 1.1, 12.4],
-        "face_subset": "eyes_brows",
-        "use_face_keypoints": True,
-        "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + eyes brows"
-    },
-    {
-        "basename": "stgcn_bilstm",
-        "window_size": 128,
-        "class_weights": [1.0, 1.1, 12.4],
-        "face_subset": "minimal",
-        "use_face_keypoints": True,
-        "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + minimal face"
-    },
+    # {
+    #     "basename": "stgcn_bilstm",
+    #     "window_size": 128,
+    #     "class_weights": [1.0, 1.1, 12.4],
+    #     "face_subset": "full",
+    #     "use_face_keypoints": True,
+    #     "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + full face"
+    # },
+    # {
+    #     "basename": "stgcn_bilstm",
+    #     "window_size": 128,
+    #     "class_weights": [1.0, 1.1, 12.4],
+    #     "face_subset": "compact",
+    #     "use_face_keypoints": True,
+    #     "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + compact face"
+    # },
+    # {
+    #     "basename": "stgcn_bilstm",
+    #     "window_size": 128,
+    #     "class_weights": [1.0, 1.1, 12.4],
+    #     "face_subset": "eyes_brows",
+    #     "use_face_keypoints": True,
+    #     "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + eyes brows"
+    # },
+    # {
+    #     "basename": "stgcn_bilstm",
+    #     "window_size": 128,
+    #     "class_weights": [1.0, 1.1, 12.4],
+    #     "face_subset": "minimal",
+    #     "use_face_keypoints": True,
+    #     "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + minimal face"
+    # },
 
 
     # {

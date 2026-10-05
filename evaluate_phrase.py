@@ -98,6 +98,7 @@ def dataset_key(config):
         "use_face_keypoints": config.get("use_face_keypoints", False),
         "face_dir": config.get("face_dir"),
         "face_subset": config.get("face_subset", "full"),
+        "face_only": config.get("face_only", False),
         "use_hamer_features": config.get("use_hamer_features", False),
         "hamer_dir": config.get("hamer_dir"),
         "use_dinov2_features": config.get("use_dinov2_features", False),
@@ -136,6 +137,7 @@ def get_dataset(config, split):
             use_face_keypoints=config.get("use_face_keypoints", False),
             face_dir=config.get("face_dir", "processed_data/face_keypoints_normalized"),
             face_subset=config.get("face_subset", "full"),
+            face_only=config.get("face_only", False),
             use_hamer_features=config.get("use_hamer_features", False),
             hamer_dir=config.get("hamer_dir", "processed_data/hamer_features"),
             use_dinov2_features=config.get("use_dinov2_features", False),
@@ -381,6 +383,9 @@ def main():
             m = results[key]
             print(f"  [{label:<22}] Frame F1 {m['Frame_F1']:.4f} | IoU {m['IoU']:.4f} | "
                   f"% (ratio) {m['Pct']:.4f} | SegF1@0.5 {m['Segment_F1_05']:.4f}")
+            if key == "argmax":  # per-class F1 is decoder-independent (always argmax)
+                print(f"  {'':<24} Frame F1 per class: O {m['F1_O']:.4f} | I {m['F1_I']:.4f} | "
+                      f"B {m['F1_B']:.4f}  (Frame F1 = their average)")
             if args.per_video:
                 print_per_video(m["per_video"])
             rows.append({
@@ -388,6 +393,9 @@ def main():
                 "prefix": prefix,
                 "decoder": label,
                 "frame_f1": round(m["Frame_F1"], 4),
+                "f1_O": round(m["F1_O"], 4),
+                "f1_I": round(m["F1_I"], 4),
+                "f1_B": round(m["F1_B"], 4),
                 "iou": round(m["IoU"], 4),
                 "segment_pct": round(m["Pct"], 4),
                 "segment_f1_05": round(m["Segment_F1_05"], 4),

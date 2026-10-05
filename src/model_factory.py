@@ -128,6 +128,14 @@ def build_model_kwargs(config, detected_hamer_dim=None, detected_dinov2_dim=None
                              f"'{key}' argument. Remove it from the config or use a model that supports it.")
         model_kwargs[key] = int(value)
 
+    # Face-only input (dataset face_only mode): graph models must build a face-only graph.
+    if config.get("face_only", False):
+        if "face_only" in accepted:
+            model_kwargs["face_only"] = True
+        elif model_name not in ("bilstm_baseline", "transformer_baseline"):
+            raise ValueError(f"face_only=True but model '{model_name}' has no face-only graph. "
+                             f"Use stgcn_bilstm, stgcn_transformer, bilstm_baseline or transformer_baseline.")
+
     return model_class, model_kwargs
 
 

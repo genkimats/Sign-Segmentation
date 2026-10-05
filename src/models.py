@@ -204,10 +204,11 @@ class STGCN_Transformer(nn.Module):
     Extracts isolated spatial kinetics using a Graph Convolutional Network, 
     then applies global temporal attention using a Transformer Encoder.
     """
-    def __init__(self, in_channels, num_vertices, num_classes=3, stgcn_channels=64, d_model=256, n_layers=4, nhead=8, dim_feedforward=1024, dropout=0.2, hamer_dim=None, hamer_proj_dim=64, dinov2_dim=None, dinov2_proj_dim=128, stgcn_proj_dim=None):
+    def __init__(self, in_channels, num_vertices, num_classes=3, stgcn_channels=64, d_model=256, n_layers=4, nhead=8, dim_feedforward=1024, dropout=0.2, hamer_dim=None, hamer_proj_dim=64, dinov2_dim=None, dinov2_proj_dim=128, stgcn_proj_dim=None, face_only=False):
         super().__init__()
         
-        graph = SkeletonGraph(num_vertices=num_vertices)
+        # face_only=True: input holds ONLY face vertices (dataset face_only mode)
+        graph = SkeletonGraph(num_vertices=num_vertices, face_only=face_only)
         A = graph.A
         self.stgcn_blocks = nn.Sequential(
             STGCNBlock(in_channels, stgcn_channels, A),
@@ -562,9 +563,9 @@ class STGCN_BiMamba(nn.Module):
 
 
 class STGCN_BiLSTM(nn.Module):
-    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hamer_dim=None, hamer_proj_dim=64, dinov2_dim=None, dinov2_proj_dim=128, stgcn_proj_dim=None):
+    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hamer_dim=None, hamer_proj_dim=64, dinov2_dim=None, dinov2_proj_dim=128, stgcn_proj_dim=None, face_only=False):
         super(STGCN_BiLSTM, self).__init__()
-        graph = SkeletonGraph(num_vertices=num_vertices)
+        graph = SkeletonGraph(num_vertices=num_vertices, face_only=face_only)  # face_only: face vertices only
         A = graph.A
         self.stgcn_blocks = nn.Sequential(
             STGCNBlock(in_channels, stgcn_channels, A),

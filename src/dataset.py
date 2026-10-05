@@ -49,7 +49,7 @@ def apply_label_smoothing(labels_array, window_size=5):
     return soft_labels
 
 class SignSegmentationDataset(Dataset):
-    def __init__(self, keypoints_dir, labels_dir, split_file="dataset_splits.json", split="train", window_size=16, overlap=0, tolerance_window=5, use_full_length=False, base_features=None, kinematic_features=None, temporal_downsample_factor=1, use_face_keypoints=False, face_dir="processed_data/face_keypoints_normalized", face_subset="full", use_hamer_features=False, hamer_dir="processed_data/hamer_features", use_dinov2_features=False, dinov2_dir="processed_data/dinov2_features"):
+    def __init__(self, keypoints_dir, labels_dir, split_file="dataset_splits.json", split="train", window_size=16, overlap=0, tolerance_window=5, use_full_length=False, base_features=None, kinematic_features=None, temporal_downsample_factor=1, use_face_keypoints=False, face_dir="processed_data/face_keypoints_normalized", face_subset="full", face_only=False, use_hamer_features=False, hamer_dir="processed_data/hamer_features", use_dinov2_features=False, dinov2_dir="processed_data/dinov2_features"):
         self.labels_dir = labels_dir
         self.kinetic_dir = "processed_data/kinematic_features" 
         self.split_file = split_file
@@ -65,6 +65,16 @@ class SignSegmentationDataset(Dataset):
         # "compact" (31), "eyes_brows" (22) or "minimal" (18). Selected at load time;
         # the saved face files are not changed.
         self.face_subset = face_subset
+        # FACE-ONLY MODE: keep ONLY the face vertices (drop body + hands), e.g. to measure
+        # how much phrase information the face carries on its own. Needs
+        # use_face_keypoints=True; graph models then build a face-only graph (face_only=True).
+        self.face_only = face_only
+        if face_only:
+            if not use_face_keypoints:
+                raise ValueError("face_only=True requires use_face_keypoints=True.")
+            if kinematic_features:
+                raise ValueError("face_only=True with kinematic_features: the face has no kinematic "
+                                 "channels (they would be all zeros). Use kinematic_features=[].")
         self.face_positions = face_subset_positions(face_subset) if use_face_keypoints else None
         self.use_hamer_features = use_hamer_features
         self.hamer_dir = hamer_dir
@@ -102,9 +112,10 @@ class SignSegmentationDataset(Dataset):
         if self.use_face_keypoints:
             # Face points are appended along the VERTEX axis: 65 + subset size. Graph models
             # build the matching face graph from num_vertices (src/graph.py).
+            n_vertices = len(self.face_positions) + (0 if face_only else 65)
             print(f"[{split.upper()}] face keypoints: subset '{face_subset}' "
                   f"({len(self.face_positions)} of {len(SAVED_FACE_INDICES)} saved points) -> "
-                  f"{65 + len(self.face_positions)} vertices")
+                  f"{n_vertices} vertices" + (" (FACE ONLY: body + hands dropped)" if face_only else ""))
 
         with open(split_file, 'r') as f:
             splits = json.load(f)
@@ -233,6 +244,8 @@ class SignSegmentationDataset(Dataset):
                 # processed_data/face_keypoints/ directory instead, that guarantee no longer
                 # holds -- only do that deliberately (e.g. for debugging).
                 final_tensor = torch.cat([final_tensor, face_padded], dim=1)  # concat along the VERTEX axis
+                if self.face_only:
+                    final_tensor = final_tensor[:, 65:, :].contiguous()  # drop body (23) + hands (42)
 
             # --- OPTIONAL: HAMER HAND-POSE FEATURES (from extract_hamer_features.py) ---
             # Unlike face keypoints, HaMeR features are NOT folded into the per-vertex

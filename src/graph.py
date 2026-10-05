@@ -11,10 +11,26 @@ class SkeletonGraph:
     face vertices. The face part can be any subset defined in src/face_subsets.py
     ("full" 83, "compact" 31, "eyes_brows" 22, "minimal" 18); the subset is inferred
     from num_vertices - 65 (subset sizes are unique), so callers only pass num_vertices.
+
+    face_only=True: the graph contains ONLY face vertices (0 .. num_vertices-1), no body or
+    hands; the subset is inferred from num_vertices itself. Decoupled body/hand matrices
+    don't exist in this mode.
     """
 
-    def __init__(self, num_vertices=65):
+    def __init__(self, num_vertices=65, face_only=False):
         self.num_vertices = num_vertices
+        self.face_only = face_only
+        if face_only:
+            self.body_indices, self.lh_indices, self.rh_indices = [], [], []
+            self.has_face = True
+            self.face_offset = 0
+            self.face_subset = face_subset_for_vertex_count(num_vertices)
+            self.face_raw_indices = face_subset_raw_indices(self.face_subset)
+            self.face_indices = list(range(0, num_vertices))
+            self.A_face = self._get_subgraph_adjacency(self.face_indices, self._get_face_edges(offset=0))
+            self.A = self._get_subgraph_adjacency(self.face_indices, self._get_all_edges())
+            return
+        self.face_offset = 65
         
         # Define indices for each anatomical part
         self.body_indices = list(range(0, 23))
@@ -92,6 +108,8 @@ class SkeletonGraph:
 
     def _get_all_edges(self):
         """Combines all edges to build the full skeleton graph."""
+        if self.face_only:
+            return self._get_face_edges(offset=0)
         edges = self._get_body_edges()
         edges.extend(self._get_hand_edges(offset=23))
         edges.extend(self._get_hand_edges(offset=44))
@@ -209,6 +227,13 @@ class SkeletonGraph:
         Returns a list of vertex-index lists (each list = one hyperedge).
         """
         hyperedges = []
+        if self.face_only:
+            face_pos = self._face_local_pos()
+            for raw_list in (LIPS_INDICES, LEFT_EYE_INDICES, RIGHT_EYE_INDICES):
+                group = [face_pos[i] for i in raw_list if i in face_pos]
+                if len(set(group)) >= 2:
+                    hyperedges.append(group)
+            return hyperedges
 
         # Hand topology (within each 21-point hand block, LOCAL indices):
         # 0=wrist, 1-4=thumb, 5-8=index, 9-12=middle, 13-16=ring, 17-20=pinky
