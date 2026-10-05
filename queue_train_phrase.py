@@ -239,6 +239,7 @@ EXPERIMENTS_TO_RUN = [
     {
         "basename": "stgcn_bilstm",
         "window_size": 128,
+        "class_weights": [1.0, 1.1, 12.4],
         "description": "overlap ratio (0/128), mediapipe"
     },
     {
@@ -247,6 +248,7 @@ EXPERIMENTS_TO_RUN = [
         "use_hamer_features": True,
         "stgcn_proj_dim": 192,
         "hamer_proj_dim": 128,
+        "class_weights": [1.0, 1.1, 12.4],
         "description": "overlap ratio (0/128), st_proj=192, hamer_proj=128, hamer + mediapipe"
     },
     {
@@ -255,6 +257,7 @@ EXPERIMENTS_TO_RUN = [
         "face_only": True,
         "use_face_keypoints": True,
         "face_subset": "full",
+        "class_weights": [1.0, 1.1, 12.4],
         "description": "overlap ratio (0/128), full face"
     },
     {
@@ -263,6 +266,7 @@ EXPERIMENTS_TO_RUN = [
         "face_only": True,
         "use_face_keypoints": True,
         "face_subset": "compact",
+        "class_weights": [1.0, 1.1, 12.4],
         "description": "overlap ratio (0/128), compact face"
     },
     {
@@ -271,6 +275,7 @@ EXPERIMENTS_TO_RUN = [
         "face_only": True,
         "use_face_keypoints": True,
         "face_subset": "eyes_brows",
+        "class_weights": [1.0, 1.1, 12.4],
         "description": "overlap ratio (0/128), eyes & brows"
     },
     {
@@ -279,6 +284,7 @@ EXPERIMENTS_TO_RUN = [
         "face_only": True,
         "use_face_keypoints": True,
         "face_subset": "minimal",
+        "class_weights": [1.0, 1.1, 12.4],
         "description": "overlap ratio (0/128), minimal face"
     },
 
