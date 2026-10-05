@@ -22,7 +22,7 @@ MAMBA_DEFAULTS = {
     "patience": 10,
     "learning_rate": 0.0001,
     "num_vertices": 65,
-    "tolerance_window": 5,
+    "tolerance_window": 1,
     "temporal_downsample_factor": 1, 
     "loss_function": "weighted_ce",  
     "ctc_weight": 0.5,             
@@ -247,21 +247,53 @@ EXPERIMENTS_TO_RUN = [
     #     "window_size": 128,
     #     "description": "overlap ratio (0/128), tolerance=1, no kinetic"
     # },
+
+    {
+        "basename": "stgcn_bilstm",
+        "window_size": 128,
+        "class_weights": [1.0, 1.1, 12.4],
+        "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe"
+    },
+    {
+        "basename": "stgcn_bilstm",
+        "window_size": 128,
+        "class_weights": [1.0, 1.1, 12.4],
+        "use_hamer_features": True,
+        "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + hamer"
+    },
+    {
+        "basename": "stgcn_bilstm",
+        "window_size": 128,
+        "class_weights": [1.0, 1.1, 12.4],
+        "tolerance_window": 3,
+        "description": "overlap ratio (0/128), tolerance=3, weights=[1.0, 1.1, 12.4], mediapipe"
+    },
+    {
+        "basename": "stgcn_bilstm",
+        "window_size": 128,
+        "class_weights": [1.0, 1.1, 12.4],
+        "tolerance_window": 5,
+        "description": "overlap ratio (0/128), tolerance=5, weights=[1.0, 1.1, 12.4], mediapipe"
+    },
     {
         "basename": "stgcn_bilstm",
         "window_size": 128,
         "class_weights": [1.0, 1.1, 12.4],
         "stgcn_proj_dim": 192,
         "use_hamer_features": True,
-        "description": "(0/128), st_proj=192, weights=[1.0, 1.1, 12.4], mediapipe + hamer"
+        "description": "(0/128), st_proj=192, st_proj=128, mediapipe + hamer"
+    },
+    {
+        "basename": "stgcn_bilstm",
+        "window_size": 128,
+        "class_weights": [1.0, 1.1, 12.4],
+        "stgcn_proj_dim": 192,
+        "hamer_proj_dim": 128,
+        "use_hamer_features": True,
+        "description": "(0/128), st_proj=192, hamer_proj=128, mediapipe + hamer"
     },
 
-    # {
-    #     "basename": "stgcn_bilstm",
-    #     "window_size": 128,
-    #     "tolerance_window": 5,
-    #     "description": "overlap ratio (0/128), tolerance=5, no kinetic"
-    # },
+    
     # {
     #     "basename": "stgcn_bilstm",
     #     "window_size": 128,
