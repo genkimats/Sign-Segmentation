@@ -253,6 +253,7 @@ EXPERIMENTS_TO_RUN = [
         "window_size": 128,
         "class_weights": [1.0, 1.1, 12.4],
         "face_subset": "full",
+        "use_face_keypoints": True,
         "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + full face"
     },
     {
@@ -260,6 +261,7 @@ EXPERIMENTS_TO_RUN = [
         "window_size": 128,
         "class_weights": [1.0, 1.1, 12.4],
         "face_subset": "compact",
+        "use_face_keypoints": True,
         "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + compact face"
     },
     {
@@ -267,6 +269,7 @@ EXPERIMENTS_TO_RUN = [
         "window_size": 128,
         "class_weights": [1.0, 1.1, 12.4],
         "face_subset": "eyes_brows",
+        "use_face_keypoints": True,
         "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + eyes brows"
     },
     {
@@ -274,6 +277,7 @@ EXPERIMENTS_TO_RUN = [
         "window_size": 128,
         "class_weights": [1.0, 1.1, 12.4],
         "face_subset": "minimal",
+        "use_face_keypoints": True,
         "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + minimal face"
     },
 
