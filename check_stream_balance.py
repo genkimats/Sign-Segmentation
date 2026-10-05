@@ -57,18 +57,23 @@ def find_projection_and_streams(model):
     if bridge_dim is None:
         raise RuntimeError("model has no `bridge_dim` (streams are not concatenated before a projection).")
     linear = None
-    proj = getattr(model, "projection", None)
-    if proj is not None:
+    for attr in ("projection", "feature_proj"):  # stgcn_bilstm / stgcn_transformer naming
+        proj = getattr(model, attr, None)
+        if proj is None:
+            continue
         for m in proj.modules():
             if isinstance(m, nn.Linear) and m.in_features == bridge_dim:
                 linear = m
                 break
+        if linear is not None:
+            break
     if linear is None:
-        raise RuntimeError("could not find a Linear layer with in_features == bridge_dim in `projection`.")
+        raise RuntimeError("could not find a Linear layer with in_features == bridge_dim in "
+                           "`projection` / `feature_proj`.")
 
     hamer_dim = model.hamer_encoder[0].out_features if getattr(model, "hamer_dim", None) else 0
     dinov2_dim = model.dinov2_encoder[0].out_features if getattr(model, "dinov2_dim", None) else 0
-    graph_dim = bridge_dim - hamer_dim - dinov2_dim
+    graph_dim = bridge_dim - hamer_dim - dinov2_dim  # = stgcn_proj_dim when the graph branch is projected
 
     streams = [("ST-GCN", 0, graph_dim)]
     if hamer_dim:

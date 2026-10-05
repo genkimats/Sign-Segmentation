@@ -39,6 +39,11 @@ MAMBA_DEFAULTS = {
     "face_subset": "full",
     "use_hamer_features": False,
     "hamer_dir": "processed_data/hamer_features",
+    # Stream balancing (stgcn_bilstm / stgcn_transformer): project the flattened ST-GCN
+    # output to this size before it is concatenated with HaMeR/DINOv2. None = off
+    # (original behaviour). hamer_proj_dim / dinov2_proj_dim can also be set per
+    # experiment (model defaults: 64 / 128).
+    "stgcn_proj_dim": None,
     "use_dinov2_features": False,
     "dinov2_dir": "processed_data/dinov2_features",
     "d_model": 256,
@@ -242,10 +247,19 @@ EXPERIMENTS_TO_RUN = [
     #     "window_size": 128,
     #     "description": "overlap ratio (0/128), tolerance=1, no kinetic"
     # },
+    # {
+    #     "basename": "stgcn_bilstm",
+    #     "window_size": 128,
+    #     "class_weights": [1.0, 1.1, 12.4],
+    #     "stgcn_proj_dim": 192,
+    #     "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe only"
+    # },
     {
         "basename": "stgcn_bilstm",
-        "window_size": 512,
+        "window_size": 128,
         "class_weights": [1.0, 1.1, 12.4],
+        "stgcn_proj_dim": 192,
+        "hamer_proj_dim": 128,
         "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe only"
     },
 

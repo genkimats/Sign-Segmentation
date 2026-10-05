@@ -7,6 +7,8 @@ nhead, dim_feedforward, mamba settings, latent_dim, hamer_dim, dinov2_dim, ...)
 as the one that was trained. The logic is moved here unchanged from
 train_phrase.py.
 """
+import inspect
+
 from src.models import (PureMambaBaseline, BiMambaBaseline, STGCN_Mamba, STGCN_MLP_Mamba,
                         STGCN_BiMamba, Decoupled_STGCN_Mamba, BiLSTM_Baseline, STGCN_BiLSTM,
                         TransformerBaseline, STGCN_Transformer, Latent_STGCN_Mamba,
@@ -112,6 +114,19 @@ def build_model_kwargs(config, detected_hamer_dim=None, detected_dinov2_dim=None
             raise RuntimeError("use_dinov2_features=True but no dinov2_dim was detected in the data "
                                "and none is set in the config.")
         model_kwargs["dinov2_dim"] = dinov2_dim
+
+    # Optional per-stream branch sizes (stream balancing). Only passed when set in the
+    # config, so old configs/checkpoints build exactly as before. A model that doesn't
+    # support a requested size raises instead of silently ignoring it.
+    accepted = inspect.signature(model_class.__init__).parameters
+    for key in ("stgcn_proj_dim", "hamer_proj_dim", "dinov2_proj_dim"):
+        value = config.get(key)
+        if value is None:
+            continue
+        if key not in accepted:
+            raise ValueError(f"Config sets {key}={value}, but model '{model_name}' has no "
+                             f"'{key}' argument. Remove it from the config or use a model that supports it.")
+        model_kwargs[key] = int(value)
 
     return model_class, model_kwargs
 

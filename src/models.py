@@ -204,7 +204,7 @@ class STGCN_Transformer(nn.Module):
     Extracts isolated spatial kinetics using a Graph Convolutional Network, 
     then applies global temporal attention using a Transformer Encoder.
     """
-    def __init__(self, in_channels, num_vertices, num_classes=3, stgcn_channels=64, d_model=256, n_layers=4, nhead=8, dim_feedforward=1024, dropout=0.2, hamer_dim=None, hamer_proj_dim=64, dinov2_dim=None, dinov2_proj_dim=128):
+    def __init__(self, in_channels, num_vertices, num_classes=3, stgcn_channels=64, d_model=256, n_layers=4, nhead=8, dim_feedforward=1024, dropout=0.2, hamer_dim=None, hamer_proj_dim=64, dinov2_dim=None, dinov2_proj_dim=128, stgcn_proj_dim=None):
         super().__init__()
         
         graph = SkeletonGraph(num_vertices=num_vertices)
@@ -213,8 +213,26 @@ class STGCN_Transformer(nn.Module):
             STGCNBlock(in_channels, stgcn_channels, A),
             STGCNBlock(stgcn_channels, stgcn_channels, A)
         )
-        
-        self.bridge_dim = num_vertices * stgcn_channels
+
+        # Optional graph-feature projection ("stream balancing"): without it, the
+        # flattened ST-GCN output (num_vertices * stgcn_channels, e.g. 4160) is
+        # concatenated directly with the much smaller HaMeR/DINOv2 branches, so it
+        # dominates the shared projection simply by having far more dimensions.
+        # With stgcn_proj_dim set, the graph features get their own branch
+        # (Linear -> LayerNorm -> GELU -> Dropout, same design as the HaMeR branch)
+        # down to stgcn_proj_dim before the concatenation. None = original behaviour
+        # (keeps old checkpoints loadable).
+        self.stgcn_proj_dim = stgcn_proj_dim
+        if stgcn_proj_dim is not None:
+            self.stgcn_proj = nn.Sequential(
+                nn.Linear(num_vertices * stgcn_channels, stgcn_proj_dim),
+                nn.LayerNorm(stgcn_proj_dim),
+                nn.GELU(),
+                nn.Dropout(dropout)
+            )
+            self.bridge_dim = stgcn_proj_dim
+        else:
+            self.bridge_dim = num_vertices * stgcn_channels
 
         # Optional separate HaMeR branch -- see STGCN_Mamba's comment for why this is
         # fused here (before feature_proj) rather than folded into the graph.
@@ -269,6 +287,8 @@ class STGCN_Transformer(nn.Module):
         x = self.stgcn_blocks(x) 
         x = x.permute(0, 2, 3, 1).contiguous()
         x = x.view(B, T, -1)
+        if self.stgcn_proj_dim is not None:
+            x = self.stgcn_proj(x)  # (B, T, stgcn_proj_dim)
 
         if self.hamer_dim is not None:
             if hamer is None:
@@ -542,7 +562,7 @@ class STGCN_BiMamba(nn.Module):
 
 
 class STGCN_BiLSTM(nn.Module):
-    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hamer_dim=None, hamer_proj_dim=64, dinov2_dim=None, dinov2_proj_dim=128):
+    def __init__(self, num_vertices=65, in_channels=3, stgcn_channels=64, d_model=256, n_layers=4, num_classes=3, dropout=0.2, hamer_dim=None, hamer_proj_dim=64, dinov2_dim=None, dinov2_proj_dim=128, stgcn_proj_dim=None):
         super(STGCN_BiLSTM, self).__init__()
         graph = SkeletonGraph(num_vertices=num_vertices)
         A = graph.A
@@ -550,7 +570,25 @@ class STGCN_BiLSTM(nn.Module):
             STGCNBlock(in_channels, stgcn_channels, A),
             STGCNBlock(stgcn_channels, stgcn_channels, A)
         )
-        self.bridge_dim = num_vertices * stgcn_channels
+        # Optional graph-feature projection ("stream balancing"): without it, the
+        # flattened ST-GCN output (num_vertices * stgcn_channels, e.g. 4160) is
+        # concatenated directly with the much smaller HaMeR/DINOv2 branches, so it
+        # dominates the shared projection simply by having far more dimensions.
+        # With stgcn_proj_dim set, the graph features get their own branch
+        # (Linear -> LayerNorm -> GELU -> Dropout, same design as the HaMeR branch)
+        # down to stgcn_proj_dim before the concatenation. None = original behaviour
+        # (keeps old checkpoints loadable).
+        self.stgcn_proj_dim = stgcn_proj_dim
+        if stgcn_proj_dim is not None:
+            self.stgcn_proj = nn.Sequential(
+                nn.Linear(num_vertices * stgcn_channels, stgcn_proj_dim),
+                nn.LayerNorm(stgcn_proj_dim),
+                nn.GELU(),
+                nn.Dropout(dropout)
+            )
+            self.bridge_dim = stgcn_proj_dim
+        else:
+            self.bridge_dim = num_vertices * stgcn_channels
 
         # Optional separate HaMeR branch -- see STGCN_Mamba's comment for why this is
         # fused here (before the LSTM) rather than folded into the graph.
@@ -605,6 +643,8 @@ class STGCN_BiLSTM(nn.Module):
         x = self.stgcn_blocks(x) 
         x = x.permute(0, 2, 3, 1).contiguous() 
         x = x.view(B, T, -1)
+        if self.stgcn_proj_dim is not None:
+            x = self.stgcn_proj(x)  # (B, T, stgcn_proj_dim)
 
         if self.hamer_dim is not None:
             if hamer is None:
