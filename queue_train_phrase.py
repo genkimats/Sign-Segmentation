@@ -252,46 +252,70 @@ EXPERIMENTS_TO_RUN = [
         "basename": "stgcn_bilstm",
         "window_size": 128,
         "class_weights": [1.0, 1.1, 12.4],
-        "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe"
+        "face_subset": "full",
+        "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + full face"
     },
     {
         "basename": "stgcn_bilstm",
         "window_size": 128,
         "class_weights": [1.0, 1.1, 12.4],
-        "use_hamer_features": True,
-        "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + hamer"
+        "face_subset": "compact",
+        "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + compact face"
     },
     {
         "basename": "stgcn_bilstm",
         "window_size": 128,
         "class_weights": [1.0, 1.1, 12.4],
-        "tolerance_window": 3,
-        "description": "overlap ratio (0/128), tolerance=3, weights=[1.0, 1.1, 12.4], mediapipe"
+        "face_subset": "eyes_brows",
+        "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + eyes brows"
     },
     {
         "basename": "stgcn_bilstm",
         "window_size": 128,
         "class_weights": [1.0, 1.1, 12.4],
-        "tolerance_window": 5,
-        "description": "overlap ratio (0/128), tolerance=5, weights=[1.0, 1.1, 12.4], mediapipe"
+        "face_subset": "minimal",
+        "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + minimal face"
     },
-    {
-        "basename": "stgcn_bilstm",
-        "window_size": 128,
-        "class_weights": [1.0, 1.1, 12.4],
-        "stgcn_proj_dim": 192,
-        "use_hamer_features": True,
-        "description": "(0/128), st_proj=192, st_proj=128, mediapipe + hamer"
-    },
-    {
-        "basename": "stgcn_bilstm",
-        "window_size": 128,
-        "class_weights": [1.0, 1.1, 12.4],
-        "stgcn_proj_dim": 192,
-        "hamer_proj_dim": 128,
-        "use_hamer_features": True,
-        "description": "(0/128), st_proj=192, hamer_proj=128, mediapipe + hamer"
-    },
+
+
+    # {
+    #     "basename": "stgcn_bilstm",
+    #     "window_size": 128,
+    #     "class_weights": [1.0, 1.1, 12.4],
+    #     "use_hamer_features": True,
+    #     "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + hamer"
+    # },
+    # {
+    #     "basename": "stgcn_bilstm",
+    #     "window_size": 128,
+    #     "class_weights": [1.0, 1.1, 12.4],
+    #     "tolerance_window": 3,
+    #     "description": "overlap ratio (0/128), tolerance=3, weights=[1.0, 1.1, 12.4], mediapipe"
+    # },
+    # {
+    #     "basename": "stgcn_bilstm",
+    #     "window_size": 128,
+    #     "class_weights": [1.0, 1.1, 12.4],
+    #     "tolerance_window": 5,
+    #     "description": "overlap ratio (0/128), tolerance=5, weights=[1.0, 1.1, 12.4], mediapipe"
+    # },
+    # {
+    #     "basename": "stgcn_bilstm",
+    #     "window_size": 128,
+    #     "class_weights": [1.0, 1.1, 12.4],
+    #     "stgcn_proj_dim": 192,
+    #     "use_hamer_features": True,
+    #     "description": "(0/128), st_proj=192, st_proj=128, mediapipe + hamer"
+    # },
+    # {
+    #     "basename": "stgcn_bilstm",
+    #     "window_size": 128,
+    #     "class_weights": [1.0, 1.1, 12.4],
+    #     "stgcn_proj_dim": 192,
+    #     "hamer_proj_dim": 128,
+    #     "use_hamer_features": True,
+    #     "description": "(0/128), st_proj=192, hamer_proj=128, mediapipe + hamer"
+    # },
 
     
     # {
