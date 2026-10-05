@@ -252,9 +252,8 @@ EXPERIMENTS_TO_RUN = [
         "window_size": 128,
         "class_weights": [1.0, 1.1, 12.4],
         "stgcn_proj_dim": 192,
-        "hamer_proj_dim": 128,
         "use_hamer_features": True,
-        "description": "(0/128), st_proj=192, hamer_proj=128, weights=[1.0, 1.1, 12.4], mediapipe + hamer"
+        "description": "(0/128), st_proj=192, weights=[1.0, 1.1, 12.4], mediapipe + hamer"
     },
 
     # {
