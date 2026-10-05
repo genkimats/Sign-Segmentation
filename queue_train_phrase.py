@@ -245,13 +245,41 @@ EXPERIMENTS_TO_RUN = [
         "basename": "stgcn_bilstm",
         "window_size": 128,
         "use_hamer_features": True,
-        "description": "overlap ratio (0/128), hamer + mediapipe"
+        "stgcn_proj_dim": 192,
+        "hamer_proj_dim": 128,
+        "description": "overlap ratio (0/128), st_proj=192, hamer_proj=128, hamer + mediapipe"
     },
     {
         "basename": "stgcn_bilstm",
         "window_size": 128,
-        "use_hamer_features": True,
-        "description": "overlap ratio (0/128), hamer + mediapipe"
+        "face_only": True,
+        "use_face_keypoints": True,
+        "face_subset": "full",
+        "description": "overlap ratio (0/128), full face"
+    },
+    {
+        "basename": "stgcn_bilstm",
+        "window_size": 128,
+        "face_only": True,
+        "use_face_keypoints": True,
+        "face_subset": "compact",
+        "description": "overlap ratio (0/128), compact face"
+    },
+    {
+        "basename": "stgcn_bilstm",
+        "window_size": 128,
+        "face_only": True,
+        "use_face_keypoints": True,
+        "face_subset": "eyes_brows",
+        "description": "overlap ratio (0/128), eyes & brows"
+    },
+    {
+        "basename": "stgcn_bilstm",
+        "window_size": 128,
+        "face_only": True,
+        "use_face_keypoints": True,
+        "face_subset": "minimal",
+        "description": "overlap ratio (0/128), minimal face"
     },
 
     # {
