@@ -260,7 +260,8 @@ EXPERIMENTS_TO_RUN = [
         "class_weights": [1.0, 1.1, 12.4],
         "stgcn_proj_dim": 192,
         "hamer_proj_dim": 128,
-        "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe only"
+        "use_hamer_features": True,
+        "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + hamer"
     },
 
     # {
