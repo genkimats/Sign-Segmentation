@@ -88,7 +88,35 @@ def set_seed(seed):
         torch.cuda.manual_seed_all(seed)
 
 
-def train_model(config):
+SELECTION_METRICS = {
+    "combined": "Combined score (Frame F1 + IoU + %-score)",
+    "frame_f1": "Frame F1 only",
+}
+
+
+def ask_selection_metric():
+    """
+    Asked once when train_phrase.py starts; applies to every job in this session.
+    Decides which validation score picks the saved best epoch ("New Best") and drives
+    early stopping. Empty input keeps the current method (combined score).
+    """
+    print("\n📏 Which validation score should pick the best epoch and drive early stopping?")
+    print("   [Enter] combined  -> Frame F1 + IoU + %-score (current method)")
+    print("   f1               -> Frame F1 only")
+    while True:
+        choice = input("Selection metric: ").strip().lower()
+        if choice in ("", "combined", "c"):
+            metric = "combined"
+        elif choice in ("f1", "frame_f1", "frame f1"):
+            metric = "frame_f1"
+        else:
+            print("⚠️  Please press Enter (combined) or type 'f1'.")
+            continue
+        print(f"✅ Using: {SELECTION_METRICS[metric]}\n")
+        return metric
+
+
+def train_model(config, selection_metric="combined"):
     print(f"\n{'='*60}\n🚀 STARTING QUEUED JOB\n{'='*60}")
     print(json.dumps(config, indent=4))
 
@@ -139,6 +167,8 @@ def train_model(config):
     exp_dir = os.path.join("experiments_phrase", run_name)
     os.makedirs(exp_dir, exist_ok=True)
     
+    # Recorded with the run so you can always tell how its best epoch was chosen.
+    config["selection_metric"] = selection_metric
     with open(os.path.join(exp_dir, "hyperparameters.json"), 'w') as f:
         json.dump(config, f, indent=4)
         
@@ -426,9 +456,11 @@ def train_model(config):
             
             # Frame F1 + IoU + %-score, where %-score = max(0, 1 - |% - 1|) (1.0 = perfect count)
             combined_score = val_metrics["Combined"]
+            # The score that decides "New Best" and early stopping (chosen at startup).
+            selection_score = epoch_f1 if selection_metric == "frame_f1" else combined_score
             
-            if combined_score > best_combined_score:
-                best_combined_score = combined_score
+            if selection_score > best_combined_score:
+                best_combined_score = selection_score
                 best_epoch = epoch
                 best_model_state = copy.deepcopy(model.state_dict())
                 epochs_without_improvement = 0
@@ -532,7 +564,8 @@ def train_model(config):
     model_save_path = os.path.join(model_dir, f"{run_name}.pth")
     if best_model_state:
         torch.save(best_model_state, model_save_path)
-        print(f"✅ Best Model (Epoch {best_epoch} | Combined Score: {best_combined_score:.4f}) saved to {model_save_path}")
+        score_name = "Frame F1" if selection_metric == "frame_f1" else "Combined Score"
+        print(f"✅ Best Model (Epoch {best_epoch} | {score_name}: {best_combined_score:.4f}) saved to {model_save_path}")
     else:
         torch.save(model.state_dict(), model_save_path)
         print(f"✅ Final Model saved to {model_save_path}")
@@ -541,6 +574,7 @@ def train_model(config):
 
 if __name__ == "__main__":
     print("🚦 Starting Train Queue Manager...")
+    selection_metric = ask_selection_metric()
     
     jobs_processed = 0
     while True:
@@ -553,5 +587,5 @@ if __name__ == "__main__":
                 print(f"🎉 All {jobs_processed} queued jobs completed successfully. Shutting down.")
             break
             
-        train_model(job_config)
+        train_model(job_config, selection_metric)
         jobs_processed += 1
