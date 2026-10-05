@@ -28,9 +28,10 @@
     "in_channels": 3,
     "use_face_keypoints": false,
     "face_dir": "processed_data/face_keypoints_normalized",
-    "face_subset": "compact",
+    "face_subset": "full",
     "use_hamer_features": false,
     "hamer_dir": "processed_data/hamer_features",
+    "stgcn_proj_dim": null,
     "use_dinov2_features": false,
     "dinov2_dir": "processed_data/dinov2_features",
     "d_model": 256,
@@ -40,6 +41,6 @@
     "mamba_expand": 2,
     "optimizer": "AdamW",
     "scheduler": "CosineAnnealingLR",
-    "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + compact face",
+    "description": "overlap ratio (0/128), tolerance=5, weights=[1.0, 1.1, 12.4], mediapipe",
     "prefix": "23"
 }
