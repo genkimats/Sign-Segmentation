@@ -236,90 +236,90 @@ EXPERIMENTS_TO_RUN = [
     #  "description": "METRIC FIX: overlap ratio (0/128), tolerance=1, pure_hamer"},
 
     
-    {
-        "basename": "stgcn_bilstm",
-        "window_size": 128,
-        "class_weights": [1.0, 1.1, 12.4],
-        "description": "overlap ratio (0/128), mediapipe"
-    },
-    {
-        "basename": "stgcn_bilstm",
-        "window_size": 128,
-        "use_hamer_features": True,
-        "stgcn_proj_dim": 192,
-        "hamer_proj_dim": 128,
-        "class_weights": [1.0, 1.1, 12.4],
-        "description": "overlap ratio (0/128), st_proj=192, hamer_proj=128, hamer + mediapipe"
-    },
-    {
-        "basename": "stgcn_bilstm",
-        "window_size": 128,
-        "face_only": True,
-        "use_face_keypoints": True,
-        "face_subset": "full",
-        "class_weights": [1.0, 1.1, 12.4],
-        "description": "overlap ratio (0/128), full face"
-    },
-    {
-        "basename": "stgcn_bilstm",
-        "window_size": 128,
-        "face_only": True,
-        "use_face_keypoints": True,
-        "face_subset": "compact",
-        "class_weights": [1.0, 1.1, 12.4],
-        "description": "overlap ratio (0/128), compact face"
-    },
-    {
-        "basename": "stgcn_bilstm",
-        "window_size": 128,
-        "face_only": True,
-        "use_face_keypoints": True,
-        "face_subset": "eyes_brows",
-        "class_weights": [1.0, 1.1, 12.4],
-        "description": "overlap ratio (0/128), eyes & brows"
-    },
-    {
-        "basename": "stgcn_bilstm",
-        "window_size": 128,
-        "face_only": True,
-        "use_face_keypoints": True,
-        "face_subset": "minimal",
-        "class_weights": [1.0, 1.1, 12.4],
-        "description": "overlap ratio (0/128), minimal face"
-    },
-
     # {
     #     "basename": "stgcn_bilstm",
     #     "window_size": 128,
     #     "class_weights": [1.0, 1.1, 12.4],
+    #     "description": "overlap ratio (0/128), mediapipe"
+    # },
+    # {
+    #     "basename": "stgcn_bilstm",
+    #     "window_size": 128,
+    #     "use_hamer_features": True,
+    #     "stgcn_proj_dim": 192,
+    #     "hamer_proj_dim": 128,
+    #     "class_weights": [1.0, 1.1, 12.4],
+    #     "description": "overlap ratio (0/128), st_proj=192, hamer_proj=128, hamer + mediapipe"
+    # },
+    # {
+    #     "basename": "stgcn_bilstm",
+    #     "window_size": 128,
+    #     "face_only": True,
+    #     "use_face_keypoints": True,
     #     "face_subset": "full",
-    #     "use_face_keypoints": True,
-    #     "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + full face"
+    #     "class_weights": [1.0, 1.1, 12.4],
+    #     "description": "overlap ratio (0/128), full face"
     # },
     # {
     #     "basename": "stgcn_bilstm",
     #     "window_size": 128,
-    #     "class_weights": [1.0, 1.1, 12.4],
+    #     "face_only": True,
+    #     "use_face_keypoints": True,
     #     "face_subset": "compact",
-    #     "use_face_keypoints": True,
-    #     "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + compact face"
+    #     "class_weights": [1.0, 1.1, 12.4],
+    #     "description": "overlap ratio (0/128), compact face"
     # },
     # {
     #     "basename": "stgcn_bilstm",
     #     "window_size": 128,
-    #     "class_weights": [1.0, 1.1, 12.4],
+    #     "face_only": True,
+    #     "use_face_keypoints": True,
     #     "face_subset": "eyes_brows",
-    #     "use_face_keypoints": True,
-    #     "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + eyes brows"
+    #     "class_weights": [1.0, 1.1, 12.4],
+    #     "description": "overlap ratio (0/128), eyes & brows"
     # },
     # {
     #     "basename": "stgcn_bilstm",
     #     "window_size": 128,
-    #     "class_weights": [1.0, 1.1, 12.4],
-    #     "face_subset": "minimal",
+    #     "face_only": True,
     #     "use_face_keypoints": True,
-    #     "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + minimal face"
+    #     "face_subset": "minimal",
+    #     "class_weights": [1.0, 1.1, 12.4],
+    #     "description": "overlap ratio (0/128), minimal face"
     # },
+
+    {
+        "basename": "stgcn_bilstm",
+        "window_size": 128,
+        "class_weights": [1.0, 1.1, 12.4],
+        "face_subset": "full",
+        "use_face_keypoints": True,
+        "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + full face"
+    },
+    {
+        "basename": "stgcn_bilstm",
+        "window_size": 128,
+        "class_weights": [1.0, 1.1, 12.4],
+        "face_subset": "compact",
+        "use_face_keypoints": True,
+        "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + compact face"
+    },
+    {
+        "basename": "stgcn_bilstm",
+        "window_size": 128,
+        "class_weights": [1.0, 1.1, 12.4],
+        "face_subset": "eyes_brows",
+        "use_face_keypoints": True,
+        "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + eyes brows"
+    },
+    {
+        "basename": "stgcn_bilstm",
+        "window_size": 128,
+        "class_weights": [1.0, 1.1, 12.4],
+        "face_subset": "minimal",
+        "use_face_keypoints": True,
+        "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + minimal face"
+    },
 
 
     # {
