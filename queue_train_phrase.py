@@ -347,7 +347,7 @@ EXPERIMENTS_TO_RUN = [
     #     "description": "MS: HaMeR + face"
     # },
     {
-        "basename": "multistream_transformer", 
+        "basename": "multistream_bilstm", 
         "window_size": 128, 
         "d_model": 256,
         "use_stream_body_hands": True,
