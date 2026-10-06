@@ -347,14 +347,14 @@ EXPERIMENTS_TO_RUN = [
     #     "description": "MS: HaMeR + face"
     # },
     {
-        "basename": "multistream_bilstm", 
+        "basename": "multistream_transformer", 
         "window_size": 128, 
         "d_model": 256,
         "use_stream_body_hands": True,
         "use_stream_face": True,
         "use_stream_hamer": True,
         "face_subset": "compact",
-        "fusion": "gated_sum",              # or "gated_sum"
+        "fusion": "concat",              # or "gated_sum"
         "class_weights": [1.0, 1.1, 12.4],
         "description": "MS: Body + HaMeR + face"
     },
