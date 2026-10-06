@@ -29,6 +29,7 @@
     "use_face_keypoints": true,
     "face_dir": "processed_data/face_keypoints_normalized",
     "face_subset": "minimal",
+    "face_only": false,
     "use_hamer_features": false,
     "hamer_dir": "processed_data/hamer_features",
     "stgcn_proj_dim": null,
@@ -42,5 +43,6 @@
     "optimizer": "AdamW",
     "scheduler": "CosineAnnealingLR",
     "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + minimal face",
-    "prefix": "29"
+    "prefix": "29",
+    "selection_metric": "frame_f1"
 }

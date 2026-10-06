@@ -3,13 +3,13 @@
     "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + minimal face",
     "machine_hostname": "z790",
     "gpu_name": "NVIDIA GeForce RTX 5060 Ti",
-    "total_training_time": "70m 31s",
-    "total_training_seconds": 4231.95,
-    "total_epochs_ran": 17,
+    "total_training_time": "112m 4s",
+    "total_training_seconds": 6724.58,
+    "total_epochs_ran": 27,
     "early_stopping_triggered": true,
-    "average_time_per_epoch": "4m 8s",
+    "average_time_per_epoch": "4m 9s",
     "max_gpu_memory_used_gb": 0.8051,
-    "average_gpu_utilization_percent": 96.66,
+    "average_gpu_utilization_percent": 96.59,
     "total_nan_loss_count_latest_run": 0,
     "total_training_restarts": 0,
     "config": {
@@ -43,6 +43,7 @@
         "use_face_keypoints": true,
         "face_dir": "processed_data/face_keypoints_normalized",
         "face_subset": "minimal",
+        "face_only": false,
         "use_hamer_features": false,
         "hamer_dir": "processed_data/hamer_features",
         "stgcn_proj_dim": null,
@@ -56,6 +57,7 @@
         "optimizer": "AdamW",
         "scheduler": "CosineAnnealingLR",
         "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + minimal face",
-        "prefix": "29"
+        "prefix": "29",
+        "selection_metric": "frame_f1"
     }
 }
