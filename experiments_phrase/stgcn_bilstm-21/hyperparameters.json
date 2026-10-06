@@ -44,5 +44,6 @@
     "scheduler": "CosineAnnealingLR",
     "hamer_proj_dim": 128,
     "description": "overlap ratio (0/128), st_proj=192, hamer_proj=128, hamer + mediapipe",
-    "prefix": "21"
+    "prefix": "21",
+    "selection_metric": "frame_f1"
 }

@@ -3,13 +3,13 @@
     "description": "overlap ratio (0/128), mediapipe",
     "machine_hostname": "vine-B660",
     "gpu_name": "NVIDIA GeForce RTX 5060 Ti",
-    "total_training_time": "64m 32s",
-    "total_training_seconds": 3872.15,
-    "total_epochs_ran": 16,
+    "total_training_time": "92m 58s",
+    "total_training_seconds": 5578.54,
+    "total_epochs_ran": 23,
     "early_stopping_triggered": true,
     "average_time_per_epoch": "4m 2s",
     "max_gpu_memory_used_gb": 0.665,
-    "average_gpu_utilization_percent": 91.73,
+    "average_gpu_utilization_percent": 91.5,
     "total_nan_loss_count_latest_run": 0,
     "total_training_restarts": 0,
     "config": {
@@ -57,6 +57,7 @@
         "optimizer": "AdamW",
         "scheduler": "CosineAnnealingLR",
         "description": "overlap ratio (0/128), mediapipe",
-        "prefix": "20"
+        "prefix": "20",
+        "selection_metric": "frame_f1"
     }
 }

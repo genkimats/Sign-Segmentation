@@ -43,5 +43,6 @@
     "optimizer": "AdamW",
     "scheduler": "CosineAnnealingLR",
     "description": "overlap ratio (0/128), full face",
-    "prefix": "22"
+    "prefix": "22",
+    "selection_metric": "frame_f1"
 }
