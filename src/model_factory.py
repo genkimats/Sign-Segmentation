@@ -13,7 +13,8 @@ from src.models import (PureMambaBaseline, BiMambaBaseline, STGCN_Mamba, STGCN_M
                         STGCN_BiMamba, Decoupled_STGCN_Mamba, BiLSTM_Baseline, STGCN_BiLSTM,
                         TransformerBaseline, STGCN_Transformer, Latent_STGCN_Mamba,
                         CTRGCN_Mamba, InfoGCN_Mamba, ShiftGCN_Mamba, SpatialTransformer_Mamba,
-                        HDGCN_Mamba, HyperSign_Mamba, STGCN_HybridSequential, STGCN_HybridParallel)
+                        HDGCN_Mamba, HyperSign_Mamba, STGCN_HybridSequential, STGCN_HybridParallel,
+                        MultiStreamSegmenter, MultiStream_BiLSTM, MultiStream_Transformer)
 
 MODEL_REGISTRY = {
     "pure_mamba": PureMambaBaseline,
@@ -35,7 +36,11 @@ MODEL_REGISTRY = {
     "hypersign_mamba": HyperSign_Mamba,
     "stgcn_hybrid_seq": STGCN_HybridSequential,
     "stgcn_hybrid_parallel": STGCN_HybridParallel,
+    "multistream_bilstm": MultiStream_BiLSTM,
+    "multistream_transformer": MultiStream_Transformer,
 }
+
+MULTISTREAM_MODELS = ["multistream_bilstm", "multistream_transformer"]
 
 MAMBA_BASED_MODELS = ["pure_mamba", "bi_mamba", "stgcn_mamba", "stgcn_mlp_mamba", "stgcn_bimamba",
                       "decoupled_stgcn_mamba", "latent_stgcn_mamba", "ctrgcn_mamba", "infogcn_mamba",
@@ -46,7 +51,8 @@ HAMER_SUPPORTED_MODELS = ["stgcn_mamba", "latent_stgcn_mamba", "ctrgcn_mamba", "
                           "shiftgcn_mamba", "spatial_transformer_mamba", "hdgcn_mamba", "hypersign_mamba",
                           "stgcn_bilstm", "stgcn_transformer",
                           "stgcn_mlp_mamba", "stgcn_bimamba", "decoupled_stgcn_mamba",
-                          "stgcn_hybrid_seq", "stgcn_hybrid_parallel"]
+                          "stgcn_hybrid_seq", "stgcn_hybrid_parallel",
+                          "multistream_bilstm", "multistream_transformer"]
 
 # Own list (not an alias of HAMER_SUPPORTED_MODELS, so appending can't mutate it):
 # the graph-free baselines also accept DINOv2, e.g. for pure_hamer + DINOv2 runs.
@@ -75,7 +81,7 @@ def build_model_kwargs(config, detected_hamer_dim=None, detected_dinov2_dim=None
         "n_layers": config["n_layers"],
     }
 
-    if model_name in ["transformer_baseline", "stgcn_transformer"]:
+    if model_name in ["transformer_baseline", "stgcn_transformer", "multistream_transformer"]:
         model_kwargs["nhead"] = config.get("nhead", 8)
         model_kwargs["dim_feedforward"] = config.get("dim_feedforward", d_model * 4)
 
@@ -118,7 +124,8 @@ def build_model_kwargs(config, detected_hamer_dim=None, detected_dinov2_dim=None
     # Optional per-stream branch sizes (stream balancing). Only passed when set in the
     # config, so old configs/checkpoints build exactly as before. A model that doesn't
     # support a requested size raises instead of silently ignoring it.
-    accepted = inspect.signature(model_class.__init__).parameters
+    sig_class = MultiStreamSegmenter if issubclass(model_class, MultiStreamSegmenter) else model_class
+    accepted = inspect.signature(sig_class.__init__).parameters
     for key in ("stgcn_proj_dim", "hamer_proj_dim", "dinov2_proj_dim"):
         value = config.get(key)
         if value is None:
@@ -127,6 +134,31 @@ def build_model_kwargs(config, detected_hamer_dim=None, detected_dinov2_dim=None
             raise ValueError(f"Config sets {key}={value}, but model '{model_name}' has no "
                              f"'{key}' argument. Remove it from the config or use a model that supports it.")
         model_kwargs[key] = int(value)
+
+    # Multi-stream models: which streams are on, how they are fused, branch sizes.
+    if model_name in MULTISTREAM_MODELS:
+        if config.get("face_only", False):
+            raise ValueError("face_only=True is not used with multistream models -- turn the other "
+                             "streams off instead (use_stream_body_hands / use_stream_hamer = False).")
+        streams = {
+            "use_stream_body_hands": bool(config.get("use_stream_body_hands", True)),
+            "use_stream_face": bool(config.get("use_stream_face", False)),
+            "use_stream_hamer": bool(config.get("use_stream_hamer", False)),
+        }
+        if not any(streams.values()):
+            raise ValueError("All streams are off -- turn on at least one of use_stream_body_hands / "
+                             "use_stream_face / use_stream_hamer.")
+        if streams["use_stream_face"] and not config.get("use_face_keypoints", False):
+            raise ValueError("use_stream_face=True needs use_face_keypoints=True (the queue sets it automatically).")
+        if streams["use_stream_hamer"] and not config.get("use_hamer_features", False):
+            raise ValueError("use_stream_hamer=True needs use_hamer_features=True (the queue sets it automatically).")
+        model_kwargs.update(streams)
+        model_kwargs["fusion"] = config.get("fusion", "concat")
+        for key in ("body_hands_proj_dim", "face_proj_dim"):  # hamer_proj_dim is handled above
+            if config.get(key) is not None:
+                model_kwargs[key] = int(config[key])
+        if not streams["use_stream_hamer"]:
+            model_kwargs.pop("hamer_dim", None)
 
     # Face-only input (dataset face_only mode): graph models must build a face-only graph.
     if config.get("face_only", False):

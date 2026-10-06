@@ -47,6 +47,19 @@ MAMBA_DEFAULTS = {
     # (original behaviour). hamer_proj_dim / dinov2_proj_dim can also be set per
     # experiment (model defaults: 64 / 128).
     "stgcn_proj_dim": None,
+    # --- Multi-stream models (multistream_bilstm / multistream_transformer) ---
+    # Switch each stream on/off. The queue sets use_face_keypoints / use_hamer_features
+    # automatically from these for multistream models.
+    "use_stream_body_hands": True,   # ST-GCN on body + hands (65 vertices)
+    "use_stream_face": False,        # ST-GCN on the face subset (see face_subset)
+    "use_stream_hamer": False,       # MLP on HaMeR (288)
+    # "concat" (option A): each stream -> its *_proj_dim, concatenated, shared projection -> d_model
+    # "gated_sum" (option B): each stream -> d_model, learnable gate per stream, summed
+    "fusion": "concat",
+    "body_hands_proj_dim": 256,      # concat only (gated_sum always uses d_model)
+    "face_proj_dim": 256,
+    # (hamer_proj_dim also sets the HaMeR branch size in concat mode; model default 256 there)
+    # d_model above = the size going into the encoder (BiLSTM hidden / Transformer width).
     "use_dinov2_features": False,
     "dinov2_dir": "processed_data/dinov2_features",
     "d_model": 256,
@@ -288,97 +301,122 @@ EXPERIMENTS_TO_RUN = [
     #     "description": "overlap ratio (0/128), minimal face"
     # },
 
+    # {
+    #     "basename": "stgcn_bilstm",
+    #     "window_size": 128,
+    #     "class_weights": [1.0, 1.1, 12.4],
+    #     "face_subset": "full",
+    #     "use_face_keypoints": True,
+    #     "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + full face"
+    # },
+    # {
+    #     "basename": "stgcn_bilstm",
+    #     "window_size": 128,
+    #     "class_weights": [1.0, 1.1, 12.4],
+    #     "face_subset": "compact",
+    #     "use_face_keypoints": True,
+    #     "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + compact face"
+    # },
+    # {
+    #     "basename": "stgcn_bilstm",
+    #     "window_size": 128,
+    #     "class_weights": [1.0, 1.1, 12.4],
+    #     "face_subset": "eyes_brows",
+    #     "use_face_keypoints": True,
+    #     "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + eyes brows"
+    # },
+    # {
+    #     "basename": "stgcn_bilstm",
+    #     "window_size": 128,
+    #     "class_weights": [1.0, 1.1, 12.4],
+    #     "face_subset": "minimal",
+    #     "use_face_keypoints": True,
+    #     "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + minimal face"
+    # },
+
     {
-        "basename": "stgcn_bilstm",
-        "window_size": 128,
-        "class_weights": [1.0, 1.1, 12.4],
-        "face_subset": "full",
-        "use_face_keypoints": True,
-        "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + full face"
-    },
-    {
-        "basename": "stgcn_bilstm",
-        "window_size": 128,
-        "class_weights": [1.0, 1.1, 12.4],
+        "basename": "multistream_bilstm", 
+        "window_size": 128, 
+        "d_model": 256,
+        "use_stream_body_hands": False,
+        "use_stream_face": True,
+        "use_stream_hamer": True,
         "face_subset": "compact",
-        "use_face_keypoints": True,
-        "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + compact face"
+        "fusion": "concat",              # or "gated_sum"
+        "class_weights": [1.0, 1.1, 12.4],
+        "description": "MS: HaMeR + face"
     },
     {
-        "basename": "stgcn_bilstm",
-        "window_size": 128,
+        "basename": "multistream_bilstm", 
+        "window_size": 128, 
+        "d_model": 256,
+        "use_stream_body_hands": True,
+        "use_stream_face": True,
+        "use_stream_hamer": True,
+        "face_subset": "compact",
+        "fusion": "concat",              # or "gated_sum"
         "class_weights": [1.0, 1.1, 12.4],
-        "face_subset": "eyes_brows",
-        "use_face_keypoints": True,
-        "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + eyes brows"
+        "description": "MS: Body + HaMeR + face"
     },
     {
-        "basename": "stgcn_bilstm",
-        "window_size": 128,
+        "basename": "multistream_bilstm", 
+        "window_size": 128, 
+        "d_model": 256,
+        "use_stream_body_hands": True,
+        "use_stream_face": False,
+        "use_stream_hamer": True,
+        "face_subset": "compact",
+        "fusion": "concat",              # or "gated_sum"
         "class_weights": [1.0, 1.1, 12.4],
-        "face_subset": "minimal",
-        "use_face_keypoints": True,
-        "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + minimal face"
+        "description": "MS: Body + HaMeR"
     },
-
-
+    {
+        "basename": "multistream_bilstm", 
+        "window_size": 128, 
+        "d_model": 256,
+        "use_stream_body_hands": True,
+        "use_stream_face": True,
+        "use_stream_hamer": False,
+        "face_subset": "compact",
+        "fusion": "concat",              # or "gated_sum"
+        "class_weights": [1.0, 1.1, 12.4],
+        "description": "MS: Body + face"
+    },
     # {
-    #     "basename": "stgcn_bilstm",
-    #     "window_size": 128,
+    #     "basename": "multistream_bilstm", 
+    #     "window_size": 128, 
+    #     "d_model": 256,
+    #     "use_stream_body_hands": True,
+    #     "use_stream_face": False,
+    #     "use_stream_hamer": False,
+    #     "face_subset": "compact",
+    #     "fusion": "concat",              # or "gated_sum"
     #     "class_weights": [1.0, 1.1, 12.4],
-    #     "use_hamer_features": True,
-    #     "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + hamer"
+    #     "description": "MS: Body"
     # },
     # {
-    #     "basename": "stgcn_bilstm",
-    #     "window_size": 128,
+    #     "basename": "multistream_bilstm", 
+    #     "window_size": 128, 
+    #     "d_model": 256,
+    #     "use_stream_body_hands": False,
+    #     "use_stream_face": True,
+    #     "use_stream_hamer": False,
+    #     "face_subset": "compact",
+    #     "fusion": "concat",              # or "gated_sum"
     #     "class_weights": [1.0, 1.1, 12.4],
-    #     "tolerance_window": 3,
-    #     "description": "overlap ratio (0/128), tolerance=3, weights=[1.0, 1.1, 12.4], mediapipe"
+    #     "description": "MS: face"
     # },
     # {
-    #     "basename": "stgcn_bilstm",
-    #     "window_size": 128,
+    #     "basename": "multistream_bilstm", 
+    #     "window_size": 128, 
+    #     "d_model": 256,
+    #     "use_stream_body_hands": False,
+    #     "use_stream_face": False,
+    #     "use_stream_hamer": True,
+    #     "face_subset": "compact",
+    #     "fusion": "concat",              # or "gated_sum"
     #     "class_weights": [1.0, 1.1, 12.4],
-    #     "tolerance_window": 5,
-    #     "description": "overlap ratio (0/128), tolerance=5, weights=[1.0, 1.1, 12.4], mediapipe"
-    # },
-    # {
-    #     "basename": "stgcn_bilstm",
-    #     "window_size": 128,
-    #     "class_weights": [1.0, 1.1, 12.4],
-    #     "stgcn_proj_dim": 192,
-    #     "use_hamer_features": True,
-    #     "description": "(0/128), st_proj=192, st_proj=128, mediapipe + hamer"
-    # },
-    # {
-    #     "basename": "stgcn_bilstm",
-    #     "window_size": 128,
-    #     "class_weights": [1.0, 1.1, 12.4],
-    #     "stgcn_proj_dim": 192,
-    #     "hamer_proj_dim": 128,
-    #     "use_hamer_features": True,
-    #     "description": "(0/128), st_proj=192, hamer_proj=128, mediapipe + hamer"
-    # },
-
-    
-    # {
-    #     "basename": "stgcn_bilstm",
-    #     "window_size": 128,
-    #     "class_weights": [1.0, 1.1, 15.0],
-    #     "description": "overlap ratio (0/128), weights=[1.0, 1.1, 15.0], no kinetic"
-    # },
-    # {
-    #     "basename": "stgcn_bilstm",
-    #     "window_size": 128,
-    #     "class_weights": [1.0, 1.0, 30.0],
-    #     "description": "overlap ratio (0/128), weights=[1.0, 1.0, 30.0], no kinetic"
-    # },
-    # {
-    #     "basename": "stgcn_transformer",
-    #     "window_size": 128,
-    #     "class_weights": [1.0, 1.0, 30.0],
-    #     "description": "overlap ratio (0/128), weights=[1.0, 1.0, 30.0], no kinetic"
+    #     "description": "MS: HaMeR"
     # },
 ]
 
@@ -493,6 +531,15 @@ if __name__ == "__main__":
         # Increment just in case you queue two of the EXACT SAME model in one batch
         current_model_prefix[m_name] += 1 
         
+        # 1b. Multi-stream models: the data that gets loaded follows the stream switches
+        if m_name in ("multistream_bilstm", "multistream_transformer"):
+            full_config["use_face_keypoints"] = bool(full_config.get("use_stream_face", False))
+            full_config["use_hamer_features"] = bool(full_config.get("use_stream_hamer", False))
+            if not any(full_config.get(k, d) for k, d in (("use_stream_body_hands", True),
+                                                          ("use_stream_face", False),
+                                                          ("use_stream_hamer", False))):
+                raise ValueError(f"{full_config.get('description', m_name)}: all streams are off.")
+
         # 2. Calculate Input Channels & Num Vertices dynamically
         calculated_channels = calculate_in_channels(full_config)
         full_config["in_channels"] = calculated_channels

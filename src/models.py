@@ -2092,3 +2092,189 @@ class HandsOn2025(nn.Module):
             logits = logits.repeat_interleave(self.downsample, dim=1)[:, :T]
             emb = emb.repeat_interleave(self.downsample, dim=1)[:, :T]
         return logits.permute(0, 2, 1), emb.permute(0, 2, 1)
+
+# ==============================================================================
+# MULTI-STREAM MODELS: (body + hands) / face / HaMeR as separately switchable streams
+# ==============================================================================
+class MultiStreamSegmenter(nn.Module):
+    """
+    Up to three input streams, each switchable on/off:
+      body_hands : ST-GCN on the 65 body + hand vertices        -> own branch
+      face       : ST-GCN on the face vertices (face-only graph) -> own branch
+      hamer      : MLP on the 288-dim HaMeR vector               -> own branch
+    Each branch is Linear -> LayerNorm -> GELU -> Dropout, so every stream enters the
+    fusion normalised and at a size you choose.
+
+    fusion="concat"     (option A): branches -> sizes *_proj_dim, concatenated, then ONE
+                                    shared projection to d_model (encoder width stays
+                                    d_model whichever streams are on).
+    fusion="gated_sum"  (option B): every branch -> d_model, multiplied by a learnable
+                                    scalar gate per stream, summed, LayerNorm. Encoder
+                                    width is d_model whichever streams are on; the gates
+                                    show how much each stream is used (stream_gates()).
+
+    d_model = the size going into the encoder (BiLSTM hidden size / Transformer width).
+
+    Input layout (from the dataset): x is (B, C, T, V) with the 65 body+hand vertices
+    first and, when face keypoints are loaded, the face vertices after them
+    (V = 65 + face subset size). The face stream uses x[..., 65:].
+
+    For check_stream_balance.py the model can report each stream's contribution to the
+    fused representation (set_capture) and replace one stream by a constant (set_ablation).
+    """
+    STREAM_ORDER = ("body_hands", "face", "hamer")
+
+    def __init__(self, in_channels, num_vertices, num_classes=3, d_model=256, n_layers=4,
+                 dropout=0.2, stgcn_channels=64,
+                 use_stream_body_hands=True, use_stream_face=False, use_stream_hamer=False,
+                 fusion="concat", body_hands_proj_dim=256, face_proj_dim=256, hamer_proj_dim=256,
+                 hamer_dim=None, encoder="bilstm", nhead=8, dim_feedforward=None):
+        super().__init__()
+        if fusion not in ("concat", "gated_sum"):
+            raise ValueError(f"fusion must be 'concat' or 'gated_sum', got '{fusion}'.")
+        if encoder not in ("bilstm", "transformer"):
+            raise ValueError(f"encoder must be 'bilstm' or 'transformer', got '{encoder}'.")
+        self.streams = [name for name, on in zip(self.STREAM_ORDER,
+                                                 (use_stream_body_hands, use_stream_face, use_stream_hamer)) if on]
+        if not self.streams:
+            raise ValueError("At least one stream must be on (use_stream_body_hands / "
+                             "use_stream_face / use_stream_hamer).")
+        self.fusion = fusion
+        self.encoder_type = encoder
+        self.d_model = d_model
+
+        def branch(in_dim, out_dim):
+            return nn.Sequential(nn.Linear(in_dim, out_dim), nn.LayerNorm(out_dim), nn.GELU(), nn.Dropout(dropout))
+
+        out_dims = {
+            "body_hands": body_hands_proj_dim, "face": face_proj_dim, "hamer": hamer_proj_dim,
+        } if fusion == "concat" else {name: d_model for name in self.STREAM_ORDER}
+
+        self.branches = nn.ModuleDict()
+
+        if "body_hands" in self.streams:
+            if num_vertices < 65:
+                raise ValueError(f"body_hands stream needs the 65 body+hand vertices (num_vertices={num_vertices}).")
+            A_bh = SkeletonGraph(num_vertices=65).A
+            self.body_hands_stgcn = nn.Sequential(
+                STGCNBlock(in_channels, stgcn_channels, A_bh),
+                STGCNBlock(stgcn_channels, stgcn_channels, A_bh),
+            )
+            self.branches["body_hands"] = branch(65 * stgcn_channels, out_dims["body_hands"])
+
+        if "face" in self.streams:
+            self.num_face = num_vertices - 65
+            if self.num_face <= 0:
+                raise ValueError("face stream is on but the input has no face vertices -- set "
+                                 "use_face_keypoints=True (the queue does this for multistream models).")
+            A_face = SkeletonGraph(num_vertices=self.num_face, face_only=True).A
+            self.face_stgcn = nn.Sequential(
+                STGCNBlock(in_channels, stgcn_channels, A_face),
+                STGCNBlock(stgcn_channels, stgcn_channels, A_face),
+            )
+            self.branches["face"] = branch(self.num_face * stgcn_channels, out_dims["face"])
+
+        if "hamer" in self.streams:
+            if hamer_dim is None:
+                raise ValueError("hamer stream is on but hamer_dim is None -- set use_hamer_features=True.")
+            self.hamer_dim = hamer_dim
+            self.branches["hamer"] = branch(hamer_dim, out_dims["hamer"])
+
+        if fusion == "concat":
+            self.stream_dims = {name: out_dims[name] for name in self.streams}
+            self.concat_dim = sum(self.stream_dims.values())
+            self.fusion_proj = nn.Sequential(
+                nn.Linear(self.concat_dim, d_model), nn.LayerNorm(d_model), nn.ReLU(), nn.Dropout(dropout)
+            )
+        else:
+            self.stream_dims = {name: d_model for name in self.streams}
+            self.gates = nn.Parameter(torch.ones(len(self.streams)))
+            self.fusion_norm = nn.Sequential(nn.LayerNorm(d_model), nn.Dropout(dropout))
+
+        if encoder == "bilstm":
+            self.lstm = nn.LSTM(input_size=d_model, hidden_size=d_model, num_layers=n_layers,
+                                batch_first=True, dropout=dropout if n_layers > 1 else 0, bidirectional=True)
+            self.classifier = nn.Linear(d_model * 2, num_classes)
+        else:
+            if d_model % nhead != 0:
+                raise ValueError(f"d_model ({d_model}) must be divisible by nhead ({nhead}).")
+            self.pos_encoder = PositionalEncoding(d_model, dropout)
+            layer = nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead,
+                                               dim_feedforward=dim_feedforward or d_model * 4,
+                                               dropout=dropout, batch_first=True)
+            self.transformer_encoder = nn.TransformerEncoder(layer, num_layers=n_layers)
+            self.classifier = nn.Linear(d_model, num_classes)
+
+        self._capture = None   # callable(stream_inputs, stream_contributions) for diagnostics
+        self._ablation = None  # (stream_name, constant vector) for diagnostics
+
+    # ---- diagnostics hooks (used by check_stream_balance.py) ----------------
+    def set_capture(self, fn):
+        self._capture = fn
+
+    def set_ablation(self, stream_name=None, value=None):
+        self._ablation = None if stream_name is None else (stream_name, value)
+
+    def stream_gates(self):
+        """Gated-sum only: {stream: gate value}."""
+        if self.fusion != "gated_sum":
+            return {}
+        return {name: float(g) for name, g in zip(self.streams, self.gates.detach().cpu())}
+
+    # ---- forward ------------------------------------------------------------
+    def _graph_stream(self, stgcn, x):
+        B, C, T, V = x.shape
+        h = stgcn(x)                                   # (B, stgcn_channels, T, V)
+        return h.permute(0, 2, 3, 1).reshape(B, T, -1)  # (B, T, V * stgcn_channels)
+
+    def forward(self, x, hamer=None, dinov2=None):
+        B, C, T, V = x.shape
+        z = {}
+        if "body_hands" in self.streams:
+            z["body_hands"] = self.branches["body_hands"](self._graph_stream(self.body_hands_stgcn, x[..., :65]))
+        if "face" in self.streams:
+            z["face"] = self.branches["face"](self._graph_stream(self.face_stgcn, x[..., 65:]))
+        if "hamer" in self.streams:
+            if hamer is None:
+                raise ValueError("hamer stream is on but forward() got no `hamer` tensor.")
+            z["hamer"] = self.branches["hamer"](hamer.permute(0, 2, 1))   # (B, T, dim)
+
+        if self._ablation is not None:
+            name, value = self._ablation
+            z[name] = value.to(z[name].dtype).expand_as(z[name])
+
+        if self.fusion == "concat":
+            cat = torch.cat([z[name] for name in self.streams], dim=-1)
+            fused = self.fusion_proj(cat)
+            if self._capture is not None:
+                W = self.fusion_proj[0].weight
+                contrib, start = {}, 0
+                for name in self.streams:
+                    d = self.stream_dims[name]
+                    contrib[name] = z[name] @ W[:, start:start + d].T
+                    start += d
+                self._capture(z, contrib)
+        else:
+            contrib = {name: g * z[name] for name, g in zip(self.streams, self.gates)}
+            fused = self.fusion_norm(sum(contrib.values()))
+            if self._capture is not None:
+                self._capture(z, contrib)
+
+        if self.encoder_type == "bilstm":
+            emb, _ = self.lstm(fused)
+        else:
+            emb = self.transformer_encoder(self.pos_encoder(fused))
+        logits = self.classifier(emb)
+        return logits.permute(0, 2, 1), emb.permute(0, 2, 1)
+
+
+class MultiStream_BiLSTM(MultiStreamSegmenter):
+    def __init__(self, **kwargs):
+        kwargs.pop("encoder", None)
+        super().__init__(encoder="bilstm", **kwargs)
+
+
+class MultiStream_Transformer(MultiStreamSegmenter):
+    def __init__(self, **kwargs):
+        kwargs.pop("encoder", None)
+        super().__init__(encoder="transformer", **kwargs)
