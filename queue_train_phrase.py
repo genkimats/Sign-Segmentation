@@ -346,18 +346,18 @@ EXPERIMENTS_TO_RUN = [
     #     "class_weights": [1.0, 1.1, 12.4],
     #     "description": "MS: HaMeR + face"
     # },
-    {
-        "basename": "multistream_bilstm", 
-        "window_size": 128, 
-        "d_model": 256,
-        "use_stream_body_hands": True,
-        "use_stream_face": True,
-        "use_stream_hamer": True,
-        "face_subset": "compact",
-        "fusion": "concat",              # or "gated_sum"
-        "class_weights": [1.0, 1.1, 12.4],
-        "description": "MS: Body + HaMeR + face"
-    },
+    # {
+    #     "basename": "multistream_bilstm", 
+    #     "window_size": 128, 
+    #     "d_model": 256,
+    #     "use_stream_body_hands": True,
+    #     "use_stream_face": True,
+    #     "use_stream_hamer": True,
+    #     "face_subset": "compact",
+    #     "fusion": "concat",              # or "gated_sum"
+    #     "class_weights": [1.0, 1.1, 12.4],
+    #     "description": "MS: Body + HaMeR + face"
+    # },
     # {
     #     "basename": "multistream_transformer", 
     #     "window_size": 32, 
@@ -406,18 +406,19 @@ EXPERIMENTS_TO_RUN = [
     #     "class_weights": [1.0, 1.1, 12.4],
     #     "description": "MS: Body"
     # },
-    # {
-    #     "basename": "multistream_bilstm", 
-    #     "window_size": 128, 
-    #     "d_model": 256,
-    #     "use_stream_body_hands": False,
-    #     "use_stream_face": True,
-    #     "use_stream_hamer": False,
-    #     "face_subset": "compact",
-    #     "fusion": "concat",              # or "gated_sum"
-    #     "class_weights": [1.0, 1.1, 12.4],
-    #     "description": "MS: face"
-    # },
+    {
+        "basename": "multistream_bilstm", 
+        "base_features": ["x-cord", "y-cord"],
+        "window_size": 128, 
+        "d_model": 256,
+        "use_stream_body_hands": False,
+        "use_stream_face": True,
+        "use_stream_hamer": False,
+        "face_subset": "compact",
+        "fusion": "concat",              # or "gated_sum"
+        "class_weights": [1.0, 1.1, 12.4],
+        "description": "MS: face"
+    },
     # {
     #     "basename": "multistream_bilstm", 
     #     "window_size": 128, 
