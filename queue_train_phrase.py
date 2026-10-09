@@ -22,7 +22,7 @@ MAMBA_DEFAULTS = {
     "patience": 10,
     "learning_rate": 0.0001,
     "num_vertices": 65,
-    "tolerance_window": 5,
+    "tolerance_window": 1,
     "temporal_downsample_factor": 1, 
     "loss_function": "weighted_ce",  
     "ctc_weight": 0.5,             
@@ -279,20 +279,20 @@ _MS_BODY_HAMER = {
 
 EXPERIMENTS_TO_RUN = []
 for _window in (128, 512):
-    for _pe in ("none", "sinusoidal", "rope", "alibi"):
+    for _pe in ("none", "sinusoidal"):
         EXPERIMENTS_TO_RUN.append({
             **_MS_BODY_HAMER, "basename": "multistream_transformer", "window_size": _window,
             "pos_encoding": _pe, "transformer_norm": "pre",
-            "description": f"PE study: Body+HaMeR, Transformer pre-norm, pos={_pe}, window {_window}",
+            "description": f"LABEL_V2: PE study: Body+HaMeR, Transformer pre-norm, pos={_pe}, window {_window}",
         })
     EXPERIMENTS_TO_RUN.append({
         **_MS_BODY_HAMER, "basename": "multistream_transformer", "window_size": _window,
         "pos_encoding": "sinusoidal", "transformer_norm": "post",
-        "description": f"PE study: Body+HaMeR, Transformer post-norm (original), pos=sinusoidal, window {_window}",
+        "description": f"LABEL_V2: PE study: Body+HaMeR, Transformer post-norm (original), pos=sinusoidal, window {_window}",
     })
     EXPERIMENTS_TO_RUN.append({
         **_MS_BODY_HAMER, "basename": "multistream_bilstm", "window_size": _window,
-        "description": f"PE study: Body+HaMeR, BiLSTM reference, window {_window}",
+        "description": f"LABEL_V2: PE study: Body+HaMeR, BiLSTM reference, window {_window}",
     })
 
 if CHOSEN_TYPE == 'mamba':
