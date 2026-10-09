@@ -276,7 +276,7 @@ _MS_BODY_HAMER = {
 
 EXPERIMENTS_TO_RUN = []
 for _window in (128, 512):
-    for _pe in ("none", "sinusoidal"):
+    for _pe in ("rope", "alibi"):
         EXPERIMENTS_TO_RUN.append({
             **_MS_BODY_HAMER, "basename": "multistream_transformer", "window_size": _window,
             "pos_encoding": _pe, "transformer_norm": "pre",
