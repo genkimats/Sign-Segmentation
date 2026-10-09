@@ -22,7 +22,7 @@ MAMBA_DEFAULTS = {
     "patience": 10,
     "learning_rate": 0.0001,
     "num_vertices": 65,
-    "tolerance_window": 1,
+    "tolerance_window": 5,
     "temporal_downsample_factor": 1, 
     "loss_function": "weighted_ce",  
     "ctc_weight": 0.5,             
@@ -56,6 +56,15 @@ MAMBA_DEFAULTS = {
     # "concat" (option A): each stream -> its *_proj_dim, concatenated, shared projection -> d_model
     # "gated_sum" (option B): each stream -> d_model, learnable gate per stream, summed
     "fusion": "concat",
+    # Transformer encoder of multistream_transformer (ignored by BiLSTM models):
+    #   pos_encoding: "sinusoidal" (absolute) | "rope" (rotary, relative) | "alibi" (relative,
+    #                 favours nearby frames) | "none"
+    #   transformer_norm: "post" (original) | "pre" (LayerNorm before each sublayer; more stable)
+    #   sinusoidal + post = the original PyTorch encoder (older runs rebuild unchanged)
+    "pos_encoding": "sinusoidal",
+    "transformer_norm": "post",
+    "rope_base": 10000.0,
+    "nhead": 8,
     "body_hands_proj_dim": 256,      # concat only (gated_sum always uses d_model)
     "face_proj_dim": 256,
     # (hamer_proj_dim also sets the HaMeR branch size in concat mode; model default 256 there)
@@ -241,197 +250,47 @@ _PURE_HAMER = {
     "tolerance_window": 1,
 }
 
-EXPERIMENTS_TO_RUN = [
-    # --- Pure HaMeR ---
-    # {**_PURE_HAMER, "basename": "bilstm_baseline", "window_size": 128,
-    #  "description": "METRIC FIX: overlap ratio (0/128), tolerance=1, pure_hamer"},
-    # {**_PURE_HAMER, "basename": "transformer_baseline", "window_size": 128,
-    #  "description": "METRIC FIX: overlap ratio (0/128), tolerance=1, pure_hamer"},
+# ------------------------------------------------------------------------------
+# Position-encoding study on the multi-stream model (Body + HaMeR, the best stream
+# setup so far). Everything except the encoder / position encoding / window is fixed.
+#   - Transformer, pre-norm, 4 position encodings x 2 windows  (the main comparison)
+#   - Transformer, original post-norm sinusoidal x 2 windows    (isolates the pre-norm change)
+#   - BiLSTM x 2 windows                                        (recurrent reference)
+# Recommended: give all of them 3 seeds when the script asks (or start with 1 seed to
+# check that training is stable, then add seeds).
+# ------------------------------------------------------------------------------
+_MS_BODY_HAMER = {
+    "use_stream_body_hands": True,
+    "use_stream_face": False,
+    "use_stream_hamer": True,
+    "fusion": "concat",
+    "d_model": 256,
+    "n_layers": 4,
+    "nhead": 8,
+    "overlap": 0,
+    "loss_function": "weighted_ce",
+    "class_weights": [1.0, 1.1, 12.4],
+    "tolerance_window": 1,
+    "kinematic_features": [],
+}
 
-    
-    # {
-    #     "basename": "stgcn_bilstm",
-    #     "window_size": 128,
-    #     "class_weights": [1.0, 1.1, 12.4],
-    #     "description": "overlap ratio (0/128), mediapipe"
-    # },
-    # {
-    #     "basename": "stgcn_bilstm",
-    #     "window_size": 128,
-    #     "use_hamer_features": True,
-    #     "stgcn_proj_dim": 192,
-    #     "hamer_proj_dim": 128,
-    #     "class_weights": [1.0, 1.1, 12.4],
-    #     "description": "overlap ratio (0/128), st_proj=192, hamer_proj=128, hamer + mediapipe"
-    # },
-    # {
-    #     "basename": "stgcn_bilstm",
-    #     "window_size": 128,
-    #     "face_only": True,
-    #     "use_face_keypoints": True,
-    #     "face_subset": "full",
-    #     "class_weights": [1.0, 1.1, 12.4],
-    #     "description": "overlap ratio (0/128), full face"
-    # },
-    # {
-    #     "basename": "stgcn_bilstm",
-    #     "window_size": 128,
-    #     "face_only": True,
-    #     "use_face_keypoints": True,
-    #     "face_subset": "compact",
-    #     "class_weights": [1.0, 1.1, 12.4],
-    #     "description": "overlap ratio (0/128), compact face"
-    # },
-    # {
-    #     "basename": "stgcn_bilstm",
-    #     "window_size": 128,
-    #     "face_only": True,
-    #     "use_face_keypoints": True,
-    #     "face_subset": "eyes_brows",
-    #     "class_weights": [1.0, 1.1, 12.4],
-    #     "description": "overlap ratio (0/128), eyes & brows"
-    # },
-    # {
-    #     "basename": "stgcn_bilstm",
-    #     "window_size": 128,
-    #     "face_only": True,
-    #     "use_face_keypoints": True,
-    #     "face_subset": "minimal",
-    #     "class_weights": [1.0, 1.1, 12.4],
-    #     "description": "overlap ratio (0/128), minimal face"
-    # },
-
-    # {
-    #     "basename": "stgcn_bilstm",
-    #     "window_size": 128,
-    #     "class_weights": [1.0, 1.1, 12.4],
-    #     "face_subset": "full",
-    #     "use_face_keypoints": True,
-    #     "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + full face"
-    # },
-    # {
-    #     "basename": "stgcn_bilstm",
-    #     "window_size": 128,
-    #     "class_weights": [1.0, 1.1, 12.4],
-    #     "face_subset": "compact",
-    #     "use_face_keypoints": True,
-    #     "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + compact face"
-    # },
-    # {
-    #     "basename": "stgcn_bilstm",
-    #     "window_size": 128,
-    #     "class_weights": [1.0, 1.1, 12.4],
-    #     "face_subset": "eyes_brows",
-    #     "use_face_keypoints": True,
-    #     "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + eyes brows"
-    # },
-    # {
-    #     "basename": "stgcn_bilstm",
-    #     "window_size": 128,
-    #     "class_weights": [1.0, 1.1, 12.4],
-    #     "face_subset": "minimal",
-    #     "use_face_keypoints": True,
-    #     "description": "overlap ratio (0/128), weights=[1.0, 1.1, 12.4], mediapipe + minimal face"
-    # },
-
-    # {
-    #     "basename": "multistream_bilstm", 
-    #     "window_size": 128, 
-    #     "d_model": 256,
-    #     "use_stream_body_hands": False,
-    #     "use_stream_face": True,
-    #     "use_stream_hamer": True,
-    #     "face_subset": "compact",
-    #     "fusion": "concat",              # or "gated_sum"
-    #     "class_weights": [1.0, 1.1, 12.4],
-    #     "description": "MS: HaMeR + face"
-    # },
-    # {
-    #     "basename": "multistream_bilstm", 
-    #     "window_size": 128, 
-    #     "d_model": 256,
-    #     "use_stream_body_hands": True,
-    #     "use_stream_face": True,
-    #     "use_stream_hamer": True,
-    #     "face_subset": "compact",
-    #     "fusion": "concat",              # or "gated_sum"
-    #     "class_weights": [1.0, 1.1, 12.4],
-    #     "description": "MS: Body + HaMeR + face"
-    # },
-    # {
-    #     "basename": "multistream_transformer", 
-    #     "window_size": 32, 
-    #     "d_model": 256,
-    #     "use_stream_body_hands": True,
-    #     "use_stream_face": True,
-    #     "use_stream_hamer": True,
-    #     "face_subset": "compact",
-    #     "fusion": "concat",              # or "gated_sum"
-    #     "class_weights": [1.0, 1.1, 12.4],
-    #     "description": "MS: Body + HaMeR + face, window=32"
-    # },
-    # {
-    #     "basename": "multistream_bilstm", 
-    #     "window_size": 128, 
-    #     "d_model": 256,
-    #     "use_stream_body_hands": True,
-    #     "use_stream_face": False,
-    #     "use_stream_hamer": True,
-    #     "face_subset": "compact",
-    #     "fusion": "concat",              # or "gated_sum"
-    #     "class_weights": [1.0, 1.1, 12.4],
-    #     "description": "MS: Body + HaMeR"
-    # },
-    # {
-    #     "basename": "multistream_bilstm", 
-    #     "window_size": 128, 
-    #     "d_model": 256,
-    #     "use_stream_body_hands": True,
-    #     "use_stream_face": True,
-    #     "use_stream_hamer": False,
-    #     "face_subset": "compact",
-    #     "fusion": "concat",              # or "gated_sum"
-    #     "class_weights": [1.0, 1.1, 12.4],
-    #     "description": "MS: Body + face"
-    # },
-    # {
-    #     "basename": "multistream_bilstm", 
-    #     "window_size": 128, 
-    #     "d_model": 256,
-    #     "use_stream_body_hands": True,
-    #     "use_stream_face": False,
-    #     "use_stream_hamer": False,
-    #     "face_subset": "compact",
-    #     "fusion": "concat",              # or "gated_sum"
-    #     "class_weights": [1.0, 1.1, 12.4],
-    #     "description": "MS: Body"
-    # },
-    {
-        "basename": "multistream_bilstm", 
-        "base_features": ["x-cord", "y-cord"],
-        "window_size": 128, 
-        "d_model": 256,
-        "use_stream_body_hands": False,
-        "use_stream_face": True,
-        "use_stream_hamer": False,
-        "face_subset": "compact",
-        "fusion": "concat",              # or "gated_sum"
-        "class_weights": [1.0, 1.1, 12.4],
-        "description": "MS: face"
-    },
-    # {
-    #     "basename": "multistream_bilstm", 
-    #     "window_size": 128, 
-    #     "d_model": 256,
-    #     "use_stream_body_hands": False,
-    #     "use_stream_face": False,
-    #     "use_stream_hamer": True,
-    #     "face_subset": "compact",
-    #     "fusion": "concat",              # or "gated_sum"
-    #     "class_weights": [1.0, 1.1, 12.4],
-    #     "description": "MS: HaMeR"
-    # },
-]
+EXPERIMENTS_TO_RUN = []
+for _window in (128, 512):
+    for _pe in ("none", "sinusoidal", "rope", "alibi"):
+        EXPERIMENTS_TO_RUN.append({
+            **_MS_BODY_HAMER, "basename": "multistream_transformer", "window_size": _window,
+            "pos_encoding": _pe, "transformer_norm": "pre",
+            "description": f"PE study: Body+HaMeR, Transformer pre-norm, pos={_pe}, window {_window}",
+        })
+    EXPERIMENTS_TO_RUN.append({
+        **_MS_BODY_HAMER, "basename": "multistream_transformer", "window_size": _window,
+        "pos_encoding": "sinusoidal", "transformer_norm": "post",
+        "description": f"PE study: Body+HaMeR, Transformer post-norm (original), pos=sinusoidal, window {_window}",
+    })
+    EXPERIMENTS_TO_RUN.append({
+        **_MS_BODY_HAMER, "basename": "multistream_bilstm", "window_size": _window,
+        "description": f"PE study: Body+HaMeR, BiLSTM reference, window {_window}",
+    })
 
 if CHOSEN_TYPE == 'mamba':
     defaults = MAMBA_DEFAULTS

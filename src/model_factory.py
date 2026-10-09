@@ -159,6 +159,12 @@ def build_model_kwargs(config, detected_hamer_dim=None, detected_dinov2_dim=None
                 model_kwargs[key] = int(config[key])
         if not streams["use_stream_hamer"]:
             model_kwargs.pop("hamer_dim", None)
+        if model_name == "multistream_transformer":
+            # Position encoding / norm placement of the Transformer encoder. Defaults
+            # (sinusoidal + post) = the original encoder, so older runs rebuild unchanged.
+            model_kwargs["pos_encoding"] = config.get("pos_encoding", "sinusoidal")
+            model_kwargs["transformer_norm"] = config.get("transformer_norm", "post")
+            model_kwargs["rope_base"] = float(config.get("rope_base", 10000.0))
 
     # Face-only input (dataset face_only mode): graph models must build a face-only graph.
     if config.get("face_only", False):

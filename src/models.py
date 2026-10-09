@@ -2093,6 +2093,154 @@ class HandsOn2025(nn.Module):
             emb = emb.repeat_interleave(self.downsample, dim=1)[:, :T]
         return logits.permute(0, 2, 1), emb.permute(0, 2, 1)
 
+
+# ==============================================================================
+# RELATIVE-POSITION TRANSFORMER ENCODER (RoPE / ALiBi / sinusoidal / none)
+# ==============================================================================
+def _alibi_slopes(n_heads):
+    """Per-head ALiBi slopes (Press et al., 2022): geometric sequence 2^(-8/n), 2^(-16/n), ..."""
+    def pow2_slopes(n):
+        start = 2 ** (-8.0 / n)
+        return [start ** (i + 1) for i in range(n)]
+    if math.log2(n_heads).is_integer():
+        return pow2_slopes(n_heads)
+    closest = 2 ** math.floor(math.log2(n_heads))
+    return pow2_slopes(closest) + pow2_slopes(2 * closest)[0::2][: n_heads - closest]
+
+
+class RotaryEmbedding(nn.Module):
+    """
+    RoPE (Su et al., 2021): rotates each query/key feature pair by an angle proportional
+    to the frame index, so q.k depends only on the DISTANCE between two frames, not on
+    where they sit inside the (arbitrarily cut) window.
+    """
+    def __init__(self, head_dim, base=10000.0):
+        super().__init__()
+        if head_dim % 2 != 0:
+            raise ValueError(f"RoPE needs an even head dimension, got {head_dim}.")
+        inv_freq = 1.0 / (base ** (torch.arange(0, head_dim, 2, dtype=torch.float32) / head_dim))
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+
+    def cos_sin(self, T, device, dtype):
+        t = torch.arange(T, device=device, dtype=torch.float32)
+        freqs = torch.outer(t, self.inv_freq.to(device))      # (T, head_dim/2)
+        return freqs.cos().to(dtype), freqs.sin().to(dtype)
+
+    @staticmethod
+    def apply(x, cos, sin):
+        """x: (B, H, T, head_dim) -- rotate-half formulation."""
+        half = x.shape[-1] // 2
+        x1, x2 = x[..., :half], x[..., half:]
+        return torch.cat([x1 * cos - x2 * sin, x1 * sin + x2 * cos], dim=-1)
+
+
+class RelPosSelfAttention(nn.Module):
+    def __init__(self, d_model, nhead, dropout, pos_encoding, rope_base=10000.0):
+        super().__init__()
+        self.nhead = nhead
+        self.head_dim = d_model // nhead
+        self.pos_encoding = pos_encoding
+        self.qkv = nn.Linear(d_model, 3 * d_model)
+        self.out = nn.Linear(d_model, d_model)
+        self.attn_dropout = dropout
+        self.rope = RotaryEmbedding(self.head_dim, rope_base) if pos_encoding == "rope" else None
+        if pos_encoding == "alibi":
+            self.register_buffer("alibi_slopes", torch.tensor(_alibi_slopes(nhead), dtype=torch.float32),
+                                 persistent=False)
+        self.store_attention = False  # set True to keep the last attention map (analysis only)
+        self.last_attention = None
+
+    def _alibi_bias(self, T, device, dtype):
+        pos = torch.arange(T, device=device)
+        dist = (pos[None, :] - pos[:, None]).abs().to(torch.float32)          # (T, T)
+        return (-self.alibi_slopes.to(device)[:, None, None] * dist).to(dtype)  # (H, T, T)
+
+    def forward(self, x):
+        B, T, D = x.shape
+        q, k, v = self.qkv(x).view(B, T, 3, self.nhead, self.head_dim).permute(2, 0, 3, 1, 4)
+        if self.rope is not None:
+            cos, sin = self.rope.cos_sin(T, x.device, q.dtype)
+            q, k = RotaryEmbedding.apply(q, cos, sin), RotaryEmbedding.apply(k, cos, sin)
+        bias = self._alibi_bias(T, x.device, q.dtype) if self.pos_encoding == "alibi" else None
+
+        if self.store_attention:
+            scores = (q @ k.transpose(-2, -1)) / math.sqrt(self.head_dim)
+            if bias is not None:
+                scores = scores + bias
+            attn = scores.softmax(dim=-1)
+            self.last_attention = attn.detach()                                 # (B, H, T, T)
+            attn = nn.functional.dropout(attn, self.attn_dropout, self.training)
+            y = attn @ v
+        else:
+            y = nn.functional.scaled_dot_product_attention(
+                q, k, v, attn_mask=bias, dropout_p=self.attn_dropout if self.training else 0.0)
+        return self.out(y.transpose(1, 2).reshape(B, T, D))
+
+
+class RelPosEncoderLayer(nn.Module):
+    """Transformer encoder layer with pre- or post-norm and a ReLU feed-forward (as nn.TransformerEncoderLayer)."""
+    def __init__(self, d_model, nhead, dim_feedforward, dropout, pos_encoding, norm="pre", rope_base=10000.0):
+        super().__init__()
+        self.norm_first = norm == "pre"
+        self.attn = RelPosSelfAttention(d_model, nhead, dropout, pos_encoding, rope_base)
+        self.ff = nn.Sequential(nn.Linear(d_model, dim_feedforward), nn.ReLU(), nn.Dropout(dropout),
+                                nn.Linear(dim_feedforward, d_model))
+        self.norm1, self.norm2 = nn.LayerNorm(d_model), nn.LayerNorm(d_model)
+        self.drop1, self.drop2 = nn.Dropout(dropout), nn.Dropout(dropout)
+
+    def forward(self, x):
+        if self.norm_first:
+            x = x + self.drop1(self.attn(self.norm1(x)))
+            x = x + self.drop2(self.ff(self.norm2(x)))
+        else:
+            x = self.norm1(x + self.drop1(self.attn(x)))
+            x = self.norm2(x + self.drop2(self.ff(x)))
+        return x
+
+
+class RelPosTransformerEncoder(nn.Module):
+    """
+    pos_encoding:
+      "sinusoidal" -- absolute sine/cosine added to the input (classic Transformer)
+      "rope"       -- rotary embedding inside every attention layer (relative distance)
+      "alibi"      -- per-head linear distance penalty on attention scores (relative, favours nearby frames)
+      "none"       -- no position information (attention is order-blind)
+    norm: "pre" (LayerNorm before each sublayer, + final LayerNorm) or "post".
+    """
+    POS_ENCODINGS = ("sinusoidal", "rope", "alibi", "none")
+
+    def __init__(self, d_model, nhead, n_layers, dim_feedforward, dropout, pos_encoding="rope",
+                 norm="pre", rope_base=10000.0):
+        super().__init__()
+        if pos_encoding not in self.POS_ENCODINGS:
+            raise ValueError(f"pos_encoding must be one of {self.POS_ENCODINGS}, got '{pos_encoding}'.")
+        if norm not in ("pre", "post"):
+            raise ValueError(f"transformer_norm must be 'pre' or 'post', got '{norm}'.")
+        self.pos_encoding = pos_encoding
+        self.input_pos = PositionalEncoding(d_model, dropout) if pos_encoding == "sinusoidal" else nn.Dropout(dropout)
+        self.layers = nn.ModuleList([
+            RelPosEncoderLayer(d_model, nhead, dim_feedforward, dropout, pos_encoding, norm, rope_base)
+            for _ in range(n_layers)
+        ])
+        self.final_norm = nn.LayerNorm(d_model) if norm == "pre" else nn.Identity()
+
+    def set_attention_capture(self, on=True):
+        for layer in self.layers:
+            layer.attn.store_attention = on
+            if not on:
+                layer.attn.last_attention = None
+
+    def attention_maps(self):
+        """List (one per layer) of the last stored (B, H, T, T) attention maps."""
+        return [layer.attn.last_attention for layer in self.layers]
+
+    def forward(self, x):
+        x = self.input_pos(x)
+        for layer in self.layers:
+            x = layer(x)
+        return self.final_norm(x)
+
+
 # ==============================================================================
 # MULTI-STREAM MODELS: (body + hands) / face / HaMeR as separately switchable streams
 # ==============================================================================
@@ -2128,7 +2276,8 @@ class MultiStreamSegmenter(nn.Module):
                  dropout=0.2, stgcn_channels=64,
                  use_stream_body_hands=True, use_stream_face=False, use_stream_hamer=False,
                  fusion="concat", body_hands_proj_dim=256, face_proj_dim=256, hamer_proj_dim=256,
-                 hamer_dim=None, encoder="bilstm", nhead=8, dim_feedforward=None):
+                 hamer_dim=None, encoder="bilstm", nhead=8, dim_feedforward=None,
+                 pos_encoding="sinusoidal", transformer_norm="post", rope_base=10000.0):
         super().__init__()
         if fusion not in ("concat", "gated_sum"):
             raise ValueError(f"fusion must be 'concat' or 'gated_sum', got '{fusion}'.")
@@ -2198,11 +2347,20 @@ class MultiStreamSegmenter(nn.Module):
         else:
             if d_model % nhead != 0:
                 raise ValueError(f"d_model ({d_model}) must be divisible by nhead ({nhead}).")
-            self.pos_encoder = PositionalEncoding(d_model, dropout)
-            layer = nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead,
-                                               dim_feedforward=dim_feedforward or d_model * 4,
-                                               dropout=dropout, batch_first=True)
-            self.transformer_encoder = nn.TransformerEncoder(layer, num_layers=n_layers)
+            self.pos_encoding = pos_encoding
+            # sinusoidal + post-norm = the original PyTorch encoder (old checkpoints keep loading);
+            # every other combination uses RelPosTransformerEncoder.
+            self.legacy_encoder = (pos_encoding == "sinusoidal" and transformer_norm == "post")
+            if self.legacy_encoder:
+                self.pos_encoder = PositionalEncoding(d_model, dropout)
+                layer = nn.TransformerEncoderLayer(d_model=d_model, nhead=nhead,
+                                                   dim_feedforward=dim_feedforward or d_model * 4,
+                                                   dropout=dropout, batch_first=True)
+                self.transformer_encoder = nn.TransformerEncoder(layer, num_layers=n_layers)
+            else:
+                self.rel_encoder = RelPosTransformerEncoder(
+                    d_model, nhead, n_layers, dim_feedforward or d_model * 4, dropout,
+                    pos_encoding=pos_encoding, norm=transformer_norm, rope_base=rope_base)
             self.classifier = nn.Linear(d_model, num_classes)
 
         self._capture = None   # callable(stream_inputs, stream_contributions) for diagnostics
@@ -2262,8 +2420,10 @@ class MultiStreamSegmenter(nn.Module):
 
         if self.encoder_type == "bilstm":
             emb, _ = self.lstm(fused)
-        else:
+        elif self.legacy_encoder:
             emb = self.transformer_encoder(self.pos_encoder(fused))
+        else:
+            emb = self.rel_encoder(fused)
         logits = self.classifier(emb)
         return logits.permute(0, 2, 1), emb.permute(0, 2, 1)
 
