@@ -36,6 +36,7 @@ from src.dataset import SignSegmentationDataset
 from src.model_factory import build_model_kwargs
 from src.evaluation import predict_split
 from src.metrics import evaluate_videos, pct_score, extract_segments, decode_threshold_2023, segment_iou
+from src.metrics import boundary_type_analysis, BOUNDARY_TYPES, BOUNDARY_TYPE_LABELS
 
 EXP_DIR = "experiments_phrase"
 MODEL_DIR = "saved_models_phrase"
@@ -275,7 +276,33 @@ def evaluate_run(run_name, split, device, b_threshold, o_threshold, do_sweep, ba
         print(f"  [time] threshold sweep ({len(grid)}x{len(grid)} = {len(grid) ** 2} pairs): "
               f"{time.time() - t0:.1f}s")
 
-    return config, results, best_thresholds, dataset
+    return config, results, best_thresholds, dataset, video_probs, video_gold
+
+
+def print_boundary_types(bt):
+    """Table: phrase-start detection per boundary type (recall@k, offsets, peak P(B))."""
+    tols = bt["tolerances"]
+    header = (f"      {'boundary type':<22} {'n':>5} {'share':>6} {'gap':>5}  "
+              + "  ".join(f"{'R@' + str(k):>6}" for k in tols)
+              + f"  {'offset':>7} {'|off|':>6} {'peakPB':>6}")
+    print(header)
+    print("      " + "-" * (len(header) - 6))
+    for t in BOUNDARY_TYPES + ("all",):
+        r = bt["types"][t]
+        if r["n"] == 0 and t != "all":
+            continue
+        name = "ALL" if t == "all" else BOUNDARY_TYPE_LABELS[t]
+        gap = f"{r['median_gap']:>5.0f}" if not np.isnan(r["median_gap"]) else f"{'-':>5}"
+        off = f"{r['median_offset']:>+7.1f}" if not np.isnan(r["median_offset"]) else f"{'-':>7}"
+        aoff = f"{r['mean_abs_offset']:>6.1f}" if not np.isnan(r["mean_abs_offset"]) else f"{'-':>6}"
+        print(f"      {name:<22} {r['n']:>5} {r['share']:>6.1%} {gap}  "
+              + "  ".join(f"{r['recall'][k]:>6.3f}" for k in tols)
+              + f"  {off} {aoff} {r['peak_pb']:>6.3f}")
+    k_mid = tols[len(tols) // 2]
+    print(f"      predicted starts: {bt['n_pred']} | "
+          + " | ".join(f"P@{k} {bt['precision'][k]:.3f}" for k in tols)
+          + f" | unmatched @±{k_mid}: {bt['fp_in_phrase'][k_mid]} inside a gold phrase, "
+            f"{bt['fp_in_pause'][k_mid]} in a gold pause")
 
 
 def print_per_video(per_video):
@@ -310,6 +337,7 @@ def main():
             "  python evaluate_phrase.py --model stgcn_bilstm --sweep     # tune thresholds on val\n"
             "  python evaluate_phrase.py --model stgcn_bilstm --split test --b-threshold 0.6 --o-threshold 0.5\n"
             "  python evaluate_phrase.py --model stgcn_bilstm --per-video --diagnose\n"
+            "  python evaluate_phrase.py --model multistream_bilstm --boundary-types --sweep\n"
         ),
     )
     parser.add_argument("--model", help="Model basename, e.g. stgcn_bilstm (asks if omitted).")
@@ -329,6 +357,15 @@ def main():
                              "was trained on labels with I/B swapped.")
     parser.add_argument("--diagnose", action="store_true",
                         help="Print class distributions, segment counts/lengths and a trivial baseline.")
+    parser.add_argument("--boundary-types", action="store_true",
+                        help="Also evaluate phrase-start detection split by boundary type: after a "
+                             "long pause, after a short pause, or within continuous signing (no gap).")
+    parser.add_argument("--tolerances", type=int, nargs="+", default=[2, 5, 10],
+                        help="Boundary tolerances in frames for --boundary-types (default: 2 5 10).")
+    parser.add_argument("--short-gap", type=int, default=12,
+                        help="Max Outside gap (frames) still counted as a SHORT pause (default 12).")
+    parser.add_argument("--peak-window", type=int, default=5,
+                        help="+-frames around a gold start for the peak P(B) column (default 5).")
     parser.add_argument("--sweep-step", type=float, default=0.1,
                         help="Threshold grid step for --sweep over 0.3..0.9 (default 0.1 = 7x7 pairs). "
                              "Smaller = finer tuning but slower (0.05 = 13x13).")
@@ -357,11 +394,12 @@ def main():
     print(f"\nEvaluating {len(selected)} run(s) of '{model_name}' on '{args.split}' ({device}).")
 
     rows = []
+    boundary_rows = []
     for prefix, run_name in selected:
         print(f"\n--- {run_name} ---")
         try:
             t_run = time.time()
-            config, results, best_thr, dataset = evaluate_run(
+            config, results, best_thr, dataset, video_probs, video_gold = evaluate_run(
                 run_name, args.split, device, args.b_threshold, args.o_threshold,
                 args.sweep, args.batch_size, args.sweep_step, args.diagnose, args.swap_ib)
         except Exception as e:
@@ -388,6 +426,29 @@ def main():
                       f"B {m['F1_B']:.4f}  (Frame F1 = their average)")
             if args.per_video:
                 print_per_video(m["per_video"])
+            if args.boundary_types:
+                thr = best_thr if key == "swept" else (args.b_threshold, args.o_threshold)
+                bt = boundary_type_analysis(
+                    video_probs, video_gold, decoder="argmax" if key == "argmax" else "threshold",
+                    b_threshold=thr[0], o_threshold=thr[1], tolerances=args.tolerances,
+                    short_gap=args.short_gap, peak_window=args.peak_window)
+                print_boundary_types(bt)
+                for t in BOUNDARY_TYPES + ("all",):
+                    r = bt["types"][t]
+                    row = {"run": run_name, "prefix": prefix, "decoder": label, "boundary_type": t,
+                           "n": r["n"], "share": round(r["share"], 4),
+                           "median_gap": r["median_gap"]}
+                    for k in bt["tolerances"]:
+                        row[f"recall@{k}"] = round(r["recall"][k], 4) if r["n"] else ""
+                    row.update({"median_offset": r["median_offset"],
+                                "mean_abs_offset": round(r["mean_abs_offset"], 3) if r["n"] else "",
+                                "peak_pb": round(r["peak_pb"], 4) if r["n"] else "",
+                                "n_pred": bt["n_pred"]})
+                    for k in bt["tolerances"]:
+                        row[f"precision@{k}"] = round(bt["precision"][k], 4)
+                    row.update({"short_gap": args.short_gap, "seed": config.get("seed", ""),
+                                "description": config.get("description", "")})
+                    boundary_rows.append(row)
             rows.append({
                 "run": run_name,
                 "prefix": prefix,
@@ -425,6 +486,13 @@ def main():
         writer.writeheader()
         writer.writerows(rows)
     print(f"\n✅ Summary saved to {csv_path} (per-video details in {OUT_DIR}/).")
+    if boundary_rows:
+        bt_path = os.path.join(OUT_DIR, f"{model_name}_{args.split}_boundary_types.csv")
+        with open(bt_path, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=list(boundary_rows[0].keys()))
+            writer.writeheader()
+            writer.writerows(boundary_rows)
+        print(f"✅ Boundary-type results saved to {bt_path}")
 
 
 if __name__ == "__main__":

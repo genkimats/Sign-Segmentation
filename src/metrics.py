@@ -289,11 +289,15 @@ def evaluate_videos(video_probs, video_gold, decoder="argmax", b_threshold=0.5, 
     if light:
         y_true = y_pred = None
         frame_f1 = float("nan")
+        per_class_f1 = [float("nan")] * 3
         mean_seg_f1 = float("nan")
     else:
         y_true = np.concatenate(all_true)
         y_pred = np.concatenate(all_pred)
         frame_f1 = f1_score(y_true, y_pred, labels=[0, 1, 2], average="macro", zero_division=0)
+        # Per-class F1 (O, I, B): the macro Frame F1 is their plain average, so a weak
+        # single-frame B class pulls it down even when O/I (and IoU) are very good.
+        per_class_f1 = f1_score(y_true, y_pred, labels=[0, 1, 2], average=None, zero_division=0)
         mean_seg_f1 = float(np.mean(seg_f1s))
 
     mean_iou = float(np.mean(ious))
@@ -301,6 +305,9 @@ def evaluate_videos(video_probs, video_gold, decoder="argmax", b_threshold=0.5, 
 
     return {
         "Frame_F1": float(frame_f1),
+        "F1_O": float(per_class_f1[0]),
+        "F1_I": float(per_class_f1[1]),
+        "F1_B": float(per_class_f1[2]),
         "IoU": mean_iou,
         "Pct": mean_pct,
         "Segment_F1_05": mean_seg_f1,
@@ -345,4 +352,168 @@ def evaluate_batch(predictions, targets):
         "Frame_F1": frame_f1,
         "Mean_IoU": total_iou / batch_size,
         "Segment_F1_05": total_seg_f1 / batch_size,
+    }
+
+
+# ==============================================================================
+# Boundary-type evaluation: how well are phrase STARTS found, split by context?
+# ==============================================================================
+BOUNDARY_TYPES = ("continuous", "short_pause", "long_pause", "video_start")
+BOUNDARY_TYPE_LABELS = {
+    "continuous": "continuous (no O gap)",
+    "short_pause": "short pause",
+    "long_pause": "long pause",
+    "video_start": "video start",
+}
+
+
+def classify_gold_boundaries(gold, short_gap):
+    """
+    Every gold phrase start, classified by what precedes it:
+      continuous  -- the previous frame is still inside a phrase (I/B): the new phrase
+                     follows the old one with no Outside gap
+      short_pause -- preceded by 1..short_gap Outside frames
+      long_pause  -- preceded by more than short_gap Outside frames
+      video_start -- the phrase starts at frame 0 (nothing before it)
+    Returns a list of (start_frame, type, gap_frames).
+    """
+    gold = np.asarray(gold).astype(np.int64)
+    out = []
+    for s, _ in extract_segments(gold):
+        if s == 0:
+            out.append((s, "video_start", 0))
+        elif gold[s - 1] != O_TAG:
+            out.append((s, "continuous", 0))
+        else:
+            k = s - 1
+            while k >= 0 and gold[k] == O_TAG:
+                k -= 1
+            gap = s - 1 - k
+            out.append((s, "short_pause" if gap <= short_gap else "long_pause", gap))
+    return out
+
+
+def match_boundaries(gold_pos, pred_pos, tolerance):
+    """
+    One-to-one matching of predicted to gold boundary frames: pairs within
+    +-tolerance frames, closest pairs first. Returns (gold_matched bool array,
+    pred_matched bool array, signed offsets pred-gold of the matched gold boundaries
+    as a float array with NaN where unmatched).
+    """
+    gold_pos = np.asarray(gold_pos, dtype=np.int64)
+    pred_pos = np.sort(np.asarray(pred_pos, dtype=np.int64))
+    g_ok = np.zeros(len(gold_pos), dtype=bool)
+    p_ok = np.zeros(len(pred_pos), dtype=bool)
+    offsets = np.full(len(gold_pos), np.nan)
+    if len(gold_pos) == 0 or len(pred_pos) == 0:
+        return g_ok, p_ok, offsets
+    pairs = []
+    for gi, g in enumerate(gold_pos):
+        lo = np.searchsorted(pred_pos, g - tolerance, side="left")
+        hi = np.searchsorted(pred_pos, g + tolerance, side="right")
+        for pi in range(lo, hi):
+            pairs.append((abs(int(pred_pos[pi]) - int(g)), gi, pi))
+    pairs.sort()
+    for _, gi, pi in pairs:
+        if not g_ok[gi] and not p_ok[pi]:
+            g_ok[gi] = p_ok[pi] = True
+            offsets[gi] = pred_pos[pi] - gold_pos[gi]
+    return g_ok, p_ok, offsets
+
+
+def boundary_type_analysis(video_probs, video_gold, decoder="argmax", b_threshold=0.5, o_threshold=0.5,
+                           tolerances=(2, 5, 10), short_gap=12, peak_window=5):
+    """
+    Phrase-start detection split by boundary type (see classify_gold_boundaries).
+
+    Predicted boundaries = start frames of the decoded predicted segments (same decoder
+    options as evaluate_videos). For each type and tolerance k it reports recall@k
+    (share of gold starts with a predicted start within +-k frames, one-to-one).
+    Precision@k is only defined over ALL predicted starts (a predicted start doesn't
+    have a type); unmatched predicted starts are split into those inside a gold phrase
+    (spurious splits) and those in gold Outside (spurious phrases in pauses).
+
+    Decoder-independent extra: "peak P(B)" = mean over gold starts of the maximum
+    P(B) within +-peak_window frames -- how strongly the model signals that boundary at
+    all, before any decoding.
+    """
+    tolerances = sorted(int(t) for t in tolerances)
+    max_tol = tolerances[-1]
+    per_type = {t: {"n": 0, "gaps": [], "hits": {k: 0 for k in tolerances},
+                    "offsets": [], "peak_pb": []} for t in BOUNDARY_TYPES}
+    n_pred = 0
+    pred_hits = {k: 0 for k in tolerances}
+    fp_in_phrase = {k: 0 for k in tolerances}
+    fp_in_pause = {k: 0 for k in tolerances}
+
+    for vid, probs in video_probs.items():
+        gold = np.asarray(video_gold[vid]).astype(np.int64)
+        T = min(len(gold), probs.shape[1])
+        gold, probs = gold[:T], probs[:, :T]
+
+        if decoder == "argmax":
+            pred_segments = extract_segments(probs.argmax(axis=0))
+        elif decoder == "threshold":
+            pred_segments = decode_threshold_2023(probs, b_threshold, o_threshold)
+        else:
+            raise ValueError(f"Unknown decoder '{decoder}'")
+        pred_pos = np.array([s for s, _ in pred_segments], dtype=np.int64)
+        n_pred += len(pred_pos)
+
+        gb = classify_gold_boundaries(gold, short_gap)
+        gold_pos = np.array([s for s, _, _ in gb], dtype=np.int64)
+        types = [t for _, t, _ in gb]
+
+        p_b = probs[B_TAG]
+        for (s, t, gap) in gb:
+            d = per_type[t]
+            d["n"] += 1
+            d["gaps"].append(gap)
+            d["peak_pb"].append(float(p_b[max(0, s - peak_window):min(T, s + peak_window + 1)].max()))
+
+        for k in tolerances:
+            g_ok, p_ok, offsets = match_boundaries(gold_pos, pred_pos, k)
+            for gi, t in enumerate(types):
+                if g_ok[gi]:
+                    per_type[t]["hits"][k] += 1
+                    if k == max_tol:
+                        per_type[t]["offsets"].append(offsets[gi])
+            pred_hits[k] += int(p_ok.sum())
+            sorted_pred = np.sort(pred_pos)
+            unmatched = sorted_pred[~p_ok]
+            inside = gold[np.clip(unmatched, 0, T - 1)] != O_TAG
+            fp_in_phrase[k] += int(inside.sum())
+            fp_in_pause[k] += int((~inside).sum())
+
+    total_gold = sum(per_type[t]["n"] for t in BOUNDARY_TYPES)
+    rows = {}
+    for t in BOUNDARY_TYPES + ("all",):
+        if t == "all":
+            n = total_gold
+            hits = {k: sum(per_type[x]["hits"][k] for x in BOUNDARY_TYPES) for k in tolerances}
+            offsets = [o for x in BOUNDARY_TYPES for o in per_type[x]["offsets"]]
+            peaks = [p for x in BOUNDARY_TYPES for p in per_type[x]["peak_pb"]]
+            gaps = [g for x in BOUNDARY_TYPES for g in per_type[x]["gaps"]]
+        else:
+            d = per_type[t]
+            n, hits, offsets, peaks, gaps = d["n"], d["hits"], d["offsets"], d["peak_pb"], d["gaps"]
+        rows[t] = {
+            "n": n,
+            "share": n / total_gold if total_gold else float("nan"),
+            "median_gap": float(np.median(gaps)) if gaps else float("nan"),
+            "recall": {k: (hits[k] / n if n else float("nan")) for k in tolerances},
+            "median_offset": float(np.median(offsets)) if offsets else float("nan"),
+            "mean_abs_offset": float(np.mean(np.abs(offsets))) if offsets else float("nan"),
+            "peak_pb": float(np.mean(peaks)) if peaks else float("nan"),
+        }
+
+    return {
+        "tolerances": tolerances,
+        "short_gap": short_gap,
+        "peak_window": peak_window,
+        "types": rows,
+        "n_pred": n_pred,
+        "precision": {k: (pred_hits[k] / n_pred if n_pred else float("nan")) for k in tolerances},
+        "fp_in_phrase": fp_in_phrase,
+        "fp_in_pause": fp_in_pause,
     }
