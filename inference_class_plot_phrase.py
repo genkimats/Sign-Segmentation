@@ -46,7 +46,7 @@ O_THRESHOLD = 0.5
 EXP_DIR = "experiments_phrase"
 MODEL_DIR = "saved_models_phrase"
 KEYPOINTS_DIR = "processed_data/keypoints"
-LABELS_DIR = "processed_data/BIO_tags_phrase"
+LABELS_DIR = None  # None = the run's own phrase_labels_dir (v1 for older runs); or set a path to override
 SPLIT_FILE = "dataset_splits.json"
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -74,7 +74,7 @@ def segments_to_bio(segments, length):
 def build_dataset(hp, split):
     return SignSegmentationDataset(
         keypoints_dir=KEYPOINTS_DIR,
-        labels_dir=LABELS_DIR,
+        labels_dir=LABELS_DIR or hp.get("phrase_labels_dir", "processed_data/BIO_tags_phrase"),
         split_file=SPLIT_FILE,
         split=split,
         window_size=hp["window_size"],

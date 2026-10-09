@@ -42,7 +42,8 @@ EXP_DIR = "experiments_phrase"
 MODEL_DIR = "saved_models_phrase"
 OUT_DIR = "evaluation_phrase"
 KEYPOINTS_DIR = "processed_data/keypoints"
-LABELS_DIR = "processed_data/BIO_tags_phrase"
+DEFAULT_LABELS_DIR = "processed_data/BIO_tags_phrase"  # v1; used when a run's config has no phrase_labels_dir
+LABELS_OVERRIDE = None  # set by --labels-dir: evaluate every run against these labels instead
 SPLIT_FILE = "dataset_splits.json"
 
 RUN_RE = re.compile(r"^(?P<model>.+)-(?P<prefix>\d+)$")
@@ -90,10 +91,16 @@ def choose_model_interactively(runs):
 _DATASET_CACHE = {}
 
 
+def labels_dir_for(config):
+    """The run's own phrase labels, unless --labels-dir overrides them for all runs."""
+    return LABELS_OVERRIDE or config.get("phrase_labels_dir", DEFAULT_LABELS_DIR)
+
+
 def dataset_key(config):
     # Window size, overlap, tolerance and downsampling don't change what is cached
     # (windowing/downsampling happen at inference time), so they are not in the key.
     return json.dumps({
+        "labels_dir": labels_dir_for(config),
         "base_features": config.get("base_features"),
         "kinematic_features": config.get("kinematic_features", []),
         "use_face_keypoints": config.get("use_face_keypoints", False),
@@ -125,7 +132,7 @@ def get_dataset(config, split):
         t0 = time.time()
         _DATASET_CACHE[key] = SignSegmentationDataset(
             keypoints_dir=KEYPOINTS_DIR,
-            labels_dir=LABELS_DIR,
+            labels_dir=labels_dir_for(config),
             split_file=SPLIT_FILE,
             split=split,
             window_size=config["window_size"],
@@ -144,6 +151,7 @@ def get_dataset(config, split):
             use_dinov2_features=config.get("use_dinov2_features", False),
             dinov2_dir=config.get("dinov2_dir", "processed_data/dinov2_features"),
         )
+        print(f"  labels: {labels_dir_for(config)}")
         print(f"  [time] loading {split} data: {time.time() - t0:.1f}s "
               f"(reused for later runs with the same input features)")
         report_skipped(_DATASET_CACHE[key], split)
@@ -366,10 +374,16 @@ def main():
                         help="Max Outside gap (frames) still counted as a SHORT pause (default 12).")
     parser.add_argument("--peak-window", type=int, default=5,
                         help="+-frames around a gold start for the peak P(B) column (default 5).")
+    parser.add_argument("--labels-dir", default=None,
+                        help="Evaluate every run against these phrase labels (e.g. "
+                             "processed_data/BIO_tags_phrase_v2). Default: each run's own labels "
+                             "(its phrase_labels_dir, or v1 for older runs).")
     parser.add_argument("--sweep-step", type=float, default=0.1,
                         help="Threshold grid step for --sweep over 0.3..0.9 (default 0.1 = 7x7 pairs). "
                              "Smaller = finer tuning but slower (0.05 = 13x13).")
     args = parser.parse_args()
+    global LABELS_OVERRIDE
+    LABELS_OVERRIDE = args.labels_dir
 
     runs = discover_runs(EXP_DIR, MODEL_DIR)
     if not runs:

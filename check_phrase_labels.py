@@ -11,6 +11,7 @@ Checks the things that would make a model predict B for whole phrases:
 Usage (repo root):  python check_phrase_labels.py
 """
 import json
+import argparse
 import os
 
 import numpy as np
@@ -55,6 +56,12 @@ def audit_video(vid):
 
 
 def main():
+    global LABELS_DIR
+    parser = argparse.ArgumentParser(description="Audit phrase BIO label files per split.")
+    parser.add_argument("--labels-dir", default=LABELS_DIR,
+                        help=f"Label directory to audit (default: {LABELS_DIR}).")
+    LABELS_DIR = parser.parse_args().labels_dir
+    print(f"Auditing {LABELS_DIR}")
     with open(SPLIT_FILE) as f:
         splits = json.load(f)
 

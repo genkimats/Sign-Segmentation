@@ -145,6 +145,10 @@ def train_model(config, selection_metric="combined"):
     # Which saved face points to load: "full" (83), "compact" (31), "eyes_brows" (22), "minimal" (18).
     # Old configs without this key load all 83 points, exactly as before.
     FACE_SUBSET = config.get("face_subset", "full")
+    # Which phrase labels to train on: v1 (processed_data/BIO_tags_phrase, the default for
+    # older configs) or v2 (processed_data/BIO_tags_phrase_v2, corrected boundaries).
+    PHRASE_LABELS_DIR = config.get("phrase_labels_dir", "processed_data/BIO_tags_phrase")
+    print(f"🏷️  Phrase labels: {PHRASE_LABELS_DIR}")
     FACE_ONLY = config.get("face_only", False)  # True: face vertices only (body + hands dropped)
     USE_HAMER_FEATURES = config.get("use_hamer_features", False)
     HAMER_DIR = config.get("hamer_dir", "processed_data/hamer_features")
@@ -174,7 +178,7 @@ def train_model(config, selection_metric="combined"):
         
     train_dataset = SignSegmentationDataset(
         keypoints_dir="processed_data/keypoints",
-        labels_dir="processed_data/BIO_tags_phrase",
+        labels_dir=PHRASE_LABELS_DIR,
         split_file="dataset_splits.json",
         split="train",
         window_size=WINDOW_SIZE,
@@ -196,7 +200,7 @@ def train_model(config, selection_metric="combined"):
     
     val_dataset = SignSegmentationDataset(
         keypoints_dir="processed_data/keypoints",
-        labels_dir="processed_data/BIO_tags_phrase",
+        labels_dir=PHRASE_LABELS_DIR,
         split_file="dataset_splits.json",
         split="val",
         window_size=WINDOW_SIZE,

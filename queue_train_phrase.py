@@ -42,6 +42,9 @@ MAMBA_DEFAULTS = {
     "face_only": False,
     "use_hamer_features": False,
     "hamer_dir": "processed_data/hamer_features",
+    # Phrase labels to train on. v2 = corrected boundaries (data_processing/
+    # create_phrase_bio_tags_v2.py); v1 = processed_data/BIO_tags_phrase (all earlier runs).
+    "phrase_labels_dir": "processed_data/BIO_tags_phrase_v2",
     # Stream balancing (stgcn_bilstm / stgcn_transformer): project the flattened ST-GCN
     # output to this size before it is concatenated with HaMeR/DINOv2. None = off
     # (original behaviour). hamer_proj_dim / dinov2_proj_dim can also be set per
@@ -276,7 +279,7 @@ _MS_BODY_HAMER = {
 
 EXPERIMENTS_TO_RUN = []
 for _window in (128, 512):
-    for _pe in ("rope", "alibi"):
+    for _pe in ("none", "sinusoidal", "rope", "alibi"):
         EXPERIMENTS_TO_RUN.append({
             **_MS_BODY_HAMER, "basename": "multistream_transformer", "window_size": _window,
             "pos_encoding": _pe, "transformer_norm": "pre",
