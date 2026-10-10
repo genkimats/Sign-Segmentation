@@ -1,0 +1,21 @@
+run,prefix,decoder,boundary_type,n,share,median_gap,recall@2,recall@5,recall@10,median_offset,mean_abs_offset,peak_pb,n_pred,precision@2,precision@5,precision@10,short_gap,seed,description
+multistream_bilstm-02,02,argmax,continuous,1230,0.7611,0.0,0.0756,0.0878,0.1008,0.0,1.895,0.2479,2293,0.1269,0.1448,0.1631,12,,MS: Body + HaMeR + face
+multistream_bilstm-02,02,argmax,short_pause,2,0.0012,10.0,0.5,1.0,1.0,2.0,2.0,0.4069,2293,0.1269,0.1448,0.1631,12,,MS: Body + HaMeR + face
+multistream_bilstm-02,02,argmax,long_pause,384,0.2376,141.0,0.513,0.5781,0.6458,0.0,1.492,0.4372,2293,0.1269,0.1448,0.1631,12,,MS: Body + HaMeR + face
+multistream_bilstm-02,02,argmax,video_start,0,0.0,nan,,,,nan,,,2293,0.1269,0.1448,0.1631,12,,MS: Body + HaMeR + face
+multistream_bilstm-02,02,argmax,all,1616,1.0,0.0,0.1801,0.2054,0.2314,0.0,1.628,0.293,2293,0.1269,0.1448,0.1631,12,,MS: Body + HaMeR + face
+multistream_bilstm-02,02,thr b=0.5 o=0.5,continuous,1230,0.7611,0.0,0.0618,0.078,0.0862,-1.0,2.151,0.2479,521,0.3589,0.5182,0.5681,12,,MS: Body + HaMeR + face
+multistream_bilstm-02,02,thr b=0.5 o=0.5,short_pause,2,0.0012,10.0,0.0,0.5,0.5,-4.0,4.0,0.4069,521,0.3589,0.5182,0.5681,12,,MS: Body + HaMeR + face
+multistream_bilstm-02,02,thr b=0.5 o=0.5,long_pause,384,0.2376,141.0,0.2891,0.4505,0.4922,-1.0,2.434,0.4372,521,0.3589,0.5182,0.5681,12,,MS: Body + HaMeR + face
+multistream_bilstm-02,02,thr b=0.5 o=0.5,video_start,0,0.0,nan,,,,nan,,,521,0.3589,0.5182,0.5681,12,,MS: Body + HaMeR + face
+multistream_bilstm-02,02,thr b=0.5 o=0.5,all,1616,1.0,0.0,0.1157,0.1671,0.1832,-1.0,2.338,0.293,521,0.3589,0.5182,0.5681,12,,MS: Body + HaMeR + face
+multistream_bilstm-05,05,argmax,continuous,1230,0.7611,0.0,0.0439,0.0488,0.0569,0.0,2.071,0.2203,1717,0.1357,0.1555,0.1771,12,,MS: Body
+multistream_bilstm-05,05,argmax,short_pause,2,0.0012,10.0,0.0,0.5,0.5,-3.0,3.0,0.2569,1717,0.1357,0.1555,0.1771,12,,MS: Body
+multistream_bilstm-05,05,argmax,long_pause,384,0.2376,141.0,0.4661,0.5365,0.6068,0.0,1.558,0.4131,1717,0.1357,0.1555,0.1771,12,,MS: Body
+multistream_bilstm-05,05,argmax,video_start,0,0.0,nan,,,,nan,,,1717,0.1357,0.1555,0.1771,12,,MS: Body
+multistream_bilstm-05,05,argmax,all,1616,1.0,0.0,0.1442,0.1652,0.1881,0.0,1.681,0.2662,1717,0.1357,0.1555,0.1771,12,,MS: Body
+multistream_bilstm-05,05,thr b=0.5 o=0.5,continuous,1230,0.7611,0.0,0.0301,0.0407,0.0455,0.0,2.304,0.2203,341,0.4106,0.5836,0.6657,12,,MS: Body
+multistream_bilstm-05,05,thr b=0.5 o=0.5,short_pause,2,0.0012,10.0,0.0,0.0,0.0,nan,nan,0.2569,341,0.4106,0.5836,0.6657,12,,MS: Body
+multistream_bilstm-05,05,thr b=0.5 o=0.5,long_pause,384,0.2376,141.0,0.2682,0.388,0.4453,-1.0,2.579,0.4131,341,0.4106,0.5836,0.6657,12,,MS: Body
+multistream_bilstm-05,05,thr b=0.5 o=0.5,video_start,0,0.0,nan,,,,nan,,,341,0.4106,0.5836,0.6657,12,,MS: Body
+multistream_bilstm-05,05,thr b=0.5 o=0.5,all,1616,1.0,0.0,0.0866,0.1231,0.1405,-1.0,2.511,0.2662,341,0.4106,0.5836,0.6657,12,,MS: Body
