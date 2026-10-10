@@ -88,6 +88,7 @@ def build_dataset(hp, split):
         face_dir=hp.get("face_dir", "processed_data/face_keypoints_normalized"),
         face_subset=hp.get("face_subset", "full"),
         face_only=hp.get("face_only", False),
+        face_dims=int(hp.get("face_dims", 3)),
         use_hamer_features=hp.get("use_hamer_features", False),
         hamer_dir=hp.get("hamer_dir", "processed_data/hamer_features"),
         use_dinov2_features=hp.get("use_dinov2_features", False),

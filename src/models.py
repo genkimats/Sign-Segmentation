@@ -2277,7 +2277,8 @@ class MultiStreamSegmenter(nn.Module):
                  use_stream_body_hands=True, use_stream_face=False, use_stream_hamer=False,
                  fusion="concat", body_hands_proj_dim=256, face_proj_dim=256, hamer_proj_dim=256,
                  hamer_dim=None, encoder="bilstm", nhead=8, dim_feedforward=None,
-                 pos_encoding="sinusoidal", transformer_norm="post", rope_base=10000.0):
+                 pos_encoding="sinusoidal", transformer_norm="post", rope_base=10000.0,
+                 face_channels=None):
         super().__init__()
         if fusion not in ("concat", "gated_sum"):
             raise ValueError(f"fusion must be 'concat' or 'gated_sum', got '{fusion}'.")
@@ -2317,8 +2318,12 @@ class MultiStreamSegmenter(nn.Module):
                 raise ValueError("face stream is on but the input has no face vertices -- set "
                                  "use_face_keypoints=True (the queue does this for multistream models).")
             A_face = SkeletonGraph(num_vertices=self.num_face, face_only=True).A
+            # face_channels: which input channels carry face data (2D face: x and y only).
+            # None = all channels (legacy 3D face runs).
+            self.face_channels = list(face_channels) if face_channels is not None else None
+            face_in = len(self.face_channels) if self.face_channels is not None else in_channels
             self.face_stgcn = nn.Sequential(
-                STGCNBlock(in_channels, stgcn_channels, A_face),
+                STGCNBlock(face_in, stgcn_channels, A_face),
                 STGCNBlock(stgcn_channels, stgcn_channels, A_face),
             )
             self.branches["face"] = branch(self.num_face * stgcn_channels, out_dims["face"])
@@ -2391,7 +2396,10 @@ class MultiStreamSegmenter(nn.Module):
         if "body_hands" in self.streams:
             z["body_hands"] = self.branches["body_hands"](self._graph_stream(self.body_hands_stgcn, x[..., :65]))
         if "face" in self.streams:
-            z["face"] = self.branches["face"](self._graph_stream(self.face_stgcn, x[..., 65:]))
+            xf = x[..., 65:]
+            if self.face_channels is not None:
+                xf = xf[:, self.face_channels]
+            z["face"] = self.branches["face"](self._graph_stream(self.face_stgcn, xf))
         if "hamer" in self.streams:
             if hamer is None:
                 raise ValueError("hamer stream is on but forward() got no `hamer` tensor.")

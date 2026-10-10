@@ -149,7 +149,9 @@ def train_model(config, selection_metric="combined"):
     # older configs) or v2 (processed_data/BIO_tags_phrase_v2, corrected boundaries).
     PHRASE_LABELS_DIR = config.get("phrase_labels_dir", "processed_data/BIO_tags_phrase")
     print(f"🏷️  Phrase labels: {PHRASE_LABELS_DIR}")
-    FACE_ONLY = config.get("face_only", False)  # True: face vertices only (body + hands dropped)
+    FACE_ONLY = config.get("face_only", False)
+    # 2 = 2D face keypoints (x, y). Configs without the key are old 3D-face runs.
+    FACE_DIMS = int(config.get("face_dims", 3))  # True: face vertices only (body + hands dropped)
     USE_HAMER_FEATURES = config.get("use_hamer_features", False)
     HAMER_DIR = config.get("hamer_dir", "processed_data/hamer_features")
     USE_DINOV2_FEATURES = config.get("use_dinov2_features", False)
@@ -192,6 +194,7 @@ def train_model(config, selection_metric="combined"):
         face_dir=FACE_DIR,
         face_subset=FACE_SUBSET,
         face_only=FACE_ONLY,
+        face_dims=FACE_DIMS,
         use_hamer_features=USE_HAMER_FEATURES,
         hamer_dir=HAMER_DIR,
         use_dinov2_features=USE_DINOV2_FEATURES,
@@ -214,6 +217,7 @@ def train_model(config, selection_metric="combined"):
         face_dir=FACE_DIR,
         face_subset=FACE_SUBSET,
         face_only=FACE_ONLY,
+        face_dims=FACE_DIMS,
         use_hamer_features=USE_HAMER_FEATURES,
         hamer_dir=HAMER_DIR,
         use_dinov2_features=USE_DINOV2_FEATURES,

@@ -154,6 +154,11 @@ def build_model_kwargs(config, detected_hamer_dim=None, detected_dinov2_dim=None
             raise ValueError("use_stream_hamer=True needs use_hamer_features=True (the queue sets it automatically).")
         model_kwargs.update(streams)
         model_kwargs["fusion"] = config.get("fusion", "concat")
+        if streams["use_stream_face"] and int(config.get("face_dims", 3)) == 2:
+            # 2D face: the face stream reads only the x / y channels (see dataset.py).
+            coord_order = [f for f in config["base_features"] if f in ("x-cord", "y-cord", "z-cord")]
+            model_kwargs["face_channels"] = [coord_order.index(f) for f in ("x-cord", "y-cord")
+                                             if f in coord_order]
         for key in ("body_hands_proj_dim", "face_proj_dim"):  # hamer_proj_dim is handled above
             if config.get(key) is not None:
                 model_kwargs[key] = int(config[key])

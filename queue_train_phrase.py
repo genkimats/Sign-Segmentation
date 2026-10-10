@@ -22,7 +22,7 @@ MAMBA_DEFAULTS = {
     "patience": 10,
     "learning_rate": 0.0001,
     "num_vertices": 65,
-    "tolerance_window": 1,
+    "tolerance_window": 5,
     "temporal_downsample_factor": 1, 
     "loss_function": "weighted_ce",  
     "ctc_weight": 0.5,             
@@ -33,7 +33,9 @@ MAMBA_DEFAULTS = {
     "kinematic_features": [],        
     "in_channels": 5, 
     "use_face_keypoints": False,
-    "face_dir": "processed_data/face_keypoints_normalized",
+    # Face keypoints: face-local, 2D (x, y) files from data_processing/normalize_face_keypoints_v2.py
+    "face_dir": "processed_data/face_keypoints_normalized_v2",
+    "face_dims": 2,
     # Which saved face points to load when use_face_keypoints=True (see src/face_subsets.py):
     #   "full" 83 | "compact" 31 (eyes, brows, mouth) | "eyes_brows" 22 | "minimal" 18
     "face_subset": "full",
@@ -105,6 +107,10 @@ def calculate_in_channels(config):
                 total += (65 * 2) # 130
         return total
     
+    # --- FACE ONLY (2D): only the face's x / y channels are kept ---
+    if config.get("face_only", False) and int(config.get("face_dims", 3)) == 2:
+        return len([f for f in base_features if f in ("x-cord", "y-cord")])
+
     # --- STANDARD / HYBRID CALCULATION ---
     valid_base_cords = [f for f in base_features if f in ["x-cord", "y-cord", "z-cord"]]
     total_channels = len(valid_base_cords)

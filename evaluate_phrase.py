@@ -107,6 +107,7 @@ def dataset_key(config):
         "face_dir": config.get("face_dir"),
         "face_subset": config.get("face_subset", "full"),
         "face_only": config.get("face_only", False),
+        "face_dims": int(config.get("face_dims", 3)),
         "use_hamer_features": config.get("use_hamer_features", False),
         "hamer_dir": config.get("hamer_dir"),
         "use_dinov2_features": config.get("use_dinov2_features", False),
@@ -146,6 +147,7 @@ def get_dataset(config, split):
             face_dir=config.get("face_dir", "processed_data/face_keypoints_normalized"),
             face_subset=config.get("face_subset", "full"),
             face_only=config.get("face_only", False),
+            face_dims=int(config.get("face_dims", 3)),  # old configs = legacy 3D face
             use_hamer_features=config.get("use_hamer_features", False),
             hamer_dir=config.get("hamer_dir", "processed_data/hamer_features"),
             use_dinov2_features=config.get("use_dinov2_features", False),

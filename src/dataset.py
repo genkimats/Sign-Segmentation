@@ -49,7 +49,7 @@ def apply_label_smoothing(labels_array, window_size=5):
     return soft_labels
 
 class SignSegmentationDataset(Dataset):
-    def __init__(self, keypoints_dir, labels_dir, split_file="dataset_splits.json", split="train", window_size=16, overlap=0, tolerance_window=5, use_full_length=False, base_features=None, kinematic_features=None, temporal_downsample_factor=1, use_face_keypoints=False, face_dir="processed_data/face_keypoints_normalized", face_subset="full", face_only=False, use_hamer_features=False, hamer_dir="processed_data/hamer_features", use_dinov2_features=False, dinov2_dir="processed_data/dinov2_features"):
+    def __init__(self, keypoints_dir, labels_dir, split_file="dataset_splits.json", split="train", window_size=16, overlap=0, tolerance_window=5, use_full_length=False, base_features=None, kinematic_features=None, temporal_downsample_factor=1, use_face_keypoints=False, face_dir="processed_data/face_keypoints_normalized_v2", face_subset="full", face_only=False, face_dims=2, use_hamer_features=False, hamer_dir="processed_data/hamer_features", use_dinov2_features=False, dinov2_dir="processed_data/dinov2_features"):
         self.labels_dir = labels_dir
         self.kinetic_dir = "processed_data/kinematic_features" 
         self.split_file = split_file
@@ -76,6 +76,12 @@ class SignSegmentationDataset(Dataset):
                 raise ValueError("face_only=True with kinematic_features: the face has no kinematic "
                                  "channels (they would be all zeros). Use kinematic_features=[].")
         self.face_positions = face_subset_positions(face_subset) if use_face_keypoints else None
+        # Face coordinates used: 2 = x, y only (z dropped; the default, matching
+        # face_keypoints_normalized_v2), 3 = legacy x, y, z (only so runs trained on the old
+        # 3D face files can still be evaluated).
+        if face_dims not in (2, 3):
+            raise ValueError(f"face_dims must be 2 or 3, got {face_dims}.")
+        self.face_dims = face_dims
         self.use_hamer_features = use_hamer_features
         self.hamer_dir = hamer_dir
         self.use_dinov2_features = use_dinov2_features
@@ -89,6 +95,14 @@ class SignSegmentationDataset(Dataset):
         
         self.base_features = base_features if base_features is not None else ["x-cord", "y-cord", "z-cord"]
         self.kinematic_features = kinematic_features if kinematic_features is not None else []
+
+        # Where the face's x and y go in the per-vertex channel layout (the body's x-cord /
+        # y-cord channels). All other channels of face vertices are 0. Models that process
+        # the face separately (multistream face stream, face_only) use only these channels.
+        coord_order = [f for f in self.base_features if f in ("x-cord", "y-cord", "z-cord")]
+        self.face_channel_indices = [coord_order.index(f) for f in ("x-cord", "y-cord") if f in coord_order]
+        if use_face_keypoints and face_dims == 2 and not self.face_channel_indices:
+            raise ValueError("2D face keypoints need 'x-cord' and/or 'y-cord' in base_features.")
 
         # PURE HAMER MODE: base_features=["pure_hamer"] makes the 288-dim HaMeR vector
         # the MAIN feature tensor, shaped (T, 1, 288) -> (288, T, 1) per window, so the
@@ -115,7 +129,8 @@ class SignSegmentationDataset(Dataset):
             n_vertices = len(self.face_positions) + (0 if face_only else 65)
             print(f"[{split.upper()}] face keypoints: subset '{face_subset}' "
                   f"({len(self.face_positions)} of {len(SAVED_FACE_INDICES)} saved points) -> "
-                  f"{n_vertices} vertices" + (" (FACE ONLY: body + hands dropped)" if face_only else ""))
+                  f"{n_vertices} vertices, {face_dims}D from {face_dir}"
+                  + (" (FACE ONLY: body + hands dropped)" if face_only else ""))
 
         with open(split_file, 'r') as f:
             splits = json.load(f)
@@ -228,24 +243,37 @@ class SignSegmentationDataset(Dataset):
                     )
                 face_raw = face_raw[:, self.face_positions, :]  # keep only the chosen subset
 
-                face_selected = face_raw[:, :, base_indices] if base_indices else face_raw
-
-                # extract_face_keypoints.py only outputs static x/y/z -- there's no face
-                # velocity/acceleration/angle equivalent yet, so any *derivative* channels
-                # requested via kinematic_features are zero-padded for the face vertices.
                 K_total = final_tensor.shape[-1]
-                face_padded = torch.zeros(num_frames, face_selected.shape[1], K_total, dtype=final_tensor.dtype)
-                face_padded[:, :, :face_selected.shape[-1]] = face_selected
+                face_padded = torch.zeros(num_frames, face_raw.shape[1], K_total, dtype=final_tensor.dtype)
+                if self.face_dims == 2:
+                    # 2D face: x -> the x-cord channel, y -> the y-cord channel, everything
+                    # else (z, kinematic channels) stays 0. Works with 2-channel v2 files
+                    # and, by dropping z, with old 3-channel files.
+                    if face_raw.shape[-1] < 2:
+                        raise ValueError(f"{face_path}: expected at least x, y per face point, got {face_raw.shape}.")
+                    coord_src = {"x-cord": 0, "y-cord": 1}
+                    coord_order = [f for f in self.base_features if f in ("x-cord", "y-cord", "z-cord")]
+                    for feat, src_ch in coord_src.items():
+                        if feat in coord_order:
+                            face_padded[:, :, coord_order.index(feat)] = face_raw[:, :, src_ch]
+                else:
+                    # Legacy 3D face (old face_keypoints_normalized files only).
+                    if face_raw.shape[-1] < 3:
+                        raise ValueError(f"{face_path} has {face_raw.shape[-1]} coordinates; face_dims=3 "
+                                         f"needs the old 3D files (use face_dims=2 for the v2 files).")
+                    face_selected = face_raw[:, :, base_indices] if base_indices else face_raw
+                    face_padded[:, :, :face_selected.shape[-1]] = face_selected
 
-                # These are shoulder-normalized coordinates (see normalize_face_keypoints.py --
-                # same (coords - shoulder_midpoint) / shoulder_xy_distance transform as body/
-                # hands use), so this vertex block lives in the same coordinate frame as the
-                # rest of final_tensor. If you point face_dir back at the raw, unnormalized
-                # processed_data/face_keypoints/ directory instead, that guarantee no longer
-                # holds -- only do that deliberately (e.g. for debugging).
+                # v2 files are FACE-LOCAL (origin between the inner eye corners, units of
+                # inter-ocular distance, roll-aligned -- see normalize_face_keypoints_v2.py),
+                # i.e. they describe facial movement, not head position (the body stream
+                # has the head). Old v1 files were in the body's shoulder frame.
                 final_tensor = torch.cat([final_tensor, face_padded], dim=1)  # concat along the VERTEX axis
                 if self.face_only:
-                    final_tensor = final_tensor[:, 65:, :].contiguous()  # drop body (23) + hands (42)
+                    final_tensor = final_tensor[:, 65:, :]  # drop body (23) + hands (42)
+                    if self.face_dims == 2:
+                        final_tensor = final_tensor[:, :, self.face_channel_indices]  # x, y only
+                    final_tensor = final_tensor.contiguous()
 
             # --- OPTIONAL: HAMER HAND-POSE FEATURES (from extract_hamer_features.py) ---
             # Unlike face keypoints, HaMeR features are NOT folded into the per-vertex
