@@ -285,7 +285,7 @@ _MS_BODY_HAMER = {
 
 EXPERIMENTS_TO_RUN = [
     {
-        "basename": "multistream_transformer", 
+        "basename": "multistream_bilstm", 
         "d_model": 256,
         "use_stream_body_hands": True,
         "use_stream_face": False,
@@ -296,7 +296,7 @@ EXPERIMENTS_TO_RUN = [
         "description": "MS: Body"
     },
     {
-        "basename": "multistream_transformer", 
+        "basename": "multistream_bilstm", 
         "d_model": 256,
         "use_stream_body_hands": False,
         "use_stream_face": True,
@@ -307,7 +307,7 @@ EXPERIMENTS_TO_RUN = [
         "description": "MS: Face"
     },
     {
-        "basename": "multistream_transformer", 
+        "basename": "multistream_bilstm", 
         "d_model": 256,
         "use_stream_body_hands": False,
         "use_stream_face": False,
@@ -318,7 +318,7 @@ EXPERIMENTS_TO_RUN = [
         "description": "MS: HaMeR"
     },
     {
-        "basename": "multistream_transformer", 
+        "basename": "multistream_bilstm", 
         "d_model": 256,
         "use_stream_body_hands": True,
         "use_stream_face": False,
@@ -329,7 +329,7 @@ EXPERIMENTS_TO_RUN = [
         "description": "MS: Body + HaMeR"
     },
     # {
-    #     "basename": "multistream_transformer", 
+    #     "basename": "multistream_bilstm", 
     #     "d_model": 256,
     #     "use_stream_body_hands": True,
     #     "use_stream_face": True,
@@ -340,7 +340,7 @@ EXPERIMENTS_TO_RUN = [
     #     "description": "MS: Body + Face"
     # },
     # {
-    #     "basename": "multistream_transformer", 
+    #     "basename": "multistream_bilstm", 
     #     "d_model": 256,
     #     "use_stream_body_hands": False,
     #     "use_stream_face": True,
@@ -351,7 +351,7 @@ EXPERIMENTS_TO_RUN = [
     #     "description": "MS: Face + HaMeR"
     # },
     # {
-    #     "basename": "multistream_transformer", 
+    #     "basename": "multistream_bilstm", 
     #     "d_model": 256,
     #     "use_stream_body_hands": True,
     #     "use_stream_face": True,
