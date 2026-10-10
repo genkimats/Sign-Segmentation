@@ -277,23 +277,85 @@ _MS_BODY_HAMER = {
     "kinematic_features": [],
 }
 
-EXPERIMENTS_TO_RUN = []
-for _window in (128, 512):
-    for _pe in ("rope", "alibi"):
-        EXPERIMENTS_TO_RUN.append({
-            **_MS_BODY_HAMER, "basename": "multistream_transformer", "window_size": _window,
-            "pos_encoding": _pe, "transformer_norm": "pre",
-            "description": f"LABEL_V2: PE study: Body+HaMeR, Transformer pre-norm, pos={_pe}, window {_window}",
-        })
-    EXPERIMENTS_TO_RUN.append({
-        **_MS_BODY_HAMER, "basename": "multistream_transformer", "window_size": _window,
-        "pos_encoding": "sinusoidal", "transformer_norm": "post",
-        "description": f"LABEL_V2: PE study: Body+HaMeR, Transformer post-norm (original), pos=sinusoidal, window {_window}",
-    })
-    EXPERIMENTS_TO_RUN.append({
-        **_MS_BODY_HAMER, "basename": "multistream_bilstm", "window_size": _window,
-        "description": f"LABEL_V2: PE study: Body+HaMeR, BiLSTM reference, window {_window}",
-    })
+EXPERIMENTS_TO_RUN = [
+    {
+        "basename": "multistream_transformer", 
+        "d_model": 256,
+        "use_stream_body_hands": True,
+        "use_stream_face": False,
+        "use_stream_hamer": False,
+        "face_subset": "compact",
+        "fusion": "concat",              # or "gated_sum"
+        "class_weights": [1.0, 1.1, 12.4],
+        "description": "MS: Body"
+    },
+    {
+        "basename": "multistream_transformer", 
+        "d_model": 256,
+        "use_stream_body_hands": False,
+        "use_stream_face": True,
+        "use_stream_hamer": False,
+        "face_subset": "compact",
+        "fusion": "concat",              # or "gated_sum"
+        "class_weights": [1.0, 1.1, 12.4],
+        "description": "MS: Face"
+    },
+    {
+        "basename": "multistream_transformer", 
+        "d_model": 256,
+        "use_stream_body_hands": False,
+        "use_stream_face": False,
+        "use_stream_hamer": True,
+        "face_subset": "compact",
+        "fusion": "concat",              # or "gated_sum"
+        "class_weights": [1.0, 1.1, 12.4],
+        "description": "MS: HaMeR"
+    },
+    {
+        "basename": "multistream_transformer", 
+        "d_model": 256,
+        "use_stream_body_hands": True,
+        "use_stream_face": False,
+        "use_stream_hamer": True,
+        "face_subset": "compact",
+        "fusion": "concat",              # or "gated_sum"
+        "class_weights": [1.0, 1.1, 12.4],
+        "description": "MS: Body + HaMeR"
+    },
+    # {
+    #     "basename": "multistream_transformer", 
+    #     "d_model": 256,
+    #     "use_stream_body_hands": True,
+    #     "use_stream_face": True,
+    #     "use_stream_hamer": False,
+    #     "face_subset": "compact",
+    #     "fusion": "concat",              # or "gated_sum"
+    #     "class_weights": [1.0, 1.1, 12.4],
+    #     "description": "MS: Body + Face"
+    # },
+    # {
+    #     "basename": "multistream_transformer", 
+    #     "d_model": 256,
+    #     "use_stream_body_hands": False,
+    #     "use_stream_face": True,
+    #     "use_stream_hamer": True,
+    #     "face_subset": "compact",
+    #     "fusion": "concat",              # or "gated_sum"
+    #     "class_weights": [1.0, 1.1, 12.4],
+    #     "description": "MS: Face + HaMeR"
+    # },
+    # {
+    #     "basename": "multistream_transformer", 
+    #     "d_model": 256,
+    #     "use_stream_body_hands": True,
+    #     "use_stream_face": True,
+    #     "use_stream_hamer": True,
+    #     "face_subset": "compact",
+    #     "fusion": "concat",              # or "gated_sum"
+    #     "class_weights": [1.0, 1.1, 12.4],
+    #     "description": "MS: Body + Face + HaMeR"
+    # },
+]
 
 if CHOSEN_TYPE == 'mamba':
     defaults = MAMBA_DEFAULTS
