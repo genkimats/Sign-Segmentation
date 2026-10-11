@@ -347,7 +347,7 @@ EXPERIMENTS_TO_RUN = [
         "use_stream_hamer": True,
         "face_subset": "compact",
         "fusion": "concat",              # or "gated_sum"
-        "class_weights": [1.0, 1.1, 4.0],
+        "class_weights": [1.0, 1.1, 2.0],
         "description": "MS: Body + HaMeR, weight=[1.0, 1.1, 2.0]"
     },
     # {
