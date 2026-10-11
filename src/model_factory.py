@@ -14,7 +14,8 @@ from src.models import (PureMambaBaseline, BiMambaBaseline, STGCN_Mamba, STGCN_M
                         TransformerBaseline, STGCN_Transformer, Latent_STGCN_Mamba,
                         CTRGCN_Mamba, InfoGCN_Mamba, ShiftGCN_Mamba, SpatialTransformer_Mamba,
                         HDGCN_Mamba, HyperSign_Mamba, STGCN_HybridSequential, STGCN_HybridParallel,
-                        MultiStreamSegmenter, MultiStream_BiLSTM, MultiStream_Transformer)
+                        MultiStreamSegmenter, MultiStream_BiLSTM, MultiStream_Transformer,
+                        MultiStream_BiLSTMAttn)
 
 MODEL_REGISTRY = {
     "pure_mamba": PureMambaBaseline,
@@ -38,9 +39,10 @@ MODEL_REGISTRY = {
     "stgcn_hybrid_parallel": STGCN_HybridParallel,
     "multistream_bilstm": MultiStream_BiLSTM,
     "multistream_transformer": MultiStream_Transformer,
+    "multistream_bilstm_attn": MultiStream_BiLSTMAttn,
 }
 
-MULTISTREAM_MODELS = ["multistream_bilstm", "multistream_transformer"]
+MULTISTREAM_MODELS = ["multistream_bilstm", "multistream_transformer", "multistream_bilstm_attn"]
 
 MAMBA_BASED_MODELS = ["pure_mamba", "bi_mamba", "stgcn_mamba", "stgcn_mlp_mamba", "stgcn_bimamba",
                       "decoupled_stgcn_mamba", "latent_stgcn_mamba", "ctrgcn_mamba", "infogcn_mamba",
@@ -52,7 +54,7 @@ HAMER_SUPPORTED_MODELS = ["stgcn_mamba", "latent_stgcn_mamba", "ctrgcn_mamba", "
                           "stgcn_bilstm", "stgcn_transformer",
                           "stgcn_mlp_mamba", "stgcn_bimamba", "decoupled_stgcn_mamba",
                           "stgcn_hybrid_seq", "stgcn_hybrid_parallel",
-                          "multistream_bilstm", "multistream_transformer"]
+                          "multistream_bilstm", "multistream_transformer", "multistream_bilstm_attn"]
 
 # Own list (not an alias of HAMER_SUPPORTED_MODELS, so appending can't mutate it):
 # the graph-free baselines also accept DINOv2, e.g. for pure_hamer + DINOv2 runs.
@@ -81,7 +83,8 @@ def build_model_kwargs(config, detected_hamer_dim=None, detected_dinov2_dim=None
         "n_layers": config["n_layers"],
     }
 
-    if model_name in ["transformer_baseline", "stgcn_transformer", "multistream_transformer"]:
+    if model_name in ["transformer_baseline", "stgcn_transformer", "multistream_transformer",
+                      "multistream_bilstm_attn"]:
         model_kwargs["nhead"] = config.get("nhead", 8)
         model_kwargs["dim_feedforward"] = config.get("dim_feedforward", d_model * 4)
 
@@ -164,6 +167,12 @@ def build_model_kwargs(config, detected_hamer_dim=None, detected_dinov2_dim=None
                 model_kwargs[key] = int(config[key])
         if not streams["use_stream_hamer"]:
             model_kwargs.pop("hamer_dim", None)
+        if model_name == "multistream_bilstm_attn":
+            # Attention head on top of the BiLSTM: pre-norm by default, 1 layer by default.
+            model_kwargs["pos_encoding"] = config.get("pos_encoding", "rope")
+            model_kwargs["transformer_norm"] = config.get("transformer_norm", "pre")
+            model_kwargs["rope_base"] = float(config.get("rope_base", 10000.0))
+            model_kwargs["attn_layers"] = int(config.get("attn_layers", 1))
         if model_name == "multistream_transformer":
             # Position encoding / norm placement of the Transformer encoder. Defaults
             # (sinusoidal + post) = the original encoder, so older runs rebuild unchanged.

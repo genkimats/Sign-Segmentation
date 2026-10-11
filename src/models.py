@@ -2278,12 +2278,12 @@ class MultiStreamSegmenter(nn.Module):
                  fusion="concat", body_hands_proj_dim=256, face_proj_dim=256, hamer_proj_dim=256,
                  hamer_dim=None, encoder="bilstm", nhead=8, dim_feedforward=None,
                  pos_encoding="sinusoidal", transformer_norm="post", rope_base=10000.0,
-                 face_channels=None):
+                 face_channels=None, attn_layers=1):
         super().__init__()
         if fusion not in ("concat", "gated_sum"):
             raise ValueError(f"fusion must be 'concat' or 'gated_sum', got '{fusion}'.")
-        if encoder not in ("bilstm", "transformer"):
-            raise ValueError(f"encoder must be 'bilstm' or 'transformer', got '{encoder}'.")
+        if encoder not in ("bilstm", "transformer", "bilstm_attn"):
+            raise ValueError(f"encoder must be 'bilstm', 'transformer' or 'bilstm_attn', got '{encoder}'.")
         self.streams = [name for name, on in zip(self.STREAM_ORDER,
                                                  (use_stream_body_hands, use_stream_face, use_stream_hamer)) if on]
         if not self.streams:
@@ -2349,6 +2349,21 @@ class MultiStreamSegmenter(nn.Module):
             self.lstm = nn.LSTM(input_size=d_model, hidden_size=d_model, num_layers=n_layers,
                                 batch_first=True, dropout=dropout if n_layers > 1 else 0, bidirectional=True)
             self.classifier = nn.Linear(d_model * 2, num_classes)
+        elif encoder == "bilstm_attn":
+            # BiLSTM followed by `attn_layers` self-attention layers. RoPE / ALiBi only exist
+            # inside attention, so position encodings are compared on this attention head;
+            # the BiLSTM below it already supplies order, which "none" relies on.
+            if d_model % nhead != 0:
+                raise ValueError(f"d_model ({d_model}) must be divisible by nhead ({nhead}).")
+            self.lstm = nn.LSTM(input_size=d_model, hidden_size=d_model, num_layers=n_layers,
+                                batch_first=True, dropout=dropout if n_layers > 1 else 0, bidirectional=True)
+            self.lstm_proj = nn.Sequential(nn.Linear(d_model * 2, d_model), nn.Dropout(dropout))
+            self.pos_encoding = pos_encoding
+            self.legacy_encoder = False
+            self.rel_encoder = RelPosTransformerEncoder(
+                d_model, nhead, attn_layers, dim_feedforward or d_model * 4, dropout,
+                pos_encoding=pos_encoding, norm=transformer_norm, rope_base=rope_base)
+            self.classifier = nn.Linear(d_model, num_classes)
         else:
             if d_model % nhead != 0:
                 raise ValueError(f"d_model ({d_model}) must be divisible by nhead ({nhead}).")
@@ -2428,6 +2443,9 @@ class MultiStreamSegmenter(nn.Module):
 
         if self.encoder_type == "bilstm":
             emb, _ = self.lstm(fused)
+        elif self.encoder_type == "bilstm_attn":
+            h, _ = self.lstm(fused)
+            emb = self.rel_encoder(self.lstm_proj(h))
         elif self.legacy_encoder:
             emb = self.transformer_encoder(self.pos_encoder(fused))
         else:
@@ -2446,3 +2464,10 @@ class MultiStream_Transformer(MultiStreamSegmenter):
     def __init__(self, **kwargs):
         kwargs.pop("encoder", None)
         super().__init__(encoder="transformer", **kwargs)
+
+
+class MultiStream_BiLSTMAttn(MultiStreamSegmenter):
+    """BiLSTM + self-attention layer(s) on top, with a selectable position encoding."""
+    def __init__(self, **kwargs):
+        kwargs.pop("encoder", None)
+        super().__init__(encoder="bilstm_attn", **kwargs)

@@ -14,7 +14,7 @@ CHOSEN_TYPE = 'mamba'
 # ==============================================================================
 MAMBA_DEFAULTS = {
     "basename": "stgcn_mamba",  
-    "window_size": 128,
+    "window_size": 256,
     "overlap": 0,
     "batch_size": 16,
     "epochs": 100,
@@ -260,13 +260,12 @@ _PURE_HAMER = {
 }
 
 # ------------------------------------------------------------------------------
-# Position-encoding study on the multi-stream model (Body + HaMeR, the best stream
-# setup so far). Everything except the encoder / position encoding / window is fixed.
-#   - Transformer, pre-norm, 4 position encodings x 2 windows  (the main comparison)
-#   - Transformer, original post-norm sinusoidal x 2 windows    (isolates the pre-norm change)
-#   - BiLSTM x 2 windows                                        (recurrent reference)
-# Recommended: give all of them 3 seeds when the script asks (or start with 1 seed to
-# check that training is stable, then add seeds).
+# Position-encoding study for the multi-stream BiLSTM.
+# RoPE / ALiBi only exist inside self-attention, so the BiLSTM gets ONE pre-norm
+# self-attention layer on top (multistream_bilstm_attn) and the position encoding is
+# varied there: none / sinusoidal / rope / alibi. The plain multistream_bilstm (no
+# attention) is the reference that shows what the attention layer itself adds.
+# Body + HaMeR, v2 phrase labels, tolerance 1 -- same setup as the Transformer study.
 # ------------------------------------------------------------------------------
 _MS_BODY_HAMER = {
     "use_stream_body_hands": True,
@@ -281,108 +280,10 @@ _MS_BODY_HAMER = {
     "class_weights": [1.0, 1.1, 12.4],
     "tolerance_window": 1,
     "kinematic_features": [],
+    "phrase_labels_dir": "processed_data/BIO_tags_phrase_v2",
 }
 
 EXPERIMENTS_TO_RUN = [
-    # {
-    #     "basename": "multistream_bilstm", 
-    #     "d_model": 256,
-    #     "use_stream_body_hands": True,
-    #     "use_stream_face": False,
-    #     "use_stream_hamer": False,
-    #     "face_subset": "compact",
-    #     "fusion": "concat",              # or "gated_sum"
-    #     "class_weights": [1.0, 1.1, 12.4],
-    #     "description": "MS: Body"
-    # },
-    # {
-    #     "basename": "multistream_bilstm", 
-    #     "d_model": 256,
-    #     "use_stream_body_hands": False,
-    #     "use_stream_face": True,
-    #     "use_stream_hamer": False,
-    #     "face_subset": "compact",
-    #     "fusion": "concat",              # or "gated_sum"
-    #     "class_weights": [1.0, 1.1, 12.4],
-    #     "description": "MS: Face"
-    # },
-    # {
-    #     "basename": "multistream_bilstm", 
-    #     "d_model": 256,
-    #     "use_stream_body_hands": False,
-    #     "use_stream_face": False,
-    #     "use_stream_hamer": True,
-    #     "face_subset": "compact",
-    #     "fusion": "concat",              # or "gated_sum"
-    #     "class_weights": [1.0, 1.1, 12.4],
-    #     "description": "MS: HaMeR"
-    # },
-    # {
-    #     "basename": "multistream_bilstm", 
-    #     "d_model": 256,
-    #     "use_stream_body_hands": True,
-    #     "use_stream_face": False,
-    #     "use_stream_hamer": True,
-    #     "face_subset": "compact",
-    #     "fusion": "concat",              # or "gated_sum"
-    #     "class_weights": [1.0, 1.1, 12.4],
-    #     "description": "MS: Body + HaMeR, weight=[1.0, 1.1, 12.4]"
-    # },
-    # {
-    #     "basename": "multistream_bilstm", 
-    #     "d_model": 256,
-    #     "use_stream_body_hands": True,
-    #     "use_stream_face": False,
-    #     "use_stream_hamer": True,
-    #     "face_subset": "compact",
-    #     "fusion": "concat",              # or "gated_sum"
-    #     "class_weights": [1.0, 1.1, 7.0],
-    #     "description": "MS: Body + HaMeR, weight=[1.0, 1.1, 7.0]"
-    # },
-    {
-        "basename": "multistream_bilstm", 
-        "d_model": 256,
-        "use_stream_body_hands": True,
-        "use_stream_face": True,
-        "use_stream_hamer": True,
-        "face_subset": "compact",
-        "fusion": "concat",              # or "gated_sum"
-        "class_weights": [1.2, 1.0, 1.6],
-        "description": "MS: Body + Face + HaMeR, weight=[1.2, 1.0, 1.6]"
-    },
-    # {
-    #     "basename": "multistream_bilstm", 
-    #     "d_model": 256,
-    #     "use_stream_body_hands": True,
-    #     "use_stream_face": False,
-    #     "use_stream_hamer": True,
-    #     "face_subset": "compact",
-    #     "fusion": "concat",              # or "gated_sum"
-    #     "class_weights": [1.5, 1.0, 1.6],
-    #     "description": "MS: Body + HaMeR, weight=[1.5, 1.0, 1.6]"
-    # },
-    # {
-    #     "basename": "multistream_bilstm", 
-    #     "d_model": 256,
-    #     "use_stream_body_hands": True,
-    #     "use_stream_face": True,
-    #     "use_stream_hamer": False,
-    #     "face_subset": "compact",
-    #     "fusion": "concat",              # or "gated_sum"
-    #     "class_weights": [1.0, 1.1, 12.4],
-    #     "description": "MS: Body + Face"
-    # },
-    # {
-    #     "basename": "multistream_bilstm", 
-    #     "d_model": 256,
-    #     "use_stream_body_hands": False,
-    #     "use_stream_face": True,
-    #     "use_stream_hamer": True,
-    #     "face_subset": "compact",
-    #     "fusion": "concat",              # or "gated_sum"
-    #     "class_weights": [1.0, 1.1, 12.4],
-    #     "description": "MS: Face + HaMeR"
-    # },
     # {
     #     "basename": "multistream_bilstm", 
     #     "d_model": 256,
@@ -394,56 +295,18 @@ EXPERIMENTS_TO_RUN = [
     #     "class_weights": [1.0, 1.1, 12.4],
     #     "description": "MS: Body + Face + HaMeR"
     # },
-
-    # {
-    #     "basename": "multistream_bilstm", 
-    #     "window_size": 256,
-    #     "d_model": 256,
-    #     "use_stream_body_hands": True,
-    #     "use_stream_face": False,
-    #     "use_stream_hamer": True,
-    #     "face_subset": "compact",
-    #     "fusion": "concat",              # or "gated_sum"
-    #     "class_weights": [1.0, 1.1, 12.4],
-    #     "description": "MS: Body + HaMeR, 256 window"
-    # },
-    # {
-    #     "basename": "multistream_bilstm", 
-    #     "window_size": 512,
-    #     "d_model": 256,
-    #     "use_stream_body_hands": True,
-    #     "use_stream_face": False,
-    #     "use_stream_hamer": True,
-    #     "face_subset": "compact",
-    #     "fusion": "concat",              # or "gated_sum"
-    #     "class_weights": [1.0, 1.1, 12.4],
-    #     "description": "MS: Body + HaMeR, 512 window"
-    # },
-    # {
-    #     "basename": "multistream_bilstm", 
-    #     "window_size": 1024,
-    #     "d_model": 256,
-    #     "use_stream_body_hands": True,
-    #     "use_stream_face": False,
-    #     "use_stream_hamer": True,
-    #     "face_subset": "compact",
-    #     "fusion": "concat",              # or "gated_sum"
-    #     "class_weights": [1.0, 1.1, 12.4],
-    #     "description": "MS: Body + HaMeR, 1024 window"
-    # },
-    # {
-    #     "basename": "multistream_bilstm", 
-    #     "window_size": 1536,
-    #     "d_model": 256,
-    #     "use_stream_body_hands": True,
-    #     "use_stream_face": False,
-    #     "use_stream_hamer": True,
-    #     "face_subset": "compact",
-    #     "fusion": "concat",              # or "gated_sum"
-    #     "class_weights": [1.0, 1.1, 12.4],
-    #     "description": "MS: Body + HaMeR, 1536 window"
-    # },
 ]
+for _window in (128, 512):
+    for _pe in ("none", "sinusoidal", "rope", "alibi"):
+        EXPERIMENTS_TO_RUN.append({
+            **_MS_BODY_HAMER, "basename": "multistream_bilstm_attn", "window_size": _window,
+            "pos_encoding": _pe, "transformer_norm": "pre", "attn_layers": 1,
+            "description": f"PE study: Body+HaMeR, BiLSTM + 1 attention layer, pos={_pe}, window {_window}",
+        })
+    EXPERIMENTS_TO_RUN.append({
+        **_MS_BODY_HAMER, "basename": "multistream_bilstm", "window_size": _window,
+        "description": f"PE study: Body+HaMeR, BiLSTM only (reference), window {_window}",
+    })
 
 if CHOSEN_TYPE == 'mamba':
     defaults = MAMBA_DEFAULTS
@@ -557,7 +420,7 @@ if __name__ == "__main__":
         current_model_prefix[m_name] += 1 
         
         # 1b. Multi-stream models: the data that gets loaded follows the stream switches
-        if m_name in ("multistream_bilstm", "multistream_transformer"):
+        if m_name in ("multistream_bilstm", "multistream_transformer", "multistream_bilstm_attn"):
             full_config["use_face_keypoints"] = bool(full_config.get("use_stream_face", False))
             full_config["use_hamer_features"] = bool(full_config.get("use_stream_hamer", False))
             if not any(full_config.get(k, d) for k, d in (("use_stream_body_hands", True),
