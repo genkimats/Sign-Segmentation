@@ -14,7 +14,7 @@ CHOSEN_TYPE = 'mamba'
 # ==============================================================================
 MAMBA_DEFAULTS = {
     "basename": "stgcn_mamba",  
-    "window_size": 256,
+    "window_size": 128,
     "overlap": 0,
     "batch_size": 16,
     "epochs": 100,
@@ -317,6 +317,17 @@ EXPERIMENTS_TO_RUN = [
     #     "class_weights": [1.0, 1.1, 12.4],
     #     "description": "MS: HaMeR"
     # },
+    {
+        "basename": "multistream_bilstm", 
+        "d_model": 256,
+        "use_stream_body_hands": True,
+        "use_stream_face": False,
+        "use_stream_hamer": True,
+        "face_subset": "compact",
+        "fusion": "concat",              # or "gated_sum"
+        "class_weights": [1.0, 1.1, 12.4],
+        "description": "MS: Body + HaMeR, weight=[1.0, 1.1, 12.4]"
+    },
     # {
     #     "basename": "multistream_bilstm", 
     #     "d_model": 256,
@@ -325,8 +336,19 @@ EXPERIMENTS_TO_RUN = [
     #     "use_stream_hamer": True,
     #     "face_subset": "compact",
     #     "fusion": "concat",              # or "gated_sum"
-    #     "class_weights": [1.0, 1.1, 12.4],
-    #     "description": "MS: Body + HaMeR"
+    #     "class_weights": [1.0, 1.1, 7.0],
+    #     "description": "MS: Body + HaMeR, weight=[1.0, 1.1, 7.0]"
+    # },
+    # {
+    #     "basename": "multistream_bilstm", 
+    #     "d_model": 256,
+    #     "use_stream_body_hands": True,
+    #     "use_stream_face": False,
+    #     "use_stream_hamer": True,
+    #     "face_subset": "compact",
+    #     "fusion": "concat",              # or "gated_sum"
+    #     "class_weights": [1.0, 1.1, 4.0],
+    #     "description": "MS: Body + HaMeR, weight=[1.0, 1.1, 4.0]"
     # },
     # {
     #     "basename": "multistream_bilstm", 
@@ -386,30 +408,30 @@ EXPERIMENTS_TO_RUN = [
     #     "class_weights": [1.0, 1.1, 12.4],
     #     "description": "MS: Body + HaMeR, 512 window"
     # },
-    {
-        "basename": "multistream_bilstm", 
-        "window_size": 1024,
-        "d_model": 256,
-        "use_stream_body_hands": True,
-        "use_stream_face": False,
-        "use_stream_hamer": True,
-        "face_subset": "compact",
-        "fusion": "concat",              # or "gated_sum"
-        "class_weights": [1.0, 1.1, 12.4],
-        "description": "MS: Body + HaMeR, 1024 window"
-    },
-    {
-        "basename": "multistream_bilstm", 
-        "window_size": 1536,
-        "d_model": 256,
-        "use_stream_body_hands": True,
-        "use_stream_face": False,
-        "use_stream_hamer": True,
-        "face_subset": "compact",
-        "fusion": "concat",              # or "gated_sum"
-        "class_weights": [1.0, 1.1, 12.4],
-        "description": "MS: Body + HaMeR, 1536 window"
-    },
+    # {
+    #     "basename": "multistream_bilstm", 
+    #     "window_size": 1024,
+    #     "d_model": 256,
+    #     "use_stream_body_hands": True,
+    #     "use_stream_face": False,
+    #     "use_stream_hamer": True,
+    #     "face_subset": "compact",
+    #     "fusion": "concat",              # or "gated_sum"
+    #     "class_weights": [1.0, 1.1, 12.4],
+    #     "description": "MS: Body + HaMeR, 1024 window"
+    # },
+    # {
+    #     "basename": "multistream_bilstm", 
+    #     "window_size": 1536,
+    #     "d_model": 256,
+    #     "use_stream_body_hands": True,
+    #     "use_stream_face": False,
+    #     "use_stream_hamer": True,
+    #     "face_subset": "compact",
+    #     "fusion": "concat",              # or "gated_sum"
+    #     "class_weights": [1.0, 1.1, 12.4],
+    #     "description": "MS: Body + HaMeR, 1536 window"
+    # },
 ]
 
 if CHOSEN_TYPE == 'mamba':
