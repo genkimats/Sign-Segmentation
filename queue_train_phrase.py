@@ -297,15 +297,20 @@ EXPERIMENTS_TO_RUN = [
     # },
 ]
 for _window in (128, 512):
-    for _pe in ("none", "sinusoidal", "rope", "alibi"):
+    for _pe in ("rope", "alibi"):
         EXPERIMENTS_TO_RUN.append({
-            **_MS_BODY_HAMER, "basename": "multistream_bilstm_attn", "window_size": _window,
-            "pos_encoding": _pe, "transformer_norm": "pre", "attn_layers": 1,
-            "description": f"PE study: Body+HaMeR, BiLSTM + 1 attention layer, pos={_pe}, window {_window}",
+            **_MS_BODY_HAMER, "basename": "multistream_transformer", "window_size": _window,
+            "pos_encoding": _pe, "transformer_norm": "pre",
+            "description": f"PE study: Body+HaMeR, Transformer pre-norm, pos={_pe}, window {_window}",
         })
     EXPERIMENTS_TO_RUN.append({
+        **_MS_BODY_HAMER, "basename": "multistream_transformer", "window_size": _window,
+        "pos_encoding": "sinusoidal", "transformer_norm": "post",
+        "description": f"PE study: Body+HaMeR, Transformer post-norm (original), pos=sinusoidal, window {_window}",
+    })
+    EXPERIMENTS_TO_RUN.append({
         **_MS_BODY_HAMER, "basename": "multistream_bilstm", "window_size": _window,
-        "description": f"PE study: Body+HaMeR, BiLSTM only (reference), window {_window}",
+        "description": f"PE study: Body+HaMeR, BiLSTM reference, window {_window}",
     })
 
 if CHOSEN_TYPE == 'mamba':
