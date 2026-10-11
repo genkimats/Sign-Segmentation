@@ -347,8 +347,8 @@ EXPERIMENTS_TO_RUN = [
         "use_stream_hamer": True,
         "face_subset": "compact",
         "fusion": "concat",              # or "gated_sum"
-        "class_weights": [1.3, 1.0, 1.6],
-        "description": "MS: Body + Face + HaMeR, weight=[1.3, 1.0, 1.6]"
+        "class_weights": [1.2, 1.0, 1.6],
+        "description": "MS: Body + Face + HaMeR, weight=[1.2, 1.0, 1.6]"
     },
     # {
     #     "basename": "multistream_bilstm", 
