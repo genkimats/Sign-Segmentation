@@ -343,24 +343,24 @@ EXPERIMENTS_TO_RUN = [
         "basename": "multistream_bilstm", 
         "d_model": 256,
         "use_stream_body_hands": True,
-        "use_stream_face": False,
+        "use_stream_face": True,
         "use_stream_hamer": True,
         "face_subset": "compact",
         "fusion": "concat",              # or "gated_sum"
         "class_weights": [1.3, 1.0, 1.6],
-        "description": "MS: Body + HaMeR, weight=[1.3, 1.0, 1.6]"
+        "description": "MS: Body + Face + HaMeR, weight=[1.3, 1.0, 1.6]"
     },
-    {
-        "basename": "multistream_bilstm", 
-        "d_model": 256,
-        "use_stream_body_hands": True,
-        "use_stream_face": False,
-        "use_stream_hamer": True,
-        "face_subset": "compact",
-        "fusion": "concat",              # or "gated_sum"
-        "class_weights": [1.5, 1.0, 1.6],
-        "description": "MS: Body + HaMeR, weight=[1.5, 1.0, 1.6]"
-    },
+    # {
+    #     "basename": "multistream_bilstm", 
+    #     "d_model": 256,
+    #     "use_stream_body_hands": True,
+    #     "use_stream_face": False,
+    #     "use_stream_hamer": True,
+    #     "face_subset": "compact",
+    #     "fusion": "concat",              # or "gated_sum"
+    #     "class_weights": [1.5, 1.0, 1.6],
+    #     "description": "MS: Body + HaMeR, weight=[1.5, 1.0, 1.6]"
+    # },
     # {
     #     "basename": "multistream_bilstm", 
     #     "d_model": 256,
