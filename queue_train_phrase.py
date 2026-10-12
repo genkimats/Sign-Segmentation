@@ -327,7 +327,7 @@ EXPERIMENTS_TO_RUN = [
         "face_subset": "compact",
         "fusion": "concat",              # or "gated_sum"
         "class_weights": [1.0, 1.1, 10.0],
-        "description": "MS: Body + HaMeR, window 512"
+        "description": "MS: Body + HaMeR, weight=[1.0, 1.1, 10.0]"
     },
     {
         "basename": "multistream_bilstm", 
@@ -339,7 +339,7 @@ EXPERIMENTS_TO_RUN = [
         "face_subset": "compact",
         "fusion": "concat",              # or "gated_sum"
         "class_weights": [1.0, 1.1, 8.5],
-        "description": "MS: Body + HaMeR, window 512"
+        "description": "MS: Body + HaMeR, weight=[1.0, 1.1, 8.5]"
     },
     {
         "basename": "multistream_bilstm", 
@@ -351,7 +351,7 @@ EXPERIMENTS_TO_RUN = [
         "face_subset": "compact",
         "fusion": "concat",              # or "gated_sum"
         "class_weights": [1.0, 1.1, 5.5],
-        "description": "MS: Body + HaMeR, window 512"
+        "description": "MS: Body + HaMeR, weight=[1.0, 1.1, 5.5]"
     },
     # {
     #     "basename": "multistream_bilstm", 
