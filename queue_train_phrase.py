@@ -14,7 +14,7 @@ CHOSEN_TYPE = 'mamba'
 # ==============================================================================
 MAMBA_DEFAULTS = {
     "basename": "stgcn_mamba",  
-    "window_size": 256,
+    "window_size": 512,
     "overlap": 0,
     "batch_size": 16,
     "epochs": 100,
@@ -22,11 +22,11 @@ MAMBA_DEFAULTS = {
     "patience": 10,
     "learning_rate": 0.0001,
     "num_vertices": 65,
-    "tolerance_window": 5,
+    "tolerance_window": 1,
     "temporal_downsample_factor": 1, 
     "loss_function": "weighted_ce",  
     "ctc_weight": 0.5,             
-    "class_weights": [0.6, 0.8, 1.0], 
+    "class_weights": [1.0, 1.1, 12.4], 
     "tmse_weight": 0.15,            
     "tmse_threshold": 0.1,          
     "base_features": ["x-cord", "y-cord", "z-cord"], 
@@ -284,6 +284,72 @@ _MS_BODY_HAMER = {
 }
 
 EXPERIMENTS_TO_RUN = [
+    {
+        "basename": "multistream_bilstm", 
+        "d_model": 256,
+        "use_stream_body_hands": True,
+        "use_stream_face": False,
+        "use_stream_hamer": False,
+        "face_subset": "compact",
+        "fusion": "concat",              # or "gated_sum"
+        "class_weights": [1.0, 1.1, 12.4],
+        "description": "MS: Body"
+    },
+    {
+        "basename": "multistream_bilstm", 
+        "d_model": 256,
+        "use_stream_body_hands": False,
+        "use_stream_face": False,
+        "use_stream_hamer": True,
+        "face_subset": "compact",
+        "fusion": "concat",              # or "gated_sum"
+        "class_weights": [1.0, 1.1, 12.4],
+        "description": "MS: HaMeR"
+    },
+    {
+        "basename": "multistream_bilstm", 
+        "d_model": 256,
+        "use_stream_body_hands": False,
+        "use_stream_face": True,
+        "use_stream_hamer": False,
+        "face_subset": "compact",
+        "fusion": "concat",              # or "gated_sum"
+        "class_weights": [1.0, 1.1, 12.4],
+        "description": "MS: Face"
+    },
+    {
+        "basename": "multistream_bilstm", 
+        "d_model": 256,
+        "use_stream_body_hands": True,
+        "use_stream_face": False,
+        "use_stream_hamer": True,
+        "face_subset": "compact",
+        "fusion": "concat",              # or "gated_sum"
+        "class_weights": [1.0, 1.1, 12.4],
+        "description": "MS: Body + HaMeR"
+    },
+    # {
+    #     "basename": "multistream_bilstm", 
+    #     "d_model": 256,
+    #     "use_stream_body_hands": True,
+    #     "use_stream_face": True,
+    #     "use_stream_hamer": False,
+    #     "face_subset": "compact",
+    #     "fusion": "concat",              # or "gated_sum"
+    #     "class_weights": [1.0, 1.1, 12.4],
+    #     "description": "MS: Body + Face"
+    # },
+    # {
+    #     "basename": "multistream_bilstm", 
+    #     "d_model": 256,
+    #     "use_stream_body_hands": False,
+    #     "use_stream_face": True,
+    #     "use_stream_hamer": True,
+    #     "face_subset": "compact",
+    #     "fusion": "concat",              # or "gated_sum"
+    #     "class_weights": [1.0, 1.1, 12.4],
+    #     "description": "MS: Face + HaMeR"
+    # },
     # {
     #     "basename": "multistream_bilstm", 
     #     "d_model": 256,
@@ -296,22 +362,22 @@ EXPERIMENTS_TO_RUN = [
     #     "description": "MS: Body + Face + HaMeR"
     # },
 ]
-for _window in (128, 512):
-    for _pe in ("rope", "alibi"):
-        EXPERIMENTS_TO_RUN.append({
-            **_MS_BODY_HAMER, "basename": "multistream_transformer", "window_size": _window,
-            "pos_encoding": _pe, "transformer_norm": "pre",
-            "description": f"PE study: Body+HaMeR, Transformer pre-norm, pos={_pe}, window {_window}",
-        })
-    EXPERIMENTS_TO_RUN.append({
-        **_MS_BODY_HAMER, "basename": "multistream_transformer", "window_size": _window,
-        "pos_encoding": "sinusoidal", "transformer_norm": "post",
-        "description": f"PE study: Body+HaMeR, Transformer post-norm (original), pos=sinusoidal, window {_window}",
-    })
-    EXPERIMENTS_TO_RUN.append({
-        **_MS_BODY_HAMER, "basename": "multistream_bilstm", "window_size": _window,
-        "description": f"PE study: Body+HaMeR, BiLSTM reference, window {_window}",
-    })
+# for _window in (128, 512):
+#     for _pe in ("rope", "alibi"):
+#         EXPERIMENTS_TO_RUN.append({
+#             **_MS_BODY_HAMER, "basename": "multistream_transformer", "window_size": _window,
+#             "pos_encoding": _pe, "transformer_norm": "pre",
+#             "description": f"PE study: Body+HaMeR, Transformer pre-norm, pos={_pe}, window {_window}",
+#         })
+#     EXPERIMENTS_TO_RUN.append({
+#         **_MS_BODY_HAMER, "basename": "multistream_transformer", "window_size": _window,
+#         "pos_encoding": "sinusoidal", "transformer_norm": "post",
+#         "description": f"PE study: Body+HaMeR, Transformer post-norm (original), pos=sinusoidal, window {_window}",
+#     })
+#     EXPERIMENTS_TO_RUN.append({
+#         **_MS_BODY_HAMER, "basename": "multistream_bilstm", "window_size": _window,
+#         "description": f"PE study: Body+HaMeR, BiLSTM reference, window {_window}",
+#     })
 
 if CHOSEN_TYPE == 'mamba':
     defaults = MAMBA_DEFAULTS
