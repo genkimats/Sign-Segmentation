@@ -322,24 +322,48 @@ EXPERIMENTS_TO_RUN = [
         "window_size": 512,
         "d_model": 256,
         "use_stream_body_hands": True,
-        "use_stream_face": False,
+        "use_stream_face": True,
         "use_stream_hamer": True,
-        "face_subset": "compact",
+        "face_subset": "full",
         "fusion": "concat",              # or "gated_sum"
-        "class_weights": [1.4, 1.0, 7.0],
-        "description": "MS: Body + HaMeR, weight=[1.4, 1.0, 7.0]"
+        "class_weights": [1.0, 1.1, 7.0],
+        "description": "MS: Body + Face + HaMeR, weight=[1.0, 1.1, 7.0], full face"
     },
     {
         "basename": "multistream_bilstm", 
         "window_size": 512,
         "d_model": 256,
         "use_stream_body_hands": True,
-        "use_stream_face": False,
+        "use_stream_face": True,
         "use_stream_hamer": True,
         "face_subset": "compact",
         "fusion": "concat",              # or "gated_sum"
-        "class_weights": [1.0, 1.4, 7.0],
-        "description": "MS: Body + HaMeR, weight=[1.0, 1.4, 7.0]"
+        "class_weights": [1.0, 1.1, 7.0],
+        "description": "MS: Body + Face + HaMeR, weight=[1.0, 1.1, 7.0], compact face"
+    },
+    {
+        "basename": "multistream_bilstm", 
+        "window_size": 512,
+        "d_model": 256,
+        "use_stream_body_hands": True,
+        "use_stream_face": True,
+        "use_stream_hamer": True,
+        "face_subset": "eyes_brows",
+        "fusion": "concat",              # or "gated_sum"
+        "class_weights": [1.0, 1.1, 7.0],
+        "description": "MS: Body + Face + HaMeR, weight=[1.0, 1.1, 7.0], eyes and brows"
+    },
+    {
+        "basename": "multistream_bilstm", 
+        "window_size": 512,
+        "d_model": 256,
+        "use_stream_body_hands": True,
+        "use_stream_face": True,
+        "use_stream_hamer": True,
+        "face_subset": "minimal",
+        "fusion": "concat",              # or "gated_sum"
+        "class_weights": [1.0, 1.1, 7.0],
+        "description": "MS: Body + Face + HaMeR, weight=[1.0, 1.1, 7.0], minimal face"
     },
     # {
     #     "basename": "multistream_bilstm", 
