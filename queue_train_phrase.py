@@ -319,7 +319,7 @@ EXPERIMENTS_TO_RUN = [
     # },
     {
         "basename": "multistream_bilstm", 
-        "window_size": 768,
+        "window_size": 1536,
         "d_model": 256,
         "use_stream_body_hands": True,
         "use_stream_face": False,
@@ -327,19 +327,7 @@ EXPERIMENTS_TO_RUN = [
         "face_subset": "compact",
         "fusion": "concat",              # or "gated_sum"
         "class_weights": [1.0, 1.1, 12.4],
-        "description": "MS: Body + HaMeR, window 768"
-    },
-    {
-        "basename": "multistream_bilstm", 
-        "window_size": 1024,
-        "d_model": 256,
-        "use_stream_body_hands": True,
-        "use_stream_face": False,
-        "use_stream_hamer": True,
-        "face_subset": "compact",
-        "fusion": "concat",              # or "gated_sum"
-        "class_weights": [1.0, 1.1, 12.4],
-        "description": "MS: Body + HaMeR, window 1024"
+        "description": "MS: Body + HaMeR, window 1536"
     },
     # {
     #     "basename": "multistream_bilstm", 
