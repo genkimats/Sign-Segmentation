@@ -319,51 +319,36 @@ EXPERIMENTS_TO_RUN = [
     # },
     {
         "basename": "multistream_bilstm", 
-        "window_size": 512,
+        "window_size": 16,
         "d_model": 256,
         "use_stream_body_hands": True,
-        "use_stream_face": True,
+        "use_stream_face": False,
         "use_stream_hamer": True,
-        "face_subset": "full",
         "fusion": "concat",              # or "gated_sum"
-        "class_weights": [1.0, 1.1, 7.0],
-        "description": "MS: Body + Face + HaMeR, weight=[1.0, 1.1, 7.0], full face"
+        "class_weights": [1.0, 1.1, 12.4],
+        "description": "MS: Body + HaMeR, window 16"
     },
     {
         "basename": "multistream_bilstm", 
-        "window_size": 512,
+        "window_size": 32,
         "d_model": 256,
         "use_stream_body_hands": True,
-        "use_stream_face": True,
+        "use_stream_face": False,
         "use_stream_hamer": True,
-        "face_subset": "compact",
         "fusion": "concat",              # or "gated_sum"
-        "class_weights": [1.0, 1.1, 7.0],
-        "description": "MS: Body + Face + HaMeR, weight=[1.0, 1.1, 7.0], compact face"
+        "class_weights": [1.0, 1.1, 12.4],
+        "description": "MS: Body + HaMeR, window 32"
     },
     {
         "basename": "multistream_bilstm", 
-        "window_size": 512,
+        "window_size": 64,
         "d_model": 256,
         "use_stream_body_hands": True,
-        "use_stream_face": True,
+        "use_stream_face": False,
         "use_stream_hamer": True,
-        "face_subset": "eyes_brows",
         "fusion": "concat",              # or "gated_sum"
-        "class_weights": [1.0, 1.1, 7.0],
-        "description": "MS: Body + Face + HaMeR, weight=[1.0, 1.1, 7.0], eyes and brows"
-    },
-    {
-        "basename": "multistream_bilstm", 
-        "window_size": 512,
-        "d_model": 256,
-        "use_stream_body_hands": True,
-        "use_stream_face": True,
-        "use_stream_hamer": True,
-        "face_subset": "minimal",
-        "fusion": "concat",              # or "gated_sum"
-        "class_weights": [1.0, 1.1, 7.0],
-        "description": "MS: Body + Face + HaMeR, weight=[1.0, 1.1, 7.0], minimal face"
+        "class_weights": [1.0, 1.1, 12.4],
+        "description": "MS: Body + HaMeR, window 64"
     },
     # {
     #     "basename": "multistream_bilstm", 
