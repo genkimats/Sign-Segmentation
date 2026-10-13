@@ -384,28 +384,28 @@ EXPERIMENTS_TO_RUN = [
         "class_weights": [1.0, 1.1, 8.5],
         "description": "MS: Body + Face + HaMeR, compact face"
     },
-    {
-        "basename": "multistream_bilstm", 
-        "d_model": 256,
-        "use_stream_body_hands": True,
-        "use_stream_face": True,
-        "use_stream_hamer": True,
-        "face_subset": "eyes_brows",
-        "fusion": "concat",              # or "gated_sum"
-        "class_weights": [1.0, 1.1, 8.5],
-        "description": "MS: Body + Face + HaMeR, eyes and brows"
-    },
-    {
-        "basename": "multistream_bilstm", 
-        "d_model": 256,
-        "use_stream_body_hands": True,
-        "use_stream_face": True,
-        "use_stream_hamer": True,
-        "face_subset": "minimal",
-        "fusion": "concat",              # or "gated_sum"
-        "class_weights": [1.0, 1.1, 8.5],
-        "description": "MS: Body + Face + HaMeR, minimal face"
-    },
+    # {
+    #     "basename": "multistream_bilstm", 
+    #     "d_model": 256,
+    #     "use_stream_body_hands": True,
+    #     "use_stream_face": True,
+    #     "use_stream_hamer": True,
+    #     "face_subset": "eyes_brows",
+    #     "fusion": "concat",              # or "gated_sum"
+    #     "class_weights": [1.0, 1.1, 8.5],
+    #     "description": "MS: Body + Face + HaMeR, eyes and brows"
+    # },
+    # {
+    #     "basename": "multistream_bilstm", 
+    #     "d_model": 256,
+    #     "use_stream_body_hands": True,
+    #     "use_stream_face": True,
+    #     "use_stream_hamer": True,
+    #     "face_subset": "minimal",
+    #     "fusion": "concat",              # or "gated_sum"
+    #     "class_weights": [1.0, 1.1, 8.5],
+    #     "description": "MS: Body + Face + HaMeR, minimal face"
+    # },
 ]
 # for _window in (128, 512):
 #     for _pe in ("rope", "alibi"):
