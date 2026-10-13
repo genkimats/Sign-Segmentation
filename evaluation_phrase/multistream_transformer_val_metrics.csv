@@ -1,0 +1,13 @@
+run,prefix,decoder,frame_f1,f1_O,f1_I,f1_B,iou,segment_pct,segment_f1_05,videos_evaluated,videos_skipped,window_size,seed,description
+multistream_transformer-36,36,argmax,0.6617,0.9352,0.9125,0.1374,0.844,3.2105,0.2236,12,0,128,,"PE study: Body+HaMeR, Transformer pre-norm, pos=rope, window 128"
+multistream_transformer-36,36,thr b=0.5 o=0.5,0.6617,0.9352,0.9125,0.1374,0.7099,0.6682,0.4202,12,0,128,,"PE study: Body+HaMeR, Transformer pre-norm, pos=rope, window 128"
+multistream_transformer-37,37,argmax,0.6626,0.9352,0.9155,0.137,0.8467,2.831,0.2169,12,0,128,,"PE study: Body+HaMeR, Transformer pre-norm, pos=alibi, window 128"
+multistream_transformer-37,37,thr b=0.5 o=0.5,0.6626,0.9352,0.9155,0.137,0.7208,0.5606,0.3698,12,0,128,,"PE study: Body+HaMeR, Transformer pre-norm, pos=alibi, window 128"
+multistream_transformer-38,38,argmax,0.6642,0.9338,0.9127,0.1461,0.8434,2.7208,0.2194,12,0,128,,"PE study: Body+HaMeR, Transformer post-norm (original), pos=sinusoidal, window 128"
+multistream_transformer-38,38,thr b=0.5 o=0.5,0.6642,0.9338,0.9127,0.1461,0.6592,0.52,0.3371,12,0,128,,"PE study: Body+HaMeR, Transformer post-norm (original), pos=sinusoidal, window 128"
+multistream_transformer-39,39,argmax,0.6655,0.9369,0.9179,0.1417,0.8507,2.8718,0.2088,12,0,512,,"PE study: Body+HaMeR, Transformer pre-norm, pos=rope, window 512"
+multistream_transformer-39,39,thr b=0.5 o=0.5,0.6655,0.9369,0.9179,0.1417,0.7077,0.5379,0.3767,12,0,512,,"PE study: Body+HaMeR, Transformer pre-norm, pos=rope, window 512"
+multistream_transformer-40,40,argmax,0.6642,0.936,0.9172,0.1393,0.8464,2.583,0.2331,12,0,512,,"PE study: Body+HaMeR, Transformer pre-norm, pos=alibi, window 512"
+multistream_transformer-40,40,thr b=0.5 o=0.5,0.6642,0.936,0.9172,0.1393,0.7258,0.5396,0.3704,12,0,512,,"PE study: Body+HaMeR, Transformer pre-norm, pos=alibi, window 512"
+multistream_transformer-41,41,argmax,0.6629,0.9368,0.9164,0.1356,0.8468,2.5173,0.2234,12,0,512,,"PE study: Body+HaMeR, Transformer post-norm (original), pos=sinusoidal, window 512"
+multistream_transformer-41,41,thr b=0.5 o=0.5,0.6629,0.9368,0.9164,0.1356,0.5835,0.3885,0.3051,12,0,512,,"PE study: Body+HaMeR, Transformer post-norm (original), pos=sinusoidal, window 512"
