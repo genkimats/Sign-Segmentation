@@ -1,14 +1,14 @@
 {
     "seed": 42,
-    "description": "MS: Body + Face + HaMeR, weight=[1.0, 1.1, 7.0], compact face",
+    "description": "MS: Body + Face + HaMeR, compact face",
     "machine_hostname": "z790",
     "gpu_name": "NVIDIA GeForce RTX 5060 Ti",
-    "total_training_time": "126m 30s",
-    "total_training_seconds": 7590.69,
-    "total_epochs_ran": 29,
+    "total_training_time": "113m 30s",
+    "total_training_seconds": 6810.83,
+    "total_epochs_ran": 26,
     "early_stopping_triggered": true,
     "average_time_per_epoch": "4m 21s",
-    "max_gpu_memory_used_gb": 2.6392,
+    "max_gpu_memory_used_gb": 2.6375,
     "average_gpu_utilization_percent": 98.02,
     "total_nan_loss_count_latest_run": 0,
     "total_training_restarts": 0,
@@ -29,7 +29,7 @@
         "class_weights": [
             1.0,
             1.1,
-            7.0
+            8.5
         ],
         "tmse_weight": 0.15,
         "tmse_threshold": 0.1,
@@ -68,7 +68,7 @@
         "mamba_expand": 2,
         "optimizer": "AdamW",
         "scheduler": "CosineAnnealingLR",
-        "description": "MS: Body + Face + HaMeR, weight=[1.0, 1.1, 7.0], compact face",
+        "description": "MS: Body + Face + HaMeR, compact face",
         "prefix": "66",
         "selection_metric": "frame_f1"
     }
