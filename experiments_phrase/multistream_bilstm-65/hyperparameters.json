@@ -15,7 +15,7 @@
     "class_weights": [
         1.0,
         1.1,
-        7.0
+        8.5
     ],
     "tmse_weight": 0.15,
     "tmse_threshold": 0.1,
@@ -54,7 +54,7 @@
     "mamba_expand": 2,
     "optimizer": "AdamW",
     "scheduler": "CosineAnnealingLR",
-    "description": "MS: Body + Face + HaMeR, weight=[1.0, 1.1, 7.0], full face",
+    "description": "MS: Body + Face + HaMeR, full face",
     "prefix": "65",
     "selection_metric": "frame_f1"
 }
