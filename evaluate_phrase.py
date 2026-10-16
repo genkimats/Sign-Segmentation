@@ -355,8 +355,8 @@ def main():
     )
     parser.add_argument("--model", help="Model basename, e.g. stgcn_bilstm (asks if omitted).")
     parser.add_argument("--prefixes", nargs="*", help="Only these prefixes (default: all).")
-    parser.add_argument("--split", choices=["val", "test"], default="val",
-                        help="Dataset split to evaluate on: 'val' (default) or 'test'.")
+    parser.add_argument("--split", choices=["train", "val", "test"], default="val",
+                        help="Dataset split to evaluate on: 'val' (default), 'test' or 'train'.")
     parser.add_argument("--per-video", action="store_true",
                         help="Also print the metrics for every video (each decoder).")
     parser.add_argument("--b-threshold", type=float, default=0.5, help="B threshold for 2023-style decoding.")
