@@ -116,7 +116,7 @@ def dataset_key(config):
 
 
 def report_skipped(dataset, split):
-    """Prints how many videos of the split failed to load, per reason (names are saved in the per-video JSON)."""
+    """Prints how many videos of the split failed to load, per reason, followed by each video's name."""
     skipped = getattr(dataset, "skipped_videos", {}) or {}
     total = sum(len(v) for v in skipped.values())
     if total == 0:
@@ -125,6 +125,9 @@ def report_skipped(dataset, split):
     reasons = ", ".join(f"{reason}: {len(items)}" for reason, items in skipped.items())
     print(f"  ⚠️  {total} {split} video(s) failed to load ({len(dataset.video_cache)} loaded; "
           f"not in the metrics) -- {reasons}")
+    for reason, items in skipped.items():
+        for video, detail in items:
+            print(f"     [{reason}] {video}" + (f" ({detail})" if detail else ""))
 
 
 def get_dataset(config, split):
