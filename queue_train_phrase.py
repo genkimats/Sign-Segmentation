@@ -284,61 +284,61 @@ _MS_BODY_HAMER = {
 }
 
 EXPERIMENTS_TO_RUN = [
-    # {
-    #     "basename": "multistream_bilstm", 
-    #     "d_model": 256,
-    #     "use_stream_body_hands": True,
-    #     "use_stream_face": False,
-    #     "use_stream_hamer": False,
-    #     "face_subset": "compact",
-    #     "fusion": "concat",              # or "gated_sum"
-    #     "class_weights": [1.0, 1.1, 8.5],
-    #     "description": "MS: Body"
-    # },
-    # {
-    #     "basename": "multistream_bilstm", 
-    #     "d_model": 256,
-    #     "use_stream_body_hands": False,
-    #     "use_stream_face": False,
-    #     "use_stream_hamer": True,
-    #     "face_subset": "compact",
-    #     "fusion": "concat",              # or "gated_sum"
-    #     "class_weights": [1.0, 1.1, 8.5],
-    #     "description": "MS: HaMeR"
-    # },
-    # {
-    #     "basename": "multistream_bilstm", 
-    #     "d_model": 256,
-    #     "use_stream_body_hands": False,
-    #     "use_stream_face": True,
-    #     "use_stream_hamer": False,
-    #     "face_subset": "compact",
-    #     "fusion": "concat",              # or "gated_sum"
-    #     "class_weights": [1.0, 1.1, 8.5],
-    #     "description": "MS: Face"
-    # },
     {
         "basename": "multistream_bilstm", 
         "d_model": 256,
         "use_stream_body_hands": True,
         "use_stream_face": False,
+        "use_stream_hamer": False,
+        "face_subset": "compact",
+        "fusion": "concat",              # or "gated_sum"
+        "class_weights": [1.0, 1.1, 8.5],
+        "description": "New: MS: Body"
+    },
+    {
+        "basename": "multistream_bilstm", 
+        "d_model": 256,
+        "use_stream_body_hands": False,
+        "use_stream_face": False,
         "use_stream_hamer": True,
         "face_subset": "compact",
         "fusion": "concat",              # or "gated_sum"
         "class_weights": [1.0, 1.1, 8.5],
-        "description": "New 2: MS: Body + HaMeR"
+        "description": "New: MS: HaMeR"
+    },
+    {
+        "basename": "multistream_bilstm", 
+        "d_model": 256,
+        "use_stream_body_hands": False,
+        "use_stream_face": True,
+        "use_stream_hamer": False,
+        "face_subset": "compact",
+        "fusion": "concat",              # or "gated_sum"
+        "class_weights": [1.0, 1.1, 8.5],
+        "description": "New: MS: Face"
     },
     # {
     #     "basename": "multistream_bilstm", 
     #     "d_model": 256,
     #     "use_stream_body_hands": True,
-    #     "use_stream_face": True,
-    #     "use_stream_hamer": False,
+    #     "use_stream_face": False,
+    #     "use_stream_hamer": True,
     #     "face_subset": "compact",
     #     "fusion": "concat",              # or "gated_sum"
     #     "class_weights": [1.0, 1.1, 8.5],
-    #     "description": "MS: Body + Face"
+    #     "description": "New 2: MS: Body + HaMeR"
     # },
+    {
+        "basename": "multistream_bilstm", 
+        "d_model": 256,
+        "use_stream_body_hands": True,
+        "use_stream_face": True,
+        "use_stream_hamer": False,
+        "face_subset": "compact",
+        "fusion": "concat",              # or "gated_sum"
+        "class_weights": [1.0, 1.1, 8.5],
+        "description": "MS: Body + Face"
+    },
     # {
     #     "basename": "multistream_bilstm", 
     #     "d_model": 256,
