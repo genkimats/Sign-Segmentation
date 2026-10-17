@@ -337,7 +337,7 @@ EXPERIMENTS_TO_RUN = [
         "face_subset": "compact",
         "fusion": "concat",              # or "gated_sum"
         "class_weights": [1.0, 1.1, 8.5],
-        "description": "MS: Body + Face"
+        "description": "New: MS: Body + Face"
     },
     # {
     #     "basename": "multistream_bilstm", 
