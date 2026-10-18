@@ -1,0 +1,7 @@
+run,prefix,decoder,frame_f1,f1_O,f1_I,f1_B,iou,segment_pct,segment_f1_05,videos_evaluated,videos_skipped,window_size,seed,description
+multistream_bilstm-115,115,argmax,0.6624,0.9335,0.9041,0.1495,0.7914,2.0282,0.2727,500,30,512,42,"New: MS: Body + Face + HaMeR, compact face [seed=42]"
+multistream_bilstm-115,115,thr b=0.5 o=0.5,0.6624,0.9335,0.9041,0.1495,0.4922,0.3637,0.313,500,30,512,42,"New: MS: Body + Face + HaMeR, compact face [seed=42]"
+multistream_bilstm-116,116,argmax,0.6664,0.9361,0.9065,0.1565,0.7945,1.8514,0.2867,500,30,512,123,"New: MS: Body + Face + HaMeR, compact face [seed=123]"
+multistream_bilstm-116,116,thr b=0.5 o=0.5,0.6664,0.9361,0.9065,0.1565,0.4532,0.3208,0.2923,500,30,512,123,"New: MS: Body + Face + HaMeR, compact face [seed=123]"
+multistream_bilstm-117,117,argmax,0.6692,0.9375,0.9099,0.1603,0.8059,2.0121,0.2838,500,30,512,2024,"New: MS: Body + Face + HaMeR, compact face [seed=2024]"
+multistream_bilstm-117,117,thr b=0.5 o=0.5,0.6692,0.9375,0.9099,0.1603,0.5403,0.4025,0.3404,500,30,512,2024,"New: MS: Body + Face + HaMeR, compact face [seed=2024]"
