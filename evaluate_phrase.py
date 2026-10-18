@@ -32,7 +32,7 @@ import time
 import numpy as np
 import torch
 
-from src.dataset import SignSegmentationDataset
+from src.dataset import SignSegmentationDataset, cue_dataset_kwargs
 from src.model_factory import build_model_kwargs
 from src.evaluation import predict_split
 from src.metrics import evaluate_videos, pct_score, extract_segments, decode_threshold_2023, segment_iou
@@ -112,11 +112,12 @@ def dataset_key(config):
         "hamer_dir": config.get("hamer_dir"),
         "use_dinov2_features": config.get("use_dinov2_features", False),
         "dinov2_dir": config.get("dinov2_dir"),
+        "cues": cue_dataset_kwargs(config),
     }, sort_keys=True)
 
 
 def report_skipped(dataset, split):
-    """Prints how many videos of the split failed to load, per reason, followed by each video's name."""
+    """Prints how many videos of the split failed to load, per reason (names are saved in the per-video JSON)."""
     skipped = getattr(dataset, "skipped_videos", {}) or {}
     total = sum(len(v) for v in skipped.values())
     if total == 0:
@@ -125,9 +126,6 @@ def report_skipped(dataset, split):
     reasons = ", ".join(f"{reason}: {len(items)}" for reason, items in skipped.items())
     print(f"  ⚠️  {total} {split} video(s) failed to load ({len(dataset.video_cache)} loaded; "
           f"not in the metrics) -- {reasons}")
-    for reason, items in skipped.items():
-        for video, detail in items:
-            print(f"     [{reason}] {video}" + (f" ({detail})" if detail else ""))
 
 
 def get_dataset(config, split):
@@ -155,6 +153,7 @@ def get_dataset(config, split):
             hamer_dir=config.get("hamer_dir", "processed_data/hamer_features"),
             use_dinov2_features=config.get("use_dinov2_features", False),
             dinov2_dir=config.get("dinov2_dir", "processed_data/dinov2_features"),
+            **cue_dataset_kwargs(config),
         )
         print(f"  labels: {labels_dir_for(config)}")
         print(f"  [time] loading {split} data: {time.time() - t0:.1f}s "
@@ -250,6 +249,7 @@ def evaluate_run(run_name, split, device, b_threshold, o_threshold, do_sweep, ba
         config,
         detected_hamer_dim=dataset.detected_hamer_dim,
         detected_dinov2_dim=dataset.detected_dinov2_dim,
+        detected_cue_dim=getattr(dataset, "detected_cue_dim", None),
     )
     model = model_class(**model_kwargs).to(device)
     state = torch.load(ckpt_path, map_location=device)
@@ -355,8 +355,8 @@ def main():
     )
     parser.add_argument("--model", help="Model basename, e.g. stgcn_bilstm (asks if omitted).")
     parser.add_argument("--prefixes", nargs="*", help="Only these prefixes (default: all).")
-    parser.add_argument("--split", choices=["train", "val", "test"], default="val",
-                        help="Dataset split to evaluate on: 'val' (default), 'test' or 'train'.")
+    parser.add_argument("--split", choices=["val", "test"], default="val",
+                        help="Dataset split to evaluate on: 'val' (default) or 'test'.")
     parser.add_argument("--per-video", action="store_true",
                         help="Also print the metrics for every video (each decoder).")
     parser.add_argument("--b-threshold", type=float, default=0.5, help="B threshold for 2023-style decoding.")

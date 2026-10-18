@@ -196,7 +196,7 @@ def check_run(run_name, split, device, do_ablation, batch_size_override):
 
     if isinstance(model, MultiStreamSegmenter):
         # ---- multi-stream models: the model reports per-stream inputs/contributions itself
-        label = {"body_hands": "Body+Hand", "face": "Face", "hamer": "HaMeR"}
+        label = {"body_hands": "Body+Hand", "face": "Face", "hamer": "HaMeR", "cues": "Cues"}
         if model.fusion == "concat":
             W = model.fusion_proj[0].weight.detach()
             sizes, start = {}, 0

@@ -8,6 +8,8 @@ as the one that was trained. The logic is moved here unchanged from
 train_phrase.py.
 """
 import inspect
+import json
+import os
 
 from src.models import (PureMambaBaseline, BiMambaBaseline, STGCN_Mamba, STGCN_MLP_Mamba,
                         STGCN_BiMamba, Decoupled_STGCN_Mamba, BiLSTM_Baseline, STGCN_BiLSTM,
@@ -61,7 +63,24 @@ HAMER_SUPPORTED_MODELS = ["stgcn_mamba", "latent_stgcn_mamba", "ctrgcn_mamba", "
 DINOV2_SUPPORTED_MODELS = list(HAMER_SUPPORTED_MODELS) + ["bilstm_baseline", "transformer_baseline"]
 
 
-def build_model_kwargs(config, detected_hamer_dim=None, detected_dinov2_dim=None):
+def resolve_cue_dim(config, detected_cue_dim=None):
+    """Number of cue channels of the run's cue_set: config "cue_dim" > the dataset's count >
+    the cue files' _names.json (so evaluation scripts need no extra argument)."""
+    if config.get("cue_dim"):
+        return int(config["cue_dim"])
+    if detected_cue_dim:
+        return int(detected_cue_dim)
+    from src.cue_sets import resolve_cue_set
+    names_path = os.path.join(config.get("cue_dir", "processed_data/cue_features"), "_names.json")
+    file_names = None
+    if os.path.exists(names_path):
+        with open(names_path) as f:
+            file_names = json.load(f)
+    names, _ = resolve_cue_set(config.get("cue_set", "selected"), file_names)
+    return len(names)
+
+
+def build_model_kwargs(config, detected_hamer_dim=None, detected_dinov2_dim=None, detected_cue_dim=None):
     """
     Returns (model_class, model_kwargs) for a run config.
 
@@ -147,10 +166,17 @@ def build_model_kwargs(config, detected_hamer_dim=None, detected_dinov2_dim=None
             "use_stream_body_hands": bool(config.get("use_stream_body_hands", True)),
             "use_stream_face": bool(config.get("use_stream_face", False)),
             "use_stream_hamer": bool(config.get("use_stream_hamer", False)),
+            "use_stream_cues": bool(config.get("use_stream_cues", False)),
         }
         if not any(streams.values()):
             raise ValueError("All streams are off -- turn on at least one of use_stream_body_hands / "
-                             "use_stream_face / use_stream_hamer.")
+                             "use_stream_face / use_stream_hamer / use_stream_cues.")
+        if streams["use_stream_cues"]:
+            if not config.get("use_cue_features", False):
+                raise ValueError("use_stream_cues=True needs use_cue_features=True (the queue sets it automatically).")
+            model_kwargs["cue_dim"] = resolve_cue_dim(config, detected_cue_dim)
+            model_kwargs["cue_proj_dim"] = int(config.get("cue_proj_dim", 128))
+            model_kwargs["cue_temporal_kernel"] = int(config.get("cue_temporal_kernel", 1))
         if streams["use_stream_face"] and not config.get("use_face_keypoints", False):
             raise ValueError("use_stream_face=True needs use_face_keypoints=True (the queue sets it automatically).")
         if streams["use_stream_hamer"] and not config.get("use_hamer_features", False):
@@ -191,12 +217,14 @@ def build_model_kwargs(config, detected_hamer_dim=None, detected_dinov2_dim=None
     return model_class, model_kwargs
 
 
-def call_model(model, config, features, hamer=None, dinov2=None):
-    """Passes hamer/dinov2 only when the run uses them; returns the LOGITS (B, 3, T)."""
+def call_model(model, config, features, hamer=None, dinov2=None, cues=None):
+    """Passes hamer/dinov2/cues only when the run uses them; returns the LOGITS (B, 3, T)."""
     kwargs = {}
     if config.get("use_hamer_features", False):
         kwargs["hamer"] = hamer
     if config.get("use_dinov2_features", False):
         kwargs["dinov2"] = dinov2
+    if config.get("use_cue_features", False):
+        kwargs["cues"] = cues
     output = model(features, **kwargs)
     return output[0] if isinstance(output, tuple) else output

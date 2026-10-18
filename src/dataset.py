@@ -6,6 +6,16 @@ from torch.utils.data import Dataset
 from tqdm import tqdm
 
 from src.face_subsets import face_subset_positions, SAVED_FACE_INDICES
+from src.cue_sets import resolve_cue_set
+
+CUE_DEFAULT_DIR = "processed_data/cue_features"
+
+
+def cue_dataset_kwargs(config):
+    """Dataset arguments for the interpretable-cue stream, read from a run config."""
+    return {"use_cue_features": bool(config.get("use_cue_features", False)),
+            "cue_dir": config.get("cue_dir", CUE_DEFAULT_DIR),
+            "cue_set": config.get("cue_set", "selected")}
 
 def apply_label_smoothing(labels_array, window_size=5):
     """
@@ -49,7 +59,7 @@ def apply_label_smoothing(labels_array, window_size=5):
     return soft_labels
 
 class SignSegmentationDataset(Dataset):
-    def __init__(self, keypoints_dir, labels_dir, split_file="dataset_splits.json", split="train", window_size=16, overlap=0, tolerance_window=5, use_full_length=False, base_features=None, kinematic_features=None, temporal_downsample_factor=1, use_face_keypoints=False, face_dir="processed_data/face_keypoints_normalized_v2", face_subset="full", face_only=False, face_dims=2, use_hamer_features=False, hamer_dir="processed_data/hamer_features", use_dinov2_features=False, dinov2_dir="processed_data/dinov2_features"):
+    def __init__(self, keypoints_dir, labels_dir, split_file="dataset_splits.json", split="train", window_size=16, overlap=0, tolerance_window=5, use_full_length=False, base_features=None, kinematic_features=None, temporal_downsample_factor=1, use_face_keypoints=False, face_dir="processed_data/face_keypoints_normalized_v2", face_subset="full", face_only=False, face_dims=2, use_hamer_features=False, hamer_dir="processed_data/hamer_features", use_dinov2_features=False, dinov2_dir="processed_data/dinov2_features", use_cue_features=False, cue_dir=CUE_DEFAULT_DIR, cue_set="selected"):
         self.labels_dir = labels_dir
         self.kinetic_dir = "processed_data/kinematic_features" 
         self.split_file = split_file
@@ -86,6 +96,22 @@ class SignSegmentationDataset(Dataset):
         self.hamer_dir = hamer_dir
         self.use_dinov2_features = use_dinov2_features
         self.dinov2_dir = dinov2_dir
+        # INTERPRETABLE CUE STREAM (data_processing/extract_cue_features.py): a (T, C) matrix
+        # of per-frame cues (eye openness, brow height, head nod, wrist height, finger
+        # flexion ...). cue_set picks the channels at load time (src/cue_sets.py).
+        self.use_cue_features = use_cue_features
+        self.cue_dir = cue_dir
+        self.cue_set = cue_set
+        self.cue_names, self.cue_indices = None, None
+        if use_cue_features:
+            names_path = os.path.join(cue_dir, "_names.json")
+            if not os.path.exists(names_path):
+                raise FileNotFoundError(f"{names_path} not found -- run data_processing/extract_cue_features.py first.")
+            with open(names_path) as f:
+                file_names = json.load(f)
+            self.cue_names, self.cue_indices = resolve_cue_set(cue_set, file_names)
+            print(f"[{split.upper()}] cue features: set '{cue_set if isinstance(cue_set, str) else 'custom'}' "
+                  f"({len(self.cue_names)} of {len(file_names)} channels) from {cue_dir}")
 
         self.feature_map = {
             "x-cord": 0,
@@ -152,6 +178,7 @@ class SignSegmentationDataset(Dataset):
         # whatever's actually been extracted.
         self.detected_hamer_dim = None
         self.detected_dinov2_dim = None
+        self.detected_cue_dim = len(self.cue_indices) if use_cue_features else None
 
         # Tracks WHY a video got skipped, so an empty/near-empty dataset fails loudly
         # with an actionable reason instead of surfacing as a cryptic
@@ -167,6 +194,8 @@ class SignSegmentationDataset(Dataset):
             "missing_dinov2": 0,
             "dinov2_load_error": 0,
             "dinov2_frame_mismatch": 0,
+            "missing_cue": 0,
+            "cue_frame_mismatch": 0,
         }
 
         # reason -> [(video_id, detail_or_None), ...] -- WHICH videos were skipped, not just how many.
@@ -382,6 +411,22 @@ class SignSegmentationDataset(Dataset):
                         f"separate them into different directories before training."
                     )
 
+            # --- OPTIONAL: INTERPRETABLE CUES (from extract_cue_features.py) ---
+            cue_full = None
+            if self.use_cue_features:
+                cue_path = os.path.join(self.cue_dir, f"{vid}.npy")
+                if not os.path.exists(cue_path):
+                    skip_counts["missing_cue"] += 1
+                    skipped_videos.setdefault("missing_cue", []).append((vid, None))
+                    continue
+                cue_arr = np.load(cue_path)
+                if cue_arr.shape[0] != num_frames:
+                    skip_counts["cue_frame_mismatch"] += 1
+                    skipped_videos.setdefault("cue_frame_mismatch", []).append(
+                        (vid, f"cue frames={cue_arr.shape[0]}, label frames={num_frames}"))
+                    continue
+                cue_full = torch.from_numpy(np.ascontiguousarray(cue_arr[:, self.cue_indices])).to(torch.float16)
+
             # Compress to FP16 to keep RAM super low, and save it to the dictionary!
             final_tensor = final_tensor.to(torch.float16)
             
@@ -397,6 +442,8 @@ class SignSegmentationDataset(Dataset):
                 self.video_cache[vid]['hamer_features'] = hamer_full
             if self.use_dinov2_features:
                 self.video_cache[vid]['dinov2_features'] = dinov2_full
+            if self.use_cue_features:
+                self.video_cache[vid]['cue_features'] = cue_full
             
             # Map out the windows only for videos successfully loaded
             self.samples.append({'video_id': vid, 'start_idx': 0, 'end_idx': num_frames})
@@ -465,6 +512,9 @@ class SignSegmentationDataset(Dataset):
         if self.use_dinov2_features:
             window_dinov2 = cached_data['dinov2_features'][start_idx:end_idx].to(torch.float32)  # (T_win, 2*D)
             dinov2_tensor = window_dinov2.permute(1, 0)  # (2*D, T_win) -- channel-first
+
+        if self.use_cue_features:
+            cue_tensor = cached_data['cue_features'][start_idx:end_idx].to(torch.float32).permute(1, 0)  # (C, T_win)
         
         # 4. Handle Downsampling & Padding
         if self.temporal_downsample_factor > 1:
@@ -474,6 +524,8 @@ class SignSegmentationDataset(Dataset):
                 hamer_tensor = hamer_tensor[:, ::self.temporal_downsample_factor]
             if self.use_dinov2_features:
                 dinov2_tensor = dinov2_tensor[:, ::self.temporal_downsample_factor]
+            if self.use_cue_features:
+                cue_tensor = cue_tensor[:, ::self.temporal_downsample_factor]
             
         if not self.use_full_length:
             C, T, V = final_input_tensor.shape
@@ -495,6 +547,10 @@ class SignSegmentationDataset(Dataset):
                 if self.use_dinov2_features:
                     dinov2_pad = torch.zeros(dinov2_tensor.shape[0], pad_T, dtype=torch.float32)
                     dinov2_tensor = torch.cat([dinov2_tensor, dinov2_pad], dim=1)
+
+                if self.use_cue_features:
+                    cue_pad = torch.zeros(cue_tensor.shape[0], pad_T, dtype=torch.float32)
+                    cue_tensor = torch.cat([cue_tensor, cue_pad], dim=1)
                 
         start_scaled = start_idx // self.temporal_downsample_factor
         end_scaled = end_idx // self.temporal_downsample_factor
@@ -508,5 +564,7 @@ class SignSegmentationDataset(Dataset):
             extras.append(hamer_tensor)
         if self.use_dinov2_features:
             extras.append(dinov2_tensor)
+        if self.use_cue_features:
+            extras.append(cue_tensor)   # always LAST among the optional streams
 
         return (final_input_tensor, labels_tensor, *extras, vid, start_scaled, end_scaled)

@@ -479,7 +479,10 @@ def main():
             with open(os.path.join(out_dir, "occlusion_base.json"), "w") as f:
                 json.dump(base, f, indent=2)
 
-        if not args.no_gradient:
+        if not args.no_gradient and config.get("use_cue_features", False):
+            print("  Gradient attribution is not implemented for runs with the cue stream "
+                  "(occlusion results above are complete) -- skipped.")
+        elif not args.no_gradient:
             res = gradient_attribution(model, config, dataset, device, groups, args)
             if res is not None:
                 maps, n_targets = res

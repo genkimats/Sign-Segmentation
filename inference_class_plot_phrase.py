@@ -24,7 +24,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-from src.dataset import SignSegmentationDataset
+from src.dataset import SignSegmentationDataset, cue_dataset_kwargs
 from src.model_factory import build_model_kwargs
 from src.evaluation import predict_video_probs
 from src.metrics import (extract_segments, decode_threshold_2023, segment_iou,
@@ -33,8 +33,8 @@ from src.metrics import (extract_segments, decode_threshold_2023, segment_iou,
 # ==============================================================================
 # 🎛️ CONFIGURATION
 # ==============================================================================
-CHOSEN_MODEL = "multistream_bilstm"
-PREFIX = "60"
+CHOSEN_MODEL = "stgcn_bilstm"
+PREFIX = "10"
 TARGET_SPLIT = "val"            # "train", "val", "test" or "all"
 
 DISPLAY_WINDOW = 512            # frames shown per page (display only; inference always
@@ -93,6 +93,7 @@ def build_dataset(hp, split):
         hamer_dir=hp.get("hamer_dir", "processed_data/hamer_features"),
         use_dinov2_features=hp.get("use_dinov2_features", False),
         dinov2_dir=hp.get("dinov2_dir", "processed_data/dinov2_features"),
+        **cue_dataset_kwargs(hp),
     )
 
 

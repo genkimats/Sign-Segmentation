@@ -104,6 +104,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from src.face_subsets import SAVED_FACE_INDICES, LIPS_INDICES  # noqa: E402
+from src.cue_sets import FAMILIES, CUES, CUE_NAMES, CUE_INFO  # noqa: E402,F401
 from src.metrics import extract_segments, O_TAG  # noqa: E402
 
 OUT_ROOT = os.path.join("evaluation_phrase", "boundary_cues")
@@ -116,63 +117,9 @@ DEFAULT_DIRS = {
     "hamer": "processed_data/hamer_features",
 }
 
-FAMILIES = ["eyes", "brows", "mouth", "face", "head", "torso", "hands", "handshape", "hamer", "body"]
 FAMILY_COLORS = {"eyes": "#1f77b4", "brows": "#17becf", "mouth": "#e377c2", "face": "#9467bd",
                  "head": "#8c564b", "torso": "#7f7f7f", "hands": "#d62728", "handshape": "#ff7f0e",
                  "hamer": "#2ca02c", "body": "#bcbd22"}
-
-# (name, family, kind, description). kind: "z" = continuous, robust-z per video;
-# "rate" = 0/1 indicator, kept as a rate.
-CUES = [
-    ("EAR (eye openness)", "eyes", "z", "eye aspect ratio, mean of both eyes"),
-    ("blink", "eyes", "rate", "EAR below blink_ratio x video median"),
-    ("eye asymmetry", "eyes", "z", "|EAR left - EAR right|"),
-    ("brow height", "brows", "z", "upper brow edge above the eye centre (inter-ocular units)"),
-    ("inner brow height", "brows", "z", "inner brow ends above the inner eye corners"),
-    ("brow furrow (inner distance)", "brows", "z", "distance between the inner brow ends (small = furrowed)"),
-    ("brow vertical velocity", "brows", "z", "d(brow height)/dt, signed (+ = raising)"),
-    ("MAR (mouth aspect ratio)", "mouth", "z", "inner-lip opening / mouth width"),
-    ("mouth opening", "mouth", "z", "inner-lip distance 13-14"),
-    ("mouth width", "mouth", "z", "mouth corner distance 61-291"),
-    ("lower lip / jaw", "mouth", "z", "outer lower lip centre (17) below the eyes"),
-    ("mouth motion energy", "mouth", "z", "mean speed of all lip points (mouthing activity)"),
-    ("mouth opening velocity", "mouth", "z", "d(MAR)/dt, signed (+ = opening)"),
-    ("face deformation energy", "face", "z", "mean speed of all face points (face-local)"),
-    ("head height", "head", "z", "nose above the shoulder midpoint"),
-    ("head pitch (nod)", "head", "z", "nose above the ear midpoint / ear distance (- = chin down)"),
-    ("head yaw deviation", "head", "z", "|yaw - video median| (turning away from the usual direction)"),
-    ("head roll deviation", "head", "z", "|ear-line angle - video median|"),
-    ("head speed", "head", "z", "nose speed"),
-    ("head vertical velocity", "head", "z", "d(head height)/dt, signed (- = moving down)"),
-    ("head rotation speed", "head", "z", "speed of (yaw, pitch)"),
-    ("shoulder tilt", "torso", "z", "|shoulder-line angle - video median|"),
-    ("shoulder width change", "torso", "z", "shoulder width / video median (lean / turn)"),
-    ("dom wrist height", "hands", "z", "dominant pose wrist above the shoulder midpoint"),
-    ("nondom wrist height", "hands", "z", "non-dominant pose wrist height"),
-    ("dom wrist speed", "hands", "z", "dominant pose wrist speed"),
-    ("nondom wrist speed", "hands", "z", "non-dominant pose wrist speed"),
-    ("dom wrist acceleration", "hands", "z", "dominant wrist acceleration magnitude"),
-    ("dom hold", "hands", "rate", "dominant wrist speed in the video's lowest 20 %"),
-    ("hand distance", "hands", "z", "distance between the two pose wrists"),
-    ("dom hand-to-face", "hands", "z", "dominant wrist to nose distance"),
-    ("dom reach (signing space)", "hands", "z", "dominant wrist to shoulder midpoint distance"),
-    ("two-handedness", "hands", "z", "non-dominant share of the summed wrist speed"),
-    ("velocity symmetry (mirrored)", "hands", "z", "cosine of the wrist velocities, x mirrored"),
-    ("MP dom hand detected", "handshape", "rate", "MediaPipe found the dominant hand"),
-    ("MP nondom hand detected", "handshape", "rate", "MediaPipe found the non-dominant hand"),
-    ("dom hand openness", "handshape", "z", "fingertips to wrist / palm size"),
-    ("dom finger spread", "handshape", "z", "index tip to pinky tip / palm size"),
-    ("dom handshape change", "handshape", "z", "speed of the wrist-relative, palm-scaled hand shape"),
-    ("nondom handshape change", "handshape", "z", "same for the non-dominant hand"),
-    ("HaMeR dom detected", "hamer", "rate", "HaMeR found the dominant hand"),
-    ("HaMeR dom finger flexion", "hamer", "z", "mean rotation angle of the 15 finger joints"),
-    ("HaMeR dom articulation speed", "hamer", "z", "mean geodesic change of the 15 joint rotations / s"),
-    ("HaMeR dom wrist rotation speed", "hamer", "z", "geodesic change of global_orient / s"),
-    ("HaMeR nondom articulation speed", "hamer", "z", "same for the non-dominant hand"),
-    ("whole-body motion energy", "body", "z", "mean speed of all body + hand points"),
-]
-CUE_NAMES = [c[0] for c in CUES]
-CUE_INFO = {c[0]: {"family": c[1], "kind": c[2], "desc": c[3]} for c in CUES}
 
 START_TYPES = ["start_continuous", "start_short", "start_long"]
 END_TYPES = ["end_continuous", "end_short", "end_long"]
@@ -263,9 +210,11 @@ def robust_z(x):
     if ok.sum() < 10:
         return np.full_like(x, np.nan), None
     med = np.median(x[ok])
-    scale = 1.4826 * np.median(np.abs(x[ok] - med))
-    if not np.isfinite(scale) or scale < 1e-9:
-        scale = np.std(x[ok])
+    sd = np.std(x[ok])
+    # Robust scale with a floor: for speed-like cues that are ~0 in most frames (face /
+    # mouth motion at rest) the MAD collapses towards 0 and z explodes (values of 1e4).
+    # The floor keeps z interpretable without giving up robustness for normal cues.
+    scale = max(1.4826 * np.median(np.abs(x[ok] - med)), 0.1 * sd)
     if not np.isfinite(scale) or scale < 1e-9:
         return np.full_like(x, np.nan), None  # no variation in this video
     return (x - med) / scale, (med, scale)
@@ -343,7 +292,17 @@ def face_cues(face, detected, fps, k):
     out["face deformation energy"] = smooth(norm(deriv(f, fps)).mean(axis=1), k)
 
     out = {n: masked(v, valid) for n, v in out.items()}
-    out["blink"] = masked((ear_m < BLINK_RATIO * med_ear).astype(np.float64), valid)
+    # blink = a SHORT closure: EAR below blink_ratio x median for 2 frames .. 0.4 s.
+    # Longer low-EAR stretches are looking down / squinting, not blinks.
+    low = np.nan_to_num(ear_m, nan=np.inf) < BLINK_RATIO * med_ear
+    blink = np.zeros(T)
+    max_len = max(2, int(round(0.4 * fps)))
+    d = np.diff(np.concatenate([[0], low.astype(np.int8), [0]]))
+    for a, b in zip(np.flatnonzero(d == 1), np.flatnonzero(d == -1)):
+        if 2 <= b - a <= max_len:
+            blink[a:b] = 1.0
+    out["blink"] = masked(blink, valid)
+    out["eyes narrowed (long)"] = masked((low & (blink == 0)).astype(np.float64), valid)
     return out
 
 
@@ -662,21 +621,38 @@ def roc_auc(y, s):
     return float(placements(pos, neg)[0].mean())
 
 
-def fit_logreg(X, y, w, lam=1.0, iters=30):
-    """L2-regularized logistic regression by Newton / IRLS. Returns (coef, intercept)."""
+def fit_logreg(X, y, w, lam=1.0, iters=50):
+    """L2-regularized logistic regression by DAMPED Newton (step halving until the
+    penalized loss decreases), so it cannot diverge on correlated features.
+    Returns (coef, intercept)."""
     n, p = X.shape
     Xa = np.hstack([X, np.ones((n, 1))])
     beta = np.zeros(p + 1)
     reg = np.full(p + 1, lam)
     reg[-1] = 0.0
+
+    def loss(b):
+        z = Xa @ b
+        return float(np.sum(w * (np.logaddexp(0.0, z) - y * z)) + 0.5 * np.sum(reg * b * b))
+
+    cur = loss(beta)
     for _ in range(iters):
         z = np.clip(Xa @ beta, -30, 30)
         mu = 1.0 / (1.0 + np.exp(-z))
         g = Xa.T @ (w * (mu - y)) + reg * beta
-        H = (Xa * (w * mu * (1 - mu))[:, None]).T @ Xa + np.diag(reg + 1e-8)
+        H = (Xa * (w * mu * (1 - mu))[:, None]).T @ Xa + np.diag(reg + 1e-6)
         step = np.linalg.solve(H, g)
-        beta -= step
-        if np.max(np.abs(step)) < 1e-6:
+        t = 1.0
+        while t > 1e-4:
+            cand = beta - t * step
+            new = loss(cand)
+            if new <= cur:
+                break
+            t *= 0.5
+        else:
+            break
+        beta, gain, cur = cand, cur - new, new
+        if gain < 1e-7 * max(abs(cur), 1.0):
             break
     return beta[:-1], beta[-1]
 
@@ -692,9 +668,16 @@ def cv_auc(X, y, groups, folds, seed):
         tr, te = fid != f, fid == f
         if te.sum() == 0 or len(np.unique(y[tr])) < 2:
             continue
-        mu, sd = X[tr].mean(0), X[tr].std(0)
+        # robust standardization on the training fold, then clipping: heavy-tailed cues
+        # (speeds) must not produce extreme scores that wreck the pooled AUC
+        med = np.median(X[tr], axis=0)
+        q75, q25 = np.percentile(X[tr], [75, 25], axis=0)
+        sd = (q75 - q25) / 1.349
+        sd_fallback = X[tr].std(0)
+        sd = np.where(sd < 1e-9, sd_fallback, sd)
         sd[sd < 1e-9] = 1.0
-        Xtr, Xte = (X[tr] - mu) / sd, (X[te] - mu) / sd
+        Xtr = np.clip((X[tr] - med) / sd, -5, 5)
+        Xte = np.clip((X[te] - med) / sd, -5, 5)
         pos = y[tr].mean()
         w = np.where(y[tr] == 1, 0.5 / max(pos, 1e-9), 0.5 / max(1 - pos, 1e-9))
         coef, b0 = fit_logreg(Xtr, y[tr].astype(np.float64), w / w.mean(), lam=PROBE_L2)
@@ -707,7 +690,7 @@ def cv_auc(X, y, groups, folds, seed):
 # Main
 # ==============================================================================
 BLINK_RATIO = 0.75
-PROBE_L2 = 1.0
+PROBE_L2 = 10.0
 
 
 def parse_args():
@@ -1127,11 +1110,17 @@ def run_probe(probe, types, vidx, cue_names, cue_videos, group_mask, args, rng):
         rows.append({"task": name, "features": "ALL", "mode": "all", "auc": round(all_auc, 4), "n_cues": len(avail),
                      "n_first": len(ma), "n_ref": len(mb)})
         line = [f"{name}:  ALL {all_auc:.3f}"]
+        alone = {fam: cv_auc(feats([i for i in avail if CUE_INFO[cue_names[i]]["family"] == fam]),
+                             y, g, args.probe_folds, args.seed) for fam in fams}
         for fam in fams:
             cidx = [i for i in avail if CUE_INFO[cue_names[i]]["family"] == fam]
             rest = [i for i in avail if CUE_INFO[cue_names[i]]["family"] != fam]
-            a_alone = cv_auc(feats(cidx), y, g, args.probe_folds, args.seed)
+            a_alone = alone[fam]
             a_drop = cv_auc(feats(rest), y, g, args.probe_folds, args.seed) if rest else np.nan
+            best_other = max([v for f2, v in alone.items() if f2 != fam] or [0.5])
+            if np.isfinite(a_drop) and a_drop < best_other - 0.02:
+                print(f"  WARNING ({name}): ALL without {fam} = {a_drop:.3f} is below a single other family "
+                      f"({best_other:.3f}) -- the fit is unreliable; treat this 'unique' value with care.")
             rows.append({"task": name, "features": fam, "mode": "alone", "auc": round(a_alone, 4),
                          "n_cues": len(cidx), "n_first": len(ma), "n_ref": len(mb)})
             rows.append({"task": name, "features": fam, "mode": "all_without", "auc": round(a_drop, 4),

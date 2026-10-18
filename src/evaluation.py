@@ -76,6 +76,7 @@ def predict_video_probs(model, config, cached, device, batch_size=16):
     k = max(1, int(config.get("temporal_downsample_factor", 1)))
     use_hamer = config.get("use_hamer_features", False)
     use_dinov2 = config.get("use_dinov2_features", False)
+    use_cues = config.get("use_cue_features", False)
 
     features = cached["features"]
     num_frames = features.shape[0]
@@ -88,7 +89,7 @@ def predict_video_probs(model, config, cached, device, batch_size=16):
     for b0 in range(0, len(windows), batch_size):
         batch_windows = windows[b0:b0 + batch_size]
         feats = torch.stack([_prepare_window(features, s, e, k, target_T, True) for s, e in batch_windows])
-        hamer = dinov2 = None
+        hamer = dinov2 = cues = None
         if use_hamer:
             hamer = torch.stack([_prepare_window(cached["hamer_features"], s, e, k, target_T, False)
                                  for s, e in batch_windows])
@@ -97,9 +98,13 @@ def predict_video_probs(model, config, cached, device, batch_size=16):
             dinov2 = torch.stack([_prepare_window(cached["dinov2_features"], s, e, k, target_T, False)
                                   for s, e in batch_windows])
             dinov2 = torch.nan_to_num(dinov2.to(device), nan=0.0, posinf=0.0, neginf=0.0)
+        if use_cues:
+            cues = torch.stack([_prepare_window(cached["cue_features"], s, e, k, target_T, False)
+                                for s, e in batch_windows])
+            cues = torch.nan_to_num(cues.to(device), nan=0.0, posinf=0.0, neginf=0.0)
         feats = torch.nan_to_num(feats.to(device), nan=0.0, posinf=0.0, neginf=0.0)
 
-        logits = call_model(model, config, feats, hamer, dinov2)        # (B, 3, T_model)
+        logits = call_model(model, config, feats, hamer, dinov2, cues)        # (B, 3, T_model)
         probs = F.softmax(logits.float(), dim=1).cpu().numpy()
 
         for (s, e), p in zip(batch_windows, probs):

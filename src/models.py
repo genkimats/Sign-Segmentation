@@ -2246,10 +2246,16 @@ class RelPosTransformerEncoder(nn.Module):
 # ==============================================================================
 class MultiStreamSegmenter(nn.Module):
     """
-    Up to three input streams, each switchable on/off:
+    Up to four input streams, each switchable on/off:
       body_hands : ST-GCN on the 65 body + hand vertices        -> own branch
       face       : ST-GCN on the face vertices (face-only graph) -> own branch
       hamer      : MLP on the 288-dim HaMeR vector               -> own branch
+      cues       : interpretable per-frame cues (src/cue_sets.py, e.g. eye openness, brow
+                   height, head nod, wrist height, finger flexion) -- NOT a skeleton, so no
+                   ST-GCN: projection branch only, optionally after a depthwise temporal
+                   convolution (cue_temporal_kernel > 1, residual) that gives each cue the
+                   same short temporal context the ST-GCN's temporal kernel (9) has.
+                   With every other stream off this is the "cues only" model.
     Each branch is Linear -> LayerNorm -> GELU -> Dropout, so every stream enters the
     fusion normalised and at a size you choose.
 
@@ -2270,7 +2276,7 @@ class MultiStreamSegmenter(nn.Module):
     For check_stream_balance.py the model can report each stream's contribution to the
     fused representation (set_capture) and replace one stream by a constant (set_ablation).
     """
-    STREAM_ORDER = ("body_hands", "face", "hamer")
+    STREAM_ORDER = ("body_hands", "face", "hamer", "cues")
 
     def __init__(self, in_channels, num_vertices, num_classes=3, d_model=256, n_layers=4,
                  dropout=0.2, stgcn_channels=64,
@@ -2278,17 +2284,19 @@ class MultiStreamSegmenter(nn.Module):
                  fusion="concat", body_hands_proj_dim=256, face_proj_dim=256, hamer_proj_dim=256,
                  hamer_dim=None, encoder="bilstm", nhead=8, dim_feedforward=None,
                  pos_encoding="sinusoidal", transformer_norm="post", rope_base=10000.0,
-                 face_channels=None, attn_layers=1):
+                 face_channels=None, attn_layers=1,
+                 use_stream_cues=False, cue_dim=None, cue_proj_dim=128, cue_temporal_kernel=1):
         super().__init__()
         if fusion not in ("concat", "gated_sum"):
             raise ValueError(f"fusion must be 'concat' or 'gated_sum', got '{fusion}'.")
         if encoder not in ("bilstm", "transformer", "bilstm_attn"):
             raise ValueError(f"encoder must be 'bilstm', 'transformer' or 'bilstm_attn', got '{encoder}'.")
         self.streams = [name for name, on in zip(self.STREAM_ORDER,
-                                                 (use_stream_body_hands, use_stream_face, use_stream_hamer)) if on]
+                                                 (use_stream_body_hands, use_stream_face, use_stream_hamer,
+                                                  use_stream_cues)) if on]
         if not self.streams:
             raise ValueError("At least one stream must be on (use_stream_body_hands / "
-                             "use_stream_face / use_stream_hamer).")
+                             "use_stream_face / use_stream_hamer / use_stream_cues).")
         self.fusion = fusion
         self.encoder_type = encoder
         self.d_model = d_model
@@ -2298,6 +2306,7 @@ class MultiStreamSegmenter(nn.Module):
 
         out_dims = {
             "body_hands": body_hands_proj_dim, "face": face_proj_dim, "hamer": hamer_proj_dim,
+            "cues": cue_proj_dim,
         } if fusion == "concat" else {name: d_model for name in self.STREAM_ORDER}
 
         self.branches = nn.ModuleDict()
@@ -2333,6 +2342,18 @@ class MultiStreamSegmenter(nn.Module):
                 raise ValueError("hamer stream is on but hamer_dim is None -- set use_hamer_features=True.")
             self.hamer_dim = hamer_dim
             self.branches["hamer"] = branch(hamer_dim, out_dims["hamer"])
+
+        if "cues" in self.streams:
+            if not cue_dim:
+                raise ValueError("cues stream is on but cue_dim is not set -- set use_cue_features=True.")
+            self.cue_dim = cue_dim
+            self.cue_temporal_kernel = int(cue_temporal_kernel)
+            if self.cue_temporal_kernel > 1:
+                k = self.cue_temporal_kernel | 1
+                self.cue_temporal = nn.Conv1d(cue_dim, cue_dim, k, padding=k // 2, groups=cue_dim)
+                nn.init.zeros_(self.cue_temporal.weight)   # starts as identity (residual)
+                nn.init.zeros_(self.cue_temporal.bias)
+            self.branches["cues"] = branch(cue_dim, out_dims["cues"])
 
         if fusion == "concat":
             self.stream_dims = {name: out_dims[name] for name in self.streams}
@@ -2405,7 +2426,7 @@ class MultiStreamSegmenter(nn.Module):
         h = stgcn(x)                                   # (B, stgcn_channels, T, V)
         return h.permute(0, 2, 3, 1).reshape(B, T, -1)  # (B, T, V * stgcn_channels)
 
-    def forward(self, x, hamer=None, dinov2=None):
+    def forward(self, x, hamer=None, dinov2=None, cues=None):
         B, C, T, V = x.shape
         z = {}
         if "body_hands" in self.streams:
@@ -2419,6 +2440,12 @@ class MultiStreamSegmenter(nn.Module):
             if hamer is None:
                 raise ValueError("hamer stream is on but forward() got no `hamer` tensor.")
             z["hamer"] = self.branches["hamer"](hamer.permute(0, 2, 1))   # (B, T, dim)
+        if "cues" in self.streams:
+            if cues is None:
+                raise ValueError("cues stream is on but forward() got no `cues` tensor.")
+            if self.cue_temporal_kernel > 1:
+                cues = cues + self.cue_temporal(cues)                     # (B, C, T)
+            z["cues"] = self.branches["cues"](cues.permute(0, 2, 1))      # (B, T, cue_proj_dim)
 
         if self._ablation is not None:
             name, value = self._ablation

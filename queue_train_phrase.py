@@ -26,7 +26,7 @@ MAMBA_DEFAULTS = {
     "temporal_downsample_factor": 1, 
     "loss_function": "weighted_ce",  
     "ctc_weight": 0.5,             
-    "class_weights": [1.0, 1.1, 12.4], 
+    "class_weights": [1.0, 1.1, 8.5], 
     "tmse_weight": 0.15,            
     "tmse_threshold": 0.1,          
     "base_features": ["x-cord", "y-cord", "z-cord"], 
@@ -76,6 +76,21 @@ MAMBA_DEFAULTS = {
     # d_model above = the size going into the encoder (BiLSTM hidden / Transformer width).
     "use_dinov2_features": False,
     "dinov2_dir": "processed_data/dinov2_features",
+    # --- Interpretable cue stream (multistream models) ---
+    # Per-frame cues from data_processing/extract_cue_features.py (eye openness, brows,
+    # mouth, head nod/height, wrist height/speed, holds, finger flexion ...). Not a
+    # skeleton -> no ST-GCN, only a projection branch. use_cue_features is set by the
+    # queue from use_stream_cues.
+    "use_stream_cues": False,
+    "cue_dir": "processed_data/cue_features",
+    # "selected" (36, cues with boundary signal) | "all" (48) | "face" (12, facial only) |
+    # "nonmanual" (19, face + head) | "manual" (17, hands / handshape / HaMeR / body)
+    # or an explicit list of cue names (src/cue_sets.py)
+    "cue_set": "selected",
+    "cue_proj_dim": 128,              # concat only (gated_sum uses d_model)
+    # 1 = per-frame projection only; 9 = + depthwise temporal conv over each cue (same
+    # temporal kernel as the ST-GCN), residual, initialised as identity
+    "cue_temporal_kernel": 1,
     "d_model": 256,
     "n_layers": 4,     
     "mamba_d_state": 16,
@@ -283,134 +298,45 @@ _MS_BODY_HAMER = {
     "phrase_labels_dir": "processed_data/BIO_tags_phrase_v2",
 }
 
+# ------------------------------------------------------------------------------
+# CUE-STREAM STUDY: do the interpretable cues from boundary_cue_analysis.py help?
+# Run data_processing/extract_cue_features.py once before training.
+# Same setup as the stream study (multistream_bilstm, window 512, v2 labels, tolerance 1,
+# class weights [1.0, 1.1, 12.4]); the references are Body+HaMeR and
+# Body+HaMeR+Face(compact) -- re-queue them (REFERENCES below) only if your earlier runs
+# used different settings.
+# ------------------------------------------------------------------------------
+_MS_CUE_STUDY = {**_MS_BODY_HAMER, "basename": "multistream_bilstm", "window_size": 512}
+_CUES_ONLY = {**_MS_CUE_STUDY, "use_stream_body_hands": False, "use_stream_hamer": False,
+              "use_stream_face": False, "use_stream_cues": True}
+
 EXPERIMENTS_TO_RUN = [
-    # {
-    #     "basename": "multistream_bilstm", 
-    #     "d_model": 256,
-    #     "use_stream_body_hands": True,
-    #     "use_stream_face": False,
-    #     "use_stream_hamer": False,
-    #     "face_subset": "compact",
-    #     "fusion": "concat",              # or "gated_sum"
-    #     "class_weights": [1.0, 1.1, 8.5],
-    #     "description": "New: MS: Body"
-    # },
-    # {
-    #     "basename": "multistream_bilstm", 
-    #     "d_model": 256,
-    #     "use_stream_body_hands": False,
-    #     "use_stream_face": False,
-    #     "use_stream_hamer": True,
-    #     "face_subset": "compact",
-    #     "fusion": "concat",              # or "gated_sum"
-    #     "class_weights": [1.0, 1.1, 8.5],
-    #     "description": "New: MS: HaMeR"
-    # },
-    # {
-    #     "basename": "multistream_bilstm", 
-    #     "d_model": 256,
-    #     "use_stream_body_hands": False,
-    #     "use_stream_face": True,
-    #     "use_stream_hamer": False,
-    #     "face_subset": "compact",
-    #     "fusion": "concat",              # or "gated_sum"
-    #     "class_weights": [1.0, 1.1, 8.5],
-    #     "description": "New: MS: Face"
-    # },
-    # {
-    #     "basename": "multistream_bilstm", 
-    #     "d_model": 256,
-    #     "use_stream_body_hands": True,
-    #     "use_stream_face": False,
-    #     "use_stream_hamer": True,
-    #     "face_subset": "compact",
-    #     "fusion": "concat",              # or "gated_sum"
-    #     "class_weights": [1.0, 1.1, 8.5],
-    #     "description": "New 2: MS: Body + HaMeR"
-    # },
-    # {
-    #     "basename": "multistream_bilstm", 
-    #     "d_model": 256,
-    #     "use_stream_body_hands": True,
-    #     "use_stream_face": True,
-    #     "use_stream_hamer": False,
-    #     "face_subset": "compact",
-    #     "fusion": "concat",              # or "gated_sum"
-    #     "class_weights": [1.0, 1.1, 8.5],
-    #     "description": "New: MS: Body + Face"
-    # },
-    {
-        "basename": "multistream_bilstm", 
-        "d_model": 256,
-        "use_stream_body_hands": False,
-        "use_stream_face": True,
-        "use_stream_hamer": True,
-        "face_subset": "compact",
-        "fusion": "concat",              # or "gated_sum"
-        "class_weights": [1.0, 1.1, 8.5],
-        "description": "MS: Face + HaMeR"
-    },
-    {
-        "basename": "multistream_bilstm", 
-        "d_model": 256,
-        "use_stream_body_hands": True,
-        "use_stream_face": True,
-        "use_stream_hamer": True,
-        "face_subset": "full",
-        "fusion": "concat",              # or "gated_sum"
-        "class_weights": [1.0, 1.1, 8.5],
-        "description": "MS: Body + Face + HaMeR, full face"
-    },
-    {
-        "basename": "multistream_bilstm", 
-        "d_model": 256,
-        "use_stream_body_hands": True,
-        "use_stream_face": True,
-        "use_stream_hamer": True,
-        "face_subset": "compact",
-        "fusion": "concat",              # or "gated_sum"
-        "class_weights": [1.0, 1.1, 8.5],
-        "description": "New 2: MS: Body + Face + HaMeR, compact face"
-    },
-    {
-        "basename": "multistream_bilstm", 
-        "d_model": 256,
-        "use_stream_body_hands": True,
-        "use_stream_face": True,
-        "use_stream_hamer": True,
-        "face_subset": "eyes_brows",
-        "fusion": "concat",              # or "gated_sum"
-        "class_weights": [1.0, 1.1, 8.5],
-        "description": "MS: Body + Face + HaMeR, eyes and brows"
-    },
-    {
-        "basename": "multistream_bilstm", 
-        "d_model": 256,
-        "use_stream_body_hands": True,
-        "use_stream_face": True,
-        "use_stream_hamer": True,
-        "face_subset": "minimal",
-        "fusion": "concat",              # or "gated_sum"
-        "class_weights": [1.0, 1.1, 8.5],
-        "description": "MS: Body + Face + HaMeR, minimal face"
-    },
+    # Q1: how far do ~36 interpretable numbers per frame get on their own (vs Body .676 test)?
+    {**_CUES_ONLY, "cue_set": "selected",
+     "description": "Cues: cues only (selected 36), projection only"},
+    {**_CUES_ONLY, "cue_set": "selected", "cue_temporal_kernel": 9,
+     "description": "Cues: cues only (selected 36), + temporal conv k=9"},
+    {**_CUES_ONLY, "cue_set": "all",
+     "description": "Cues: cues only (all 48), projection only"},
+    # Q2: can explicit facial cues replace the raw face ST-GCN stream?
+    {**_MS_CUE_STUDY, "use_stream_cues": True, "cue_set": "face",
+     "description": "Cues: Body + HaMeR + face cues (12) instead of the face stream"},
+    {**_MS_CUE_STUDY, "use_stream_cues": True, "cue_set": "nonmanual",
+     "description": "Cues: Body + HaMeR + non-manual cues (face + head, 19)"},
+    # Q3: do the cues add anything on top of the best raw model?
+    {**_MS_CUE_STUDY, "use_stream_cues": True, "cue_set": "selected",
+     "description": "Cues: Body + HaMeR + selected cues (36)"},
+    {**_MS_CUE_STUDY, "use_stream_face": True, "face_subset": "compact",
+     "use_stream_cues": True, "cue_set": "selected",
+     "description": "Cues: Body + HaMeR + Face(compact) + selected cues (4 streams)"},
 ]
-# for _window in (128, 512):
-#     for _pe in ("rope", "alibi"):
-#         EXPERIMENTS_TO_RUN.append({
-#             **_MS_BODY_HAMER, "basename": "multistream_transformer", "window_size": _window,
-#             "pos_encoding": _pe, "transformer_norm": "pre",
-#             "description": f"PE study: Body+HaMeR, Transformer pre-norm, pos={_pe}, window {_window}",
-#         })
-#     EXPERIMENTS_TO_RUN.append({
-#         **_MS_BODY_HAMER, "basename": "multistream_transformer", "window_size": _window,
-#         "pos_encoding": "sinusoidal", "transformer_norm": "post",
-#         "description": f"PE study: Body+HaMeR, Transformer post-norm (original), pos=sinusoidal, window {_window}",
-#     })
-#     EXPERIMENTS_TO_RUN.append({
-#         **_MS_BODY_HAMER, "basename": "multistream_bilstm", "window_size": _window,
-#         "description": f"PE study: Body+HaMeR, BiLSTM reference, window {_window}",
-#     })
+
+REFERENCES = [
+    {**_MS_CUE_STUDY, "description": "Cues ref: Body + HaMeR"},
+    {**_MS_CUE_STUDY, "use_stream_face": True, "face_subset": "compact",
+     "description": "Cues ref: Body + HaMeR + Face(compact)"},
+]
+# EXPERIMENTS_TO_RUN += REFERENCES   # uncomment if the reference runs need redoing
 
 if CHOSEN_TYPE == 'mamba':
     defaults = MAMBA_DEFAULTS
@@ -527,9 +453,11 @@ if __name__ == "__main__":
         if m_name in ("multistream_bilstm", "multistream_transformer", "multistream_bilstm_attn"):
             full_config["use_face_keypoints"] = bool(full_config.get("use_stream_face", False))
             full_config["use_hamer_features"] = bool(full_config.get("use_stream_hamer", False))
+            full_config["use_cue_features"] = bool(full_config.get("use_stream_cues", False))
             if not any(full_config.get(k, d) for k, d in (("use_stream_body_hands", True),
                                                           ("use_stream_face", False),
-                                                          ("use_stream_hamer", False))):
+                                                          ("use_stream_hamer", False),
+                                                          ("use_stream_cues", False))):
                 raise ValueError(f"{full_config.get('description', m_name)}: all streams are off.")
 
         # 2. Calculate Input Channels & Num Vertices dynamically

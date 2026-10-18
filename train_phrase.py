@@ -17,7 +17,7 @@ import seaborn as sns
 from sklearn.metrics import confusion_matrix
 
 # Import our custom modules
-from src.dataset import SignSegmentationDataset
+from src.dataset import SignSegmentationDataset, cue_dataset_kwargs
 from src.model_factory import MODEL_REGISTRY, build_model_kwargs
 # Full-video validation: same windows as training, probabilities stitched per video,
 # metrics against HARD gold labels (never the tolerance-smoothed ones).
@@ -155,6 +155,7 @@ def train_model(config, selection_metric="combined"):
     USE_HAMER_FEATURES = config.get("use_hamer_features", False)
     HAMER_DIR = config.get("hamer_dir", "processed_data/hamer_features")
     USE_DINOV2_FEATURES = config.get("use_dinov2_features", False)
+    USE_CUE_FEATURES = config.get("use_cue_features", False)
     DINOV2_DIR = config.get("dinov2_dir", "processed_data/dinov2_features")
     D_MODEL = config["d_model"]
     N_LAYERS = config["n_layers"]
@@ -198,7 +199,8 @@ def train_model(config, selection_metric="combined"):
         use_hamer_features=USE_HAMER_FEATURES,
         hamer_dir=HAMER_DIR,
         use_dinov2_features=USE_DINOV2_FEATURES,
-        dinov2_dir=DINOV2_DIR
+        dinov2_dir=DINOV2_DIR,
+        **cue_dataset_kwargs(config),
     )
     
     val_dataset = SignSegmentationDataset(
@@ -221,7 +223,8 @@ def train_model(config, selection_metric="combined"):
         use_hamer_features=USE_HAMER_FEATURES,
         hamer_dir=HAMER_DIR,
         use_dinov2_features=USE_DINOV2_FEATURES,
-        dinov2_dir=DINOV2_DIR
+        dinov2_dir=DINOV2_DIR,
+        **cue_dataset_kwargs(config),
     )
     
     loader_batch_size = 1 if USE_FULL_LENGTH else BATCH_SIZE
@@ -240,6 +243,7 @@ def train_model(config, selection_metric="combined"):
         config,
         detected_hamer_dim=train_dataset.detected_hamer_dim,
         detected_dinov2_dim=train_dataset.detected_dinov2_dim,
+        detected_cue_dim=train_dataset.detected_cue_dim,
     )
     MAX_REDOS = 5
     redo_count = 0
@@ -254,12 +258,14 @@ def train_model(config, selection_metric="combined"):
 
         # Centralizes the "pass hamer/dinov2 or don't" branching in one place instead
         # of repeating it at every model(...) call site below.
-        def call_model(feats, ham, din):
+        def call_model(feats, ham, din, cue=None):
             kwargs = {}
             if USE_HAMER_FEATURES:
                 kwargs["hamer"] = ham
             if USE_DINOV2_FEATURES:
                 kwargs["dinov2"] = din
+            if USE_CUE_FEATURES:
+                kwargs["cues"] = cue
             return model(feats, **kwargs)
         
         if LOSS_FUNCTION == "bcl":
@@ -335,6 +341,9 @@ def train_model(config, selection_metric="combined"):
                 extras = list(batch[2:-3])
                 hamer = extras.pop(0) if USE_HAMER_FEATURES else None
                 dinov2 = extras.pop(0) if USE_DINOV2_FEATURES else None
+                cues = extras.pop(0) if USE_CUE_FEATURES else None
+                if USE_CUE_FEATURES:
+                    cues = torch.nan_to_num(cues.to(device), nan=0.0, posinf=0.0, neginf=0.0)
 
                 if USE_HAMER_FEATURES:
                     hamer = hamer.to(device)
@@ -350,15 +359,15 @@ def train_model(config, selection_metric="combined"):
                 optimizer.zero_grad()
                 
                 if LOSS_FUNCTION == "bcl":
-                    logits, embeddings = call_model(features, hamer, dinov2)
+                    logits, embeddings = call_model(features, hamer, dinov2, cues)
                     loss, _, _ = criterion(logits, embeddings, labels)
                 elif LOSS_FUNCTION == "unified_ctc":
-                    logits, _ = call_model(features, hamer, dinov2)
+                    logits, _ = call_model(features, hamer, dinov2, cues)
                     hard_labels = torch.argmax(labels, dim=1)
                     loss, _, _ = criterion(logits, hard_labels)
                 else:
                     # Depending on the model, it might return (logits, embeddings) or just logits
-                    output = call_model(features, hamer, dinov2)
+                    output = call_model(features, hamer, dinov2, cues)
                     logits = output[0] if isinstance(output, tuple) else output
                     hard_labels = torch.argmax(labels, dim=1)
                     loss = criterion(logits, hard_labels)
@@ -407,6 +416,9 @@ def train_model(config, selection_metric="combined"):
                     extras = list(batch[2:-3])
                     hamer = extras.pop(0) if USE_HAMER_FEATURES else None
                     dinov2 = extras.pop(0) if USE_DINOV2_FEATURES else None
+                    cues = extras.pop(0) if USE_CUE_FEATURES else None
+                    if USE_CUE_FEATURES:
+                        cues = torch.nan_to_num(cues.to(device), nan=0.0, posinf=0.0, neginf=0.0)
 
                     if USE_HAMER_FEATURES:
                         hamer = hamer.to(device)
@@ -420,14 +432,14 @@ def train_model(config, selection_metric="combined"):
                     features = torch.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
                     
                     if LOSS_FUNCTION == "bcl":
-                        logits, embeddings = call_model(features, hamer, dinov2)
+                        logits, embeddings = call_model(features, hamer, dinov2, cues)
                         loss, _, _ = criterion(logits, embeddings, labels)
                     elif LOSS_FUNCTION == "unified_ctc":
-                        logits, _ = call_model(features, hamer, dinov2)
+                        logits, _ = call_model(features, hamer, dinov2, cues)
                         hard_labels = torch.argmax(labels, dim=1)
                         loss, _, _ = criterion(logits, hard_labels)
                     else:
-                        output = call_model(features, hamer, dinov2)
+                        output = call_model(features, hamer, dinov2, cues)
                         logits = output[0] if isinstance(output, tuple) else output
                         hard_labels = torch.argmax(labels, dim=1)
                         loss = criterion(logits, hard_labels)
