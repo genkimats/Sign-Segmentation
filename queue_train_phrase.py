@@ -311,24 +311,24 @@ _CUES_ONLY = {**_MS_CUE_STUDY, "use_stream_body_hands": False, "use_stream_hamer
               "use_stream_face": False, "use_stream_cues": True}
 
 EXPERIMENTS_TO_RUN = [
-    # Q1: how far do ~36 interpretable numbers per frame get on their own (vs Body .676 test)?
-    {**_CUES_ONLY, "cue_set": "selected",
-     "description": "Cues: cues only (selected 36), projection only"},
-    {**_CUES_ONLY, "cue_set": "selected", "cue_temporal_kernel": 9,
-     "description": "Cues: cues only (selected 36), + temporal conv k=9"},
-    {**_CUES_ONLY, "cue_set": "all",
-     "description": "Cues: cues only (all 48), projection only"},
-    # # Q2: can explicit facial cues replace the raw face ST-GCN stream?
-    # {**_MS_CUE_STUDY, "use_stream_cues": True, "cue_set": "face",
-    #  "description": "Cues: Body + HaMeR + face cues (12) instead of the face stream"},
-    # {**_MS_CUE_STUDY, "use_stream_cues": True, "cue_set": "nonmanual",
-    #  "description": "Cues: Body + HaMeR + non-manual cues (face + head, 19)"},
-    # # Q3: do the cues add anything on top of the best raw model?
-    # {**_MS_CUE_STUDY, "use_stream_cues": True, "cue_set": "selected",
-    #  "description": "Cues: Body + HaMeR + selected cues (36)"},
-    # {**_MS_CUE_STUDY, "use_stream_face": True, "face_subset": "compact",
-    #  "use_stream_cues": True, "cue_set": "selected",
-    #  "description": "Cues: Body + HaMeR + Face(compact) + selected cues (4 streams)"},
+    # # Q1: how far do ~36 interpretable numbers per frame get on their own (vs Body .676 test)?
+    # {**_CUES_ONLY, "cue_set": "selected",
+    #  "description": "Cues: cues only (selected 36), projection only"},
+    # {**_CUES_ONLY, "cue_set": "selected", "cue_temporal_kernel": 9,
+    #  "description": "Cues: cues only (selected 36), + temporal conv k=9"},
+    # {**_CUES_ONLY, "cue_set": "all",
+    #  "description": "Cues: cues only (all 48), projection only"},
+    # Q2: can explicit facial cues replace the raw face ST-GCN stream?
+    {**_MS_CUE_STUDY, "use_stream_cues": True, "cue_set": "face",
+     "description": "Cues: Body + HaMeR + face cues (12) instead of the face stream"},
+    {**_MS_CUE_STUDY, "use_stream_cues": True, "cue_set": "nonmanual",
+     "description": "Cues: Body + HaMeR + non-manual cues (face + head, 19)"},
+    # Q3: do the cues add anything on top of the best raw model?
+    {**_MS_CUE_STUDY, "use_stream_cues": True, "cue_set": "selected",
+     "description": "Cues: Body + HaMeR + selected cues (36)"},
+    {**_MS_CUE_STUDY, "use_stream_face": True, "face_subset": "compact",
+     "use_stream_cues": True, "cue_set": "selected",
+     "description": "Cues: Body + HaMeR + Face(compact) + selected cues (4 streams)"},
 ]
 
 REFERENCES = [
