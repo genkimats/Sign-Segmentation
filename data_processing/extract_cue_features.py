@@ -63,7 +63,7 @@ def compute_one(vid):
             kin = kin["mediapipe"]
         base = bca.to_np(kin["base"]).astype(np.float64)
     except Exception as e:  # noqa: BLE001
-        return vid, f"body_load_error {type(e).__name__}", None
+        return vid, f"body_load_error {type(e).__name__}: {str(e)[:200]}", None
     if base.shape[0] != T:
         return vid, f"body_length_mismatch {base.shape[0]}!={T}", None
     c, _ = bca.body_hand_cues(base, a.fps, a.smooth)
@@ -149,15 +149,29 @@ def main():
         json.dump(CUE_FILE_ORDER, f, indent=1)
     print(f"{len(vids)} videos (all splits) -> {args.out_dir}  ({len(CUE_FILE_ORDER)} channels)")
 
-    skips, infos = {}, {}
-    with mproc.Pool(max(1, args.workers), initializer=_init, initargs=(args,)) as pool:
-        for vid, reason, info in tqdm(pool.imap_unordered(compute_one, vids), total=len(vids)):
-            if reason == "exists":
-                continue
-            if reason:
-                skips.setdefault(reason.split(" ")[0], []).append(vid)
-            else:
-                infos[vid] = info
+    skips, infos, first_error = {}, {}, {}
+
+    def collect(vid, reason, info):
+        if reason == "exists":
+            return
+        if reason:
+            key = reason.split(" ")[0]
+            skips.setdefault(key, []).append(vid)
+            first_error.setdefault(key, reason)
+        else:
+            infos[vid] = info
+
+    if args.workers <= 1:
+        _init(args)  # serial: easiest to debug, no multiprocessing
+        for vid in tqdm(vids):
+            collect(vid, *compute_one(vid)[1:])
+    else:
+        # "spawn": torch is not fork-safe in every setup
+        with mproc.get_context("spawn").Pool(args.workers, initializer=_init, initargs=(args,)) as pool:
+            for vid, reason, info in tqdm(pool.imap_unordered(compute_one, vids), total=len(vids)):
+                collect(vid, reason, info)
+    for key, msg in first_error.items():
+        print(f"  first '{key}': {msg}")
 
     n = len(infos)
     report = {"written": n, "skipped": {k: len(v) for k, v in skips.items()},
