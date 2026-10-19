@@ -363,28 +363,28 @@ _MS_HAMER_ONLY = {**_MS_CUE_STUDY, "use_stream_body_hands": False, "use_stream_f
                   "use_stream_hamer": True}
 
 EXPERIMENTS_TO_RUN = [
-    # 1. Handedness: does it cost anything that left-dominant signers use the other hand block?
-    {**_MS_BEST, "hand_canonicalize": True,
-     "description": "FE: B+H+Fc, dominant-hand canonicalization"},
-    {**_MS_BEST, "mirror_augment_p": 0.5,
-     "description": "FE: B+H+Fc, mirror augmentation p=0.5"},
-    # 2. HaMeR branch: 6D rotations + detected mask + rotation speed + temporal conv k=9
-    {**_MS_BEST, **_HAMER_FRONTEND,
-     "description": "FE: B+H+Fc, HaMeR front-end (rot6d + mask + motion + temporal k9)"},
-    {**_MS_HAMER_ONLY, **_HAMER_FRONTEND,
-     "description": "FE: HaMeR only, HaMeR front-end (rot6d + mask + motion + temporal k9)"},
-    # # 3. Stream dropout
-    # {**_MS_BEST, "stream_dropout": 0.2,
-    #  "description": "FE: B+H+Fc, stream dropout 0.2"},
-    # # 4. Body-part pooling instead of flattening all vertices
-    # {**_MS_BEST, "vertex_pooling": "part_mean",
-    #  "description": "FE: B+H+Fc, part pooling (mean)"},
-    # {**_MS_BEST, "vertex_pooling": "part_attn",
-    #  "description": "FE: B+H+Fc, part pooling (attention)"},
-    # # All four together
-    # {**_MS_BEST, **_HAMER_FRONTEND, "hand_canonicalize": True, "stream_dropout": 0.2,
-    #  "vertex_pooling": "part_attn",
-    #  "description": "FE: B+H+Fc, canonicalization + HaMeR front-end + stream dropout + part attn"},
+    # # 1. Handedness: does it cost anything that left-dominant signers use the other hand block?
+    # {**_MS_BEST, "hand_canonicalize": True,
+    #  "description": "FE: B+H+Fc, dominant-hand canonicalization"},
+    # {**_MS_BEST, "mirror_augment_p": 0.5,
+    #  "description": "FE: B+H+Fc, mirror augmentation p=0.5"},
+    # # 2. HaMeR branch: 6D rotations + detected mask + rotation speed + temporal conv k=9
+    # {**_MS_BEST, **_HAMER_FRONTEND,
+    #  "description": "FE: B+H+Fc, HaMeR front-end (rot6d + mask + motion + temporal k9)"},
+    # {**_MS_HAMER_ONLY, **_HAMER_FRONTEND,
+    #  "description": "FE: HaMeR only, HaMeR front-end (rot6d + mask + motion + temporal k9)"},
+    # 3. Stream dropout
+    {**_MS_BEST, "stream_dropout": 0.2,
+     "description": "FE: B+H+Fc, stream dropout 0.2"},
+    # 4. Body-part pooling instead of flattening all vertices
+    {**_MS_BEST, "vertex_pooling": "part_mean",
+     "description": "FE: B+H+Fc, part pooling (mean)"},
+    {**_MS_BEST, "vertex_pooling": "part_attn",
+     "description": "FE: B+H+Fc, part pooling (attention)"},
+    # All four together
+    {**_MS_BEST, **_HAMER_FRONTEND, "hand_canonicalize": True, "stream_dropout": 0.2,
+     "vertex_pooling": "part_attn",
+     "description": "FE: B+H+Fc, canonicalization + HaMeR front-end + stream dropout + part attn"},
 ]
 
 # References (already trained: B+H+Fc = multistream_bilstm 124-126, HaMeR only = 133-135).
