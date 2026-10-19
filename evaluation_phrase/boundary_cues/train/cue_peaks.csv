@@ -1,0 +1,277 @@
+cue,family,event,peak_offset_frames,peak_offset_s,peak_deviation_from_control,value_at_boundary,control_level,n_events
+EAR (eye openness),eyes,start_all,-56,-1.12,0.1074,-0.198,-0.1573,53477
+EAR (eye openness),eyes,start_short,-17,-0.34,0.0965,-0.2062,-0.1573,17199
+EAR (eye openness),eyes,start_long,-56,-1.12,0.1226,-0.1953,-0.1573,36027
+EAR (eye openness),eyes,end_all,-6,-0.12,0.0848,-0.1011,-0.1573,52993
+EAR (eye openness),eyes,sign_start,-40,-0.8,-0.063,-0.1888,-0.1573,25611
+EAR (eye openness),eyes,sign_start_gap,14,0.28,0.0513,-0.1547,-0.1573,23724
+blink,eyes,start_all,8,0.16,0.042,0.3105,0.2716,54199
+blink,eyes,start_short,3,0.06,0.0551,0.3231,0.2716,17358
+blink,eyes,start_long,8,0.16,0.0364,0.3047,0.2716,36588
+blink,eyes,end_all,12,0.24,0.0236,0.2678,0.2716,53705
+blink,eyes,sign_start,-40,-0.8,0.0254,0.2864,0.2716,26021
+blink,eyes,sign_start_gap,-40,-0.8,0.0306,0.2817,0.2716,24082
+eye asymmetry,eyes,start_all,-62,-1.24,0.0716,0.4623,0.4761,53477
+eye asymmetry,eyes,start_short,-1,-0.02,-0.0858,0.394,0.4761,17199
+eye asymmetry,eyes,start_long,-54,-1.08,0.0931,0.4942,0.4761,36027
+eye asymmetry,eyes,end_all,-11,-0.22,0.08,0.515,0.4761,52993
+eye asymmetry,eyes,sign_start,25,0.5,0.0922,0.4908,0.4761,25611
+eye asymmetry,eyes,sign_start_gap,14,0.28,0.1052,0.5071,0.4761,23724
+brow height,brows,start_all,-27,-0.54,-0.1406,0.407,0.3133,53477
+brow height,brows,start_short,-15,-0.3,-0.152,0.387,0.3133,17199
+brow height,brows,start_long,-38,-0.76,-0.1605,0.4172,0.3133,36027
+brow height,brows,end_all,-4,-0.08,-0.1871,0.1465,0.3133,52993
+brow height,brows,sign_start,-41,-0.82,0.0921,0.3366,0.3133,25611
+brow height,brows,sign_start_gap,-36,-0.72,0.1031,0.3427,0.3133,23724
+inner brow height,brows,start_all,0,0.0,3.0184,-0.5943,-3.6127,53477
+inner brow height,brows,start_short,12,0.24,2.9753,-0.6533,-3.6127,17199
+inner brow height,brows,start_long,-3,-0.06,3.0477,-0.5713,-3.6127,36027
+inner brow height,brows,end_all,32,0.64,3.2235,-0.5543,-3.6127,52993
+inner brow height,brows,sign_start,75,1.5,3.1515,-0.9844,-3.6127,25611
+inner brow height,brows,sign_start_gap,75,1.5,3.7708,-0.4286,-3.6127,23724
+brow furrow (inner distance),brows,start_all,-29,-0.58,-0.1877,-0.1229,-0.0047,53477
+brow furrow (inner distance),brows,start_short,34,0.68,-0.266,-0.1869,-0.0047,17199
+brow furrow (inner distance),brows,start_long,-32,-0.64,-0.15,-0.0837,-0.0047,36027
+brow furrow (inner distance),brows,end_all,-12,-0.24,-0.202,-0.1828,-0.0047,52993
+brow furrow (inner distance),brows,sign_start,63,1.26,-0.0717,-0.0537,-0.0047,25611
+brow furrow (inner distance),brows,sign_start_gap,74,1.48,-0.0362,-0.0083,-0.0047,23724
+brow vertical velocity,brows,start_all,66,1.32,588.7137,192.3709,-159.6845,53477
+brow vertical velocity,brows,start_short,44,0.88,603.3415,-36.43,-159.6845,17199
+brow vertical velocity,brows,start_long,66,1.32,729.9301,303.0538,-159.6845,36027
+brow vertical velocity,brows,end_all,7,0.14,452.759,-249.3157,-159.6845,52993
+brow vertical velocity,brows,sign_start,-32,-0.64,-953.9485,19.8869,-159.6845,25611
+brow vertical velocity,brows,sign_start_gap,68,1.36,1107.7374,407.7485,-159.6845,23724
+MAR (mouth aspect ratio),mouth,start_all,-21,-0.42,-2.1825,2.8151,4.3056,53477
+MAR (mouth aspect ratio),mouth,start_short,-10,-0.2,-2.0664,2.6379,4.3056,17199
+MAR (mouth aspect ratio),mouth,start_long,-21,-0.42,-2.335,2.9023,4.3056,36027
+MAR (mouth aspect ratio),mouth,end_all,2,0.04,-2.0981,2.2303,4.3056,52993
+MAR (mouth aspect ratio),mouth,sign_start,54,1.08,-0.6608,4.2205,4.3056,25611
+MAR (mouth aspect ratio),mouth,sign_start_gap,61,1.22,-0.8033,3.9627,4.3056,23724
+mouth opening,mouth,start_all,-22,-0.44,-1.3017,1.787,2.6801,53477
+mouth opening,mouth,start_short,-11,-0.22,-1.2143,1.6959,2.6801,17199
+mouth opening,mouth,start_long,-25,-0.5,-1.3995,1.8281,2.6801,36027
+mouth opening,mouth,end_all,1,0.02,-1.2407,1.4433,2.6801,52993
+mouth opening,mouth,sign_start,54,1.08,-0.4242,2.6129,2.6801,25611
+mouth opening,mouth,sign_start_gap,61,1.22,-0.5289,2.4351,2.6801,23724
+mouth width,mouth,start_all,6,0.12,-0.1628,-0.1041,0.018,53477
+mouth width,mouth,start_short,8,0.16,-0.1575,-0.0846,0.018,17199
+mouth width,mouth,start_long,6,0.12,-0.1648,-0.1129,0.018,36027
+mouth width,mouth,end_all,-66,-1.32,-0.1047,0.004,0.018,52993
+mouth width,mouth,sign_start,6,0.12,-0.1071,-0.073,0.018,25611
+mouth width,mouth,sign_start_gap,5,0.1,-0.1312,-0.1029,0.018,23724
+lower lip / jaw,mouth,start_all,-22,-0.44,-0.3093,0.3676,0.5523,53477
+lower lip / jaw,mouth,start_short,-11,-0.22,-0.2293,0.3909,0.5523,17199
+lower lip / jaw,mouth,start_long,-23,-0.46,-0.3629,0.3556,0.5523,36027
+lower lip / jaw,mouth,end_all,2,0.04,-0.2681,0.286,0.5523,52993
+lower lip / jaw,mouth,sign_start,71,1.42,-0.0931,0.553,0.5523,25611
+lower lip / jaw,mouth,sign_start_gap,73,1.46,-0.1045,0.5427,0.5523,23724
+mouth motion energy,mouth,start_all,-37,-0.74,-10455.0428,3092.9131,12235.2145,53477
+mouth motion energy,mouth,start_short,-51,-1.02,-10277.8883,3004.2877,12235.2145,17199
+mouth motion energy,mouth,start_long,-37,-0.74,-10677.4961,3156.152,12235.2145,36027
+mouth motion energy,mouth,end_all,60,1.2,-10192.9574,3684.7263,12235.2145,52993
+mouth motion energy,mouth,sign_start,41,0.82,-5285.3397,10126.5119,12235.2145,25611
+mouth motion energy,mouth,sign_start_gap,41,0.82,-8242.0527,7354.9633,12235.2145,23724
+mouth opening velocity,mouth,start_all,58,1.16,34.8511,-3.4799,-2.133,53477
+mouth opening velocity,mouth,start_short,58,1.16,59.5106,-3.5088,-2.133,17199
+mouth opening velocity,mouth,start_long,-26,-0.52,40.0013,-3.6607,-2.133,36027
+mouth opening velocity,mouth,end_all,-36,-0.72,31.4709,14.1831,-2.133,52993
+mouth opening velocity,mouth,sign_start,6,0.12,49.1136,-11.2657,-2.133,25611
+mouth opening velocity,mouth,sign_start_gap,-14,-0.28,45.5975,-14.5394,-2.133,23724
+face deformation energy,face,start_all,-52,-1.04,-9733.2124,3419.804,11802.2817,53477
+face deformation energy,face,start_short,-26,-0.52,-9553.2452,3318.5237,11802.2817,17199
+face deformation energy,face,start_long,-37,-0.74,-9890.9445,3489.0301,11802.2817,36027
+face deformation energy,face,end_all,60,1.2,-9268.1706,3927.8064,11802.2817,52993
+face deformation energy,face,sign_start,41,0.82,-3970.132,10519.7056,11802.2817,25611
+face deformation energy,face,sign_start_gap,45,0.9,-7344.9301,8171.0689,11802.2817,23724
+head height,head,start_all,-1,-0.02,0.1781,-0.0598,-0.2354,54199
+head height,head,start_short,10,0.2,0.1528,-0.1243,-0.2354,17358
+head height,head,start_long,-4,-0.08,0.2324,-0.0285,-0.2354,36588
+head height,head,end_all,-3,-0.06,-0.1762,-0.396,-0.2354,53705
+head height,head,sign_start,-42,-0.84,0.117,-0.1659,-0.2354,26021
+head height,head,sign_start_gap,-38,-0.76,0.1263,-0.1659,-0.2354,24082
+head pitch (nod),head,start_all,-27,-0.54,-0.1125,0.0023,-0.0499,54199
+head pitch (nod),head,start_short,-12,-0.24,-0.1642,-0.043,-0.0499,17358
+head pitch (nod),head,start_long,-44,-0.88,-0.1335,0.024,-0.0499,36588
+head pitch (nod),head,end_all,-2,-0.04,-0.2662,-0.3093,-0.0499,53705
+head pitch (nod),head,sign_start,38,0.76,-0.0919,0.014,-0.0499,26021
+head pitch (nod),head,sign_start_gap,-24,-0.48,0.1163,0.018,-0.0499,24082
+head yaw deviation,head,start_all,-6,-0.12,-0.2127,0.52,0.6938,54199
+head yaw deviation,head,start_short,-3,-0.06,-0.2212,0.4857,0.6938,17358
+head yaw deviation,head,start_long,-10,-0.2,-0.228,0.537,0.6938,36588
+head yaw deviation,head,end_all,10,0.2,-0.1953,0.5648,0.6938,53705
+head yaw deviation,head,sign_start,-10,-0.2,0.111,0.6916,0.6938,26021
+head yaw deviation,head,sign_start_gap,59,1.18,0.1197,0.7092,0.6938,24082
+head roll deviation,head,start_all,0,0.0,-0.1726,0.2352,0.4078,54199
+head roll deviation,head,start_short,2,0.04,-0.1842,0.229,0.4078,17358
+head roll deviation,head,start_long,-5,-0.1,-0.1802,0.238,0.4078,36588
+head roll deviation,head,end_all,14,0.28,-0.1675,0.3107,0.4078,53705
+head roll deviation,head,sign_start,-75,-1.5,-0.0567,0.389,0.4078,26021
+head roll deviation,head,sign_start_gap,-58,-1.16,-0.061,0.364,0.4078,24082
+head speed,head,start_all,-25,-0.5,-0.7174,1.6628,1.6705,54199
+head speed,head,start_short,-11,-0.22,-0.5961,1.7872,1.6705,17358
+head speed,head,start_long,-26,-0.52,-0.8444,1.608,1.6705,36588
+head speed,head,end_all,-1,-0.02,-0.5837,1.0971,1.6705,53705
+head speed,head,sign_start,-2,-0.04,0.2605,1.8758,1.6705,26021
+head speed,head,sign_start_gap,-2,-0.04,0.2079,1.8437,1.6705,24082
+head vertical velocity,head,start_all,-10,-0.2,0.4912,-0.1264,-0.0517,54199
+head vertical velocity,head,start_short,-4,-0.08,0.8139,0.4154,-0.0517,17358
+head vertical velocity,head,start_long,-11,-0.22,0.5756,-0.3866,-0.0517,36588
+head vertical velocity,head,end_all,6,0.12,0.8127,0.3107,-0.0517,53705
+head vertical velocity,head,sign_start,5,0.1,-0.442,-0.3036,-0.0517,26021
+head vertical velocity,head,sign_start_gap,5,0.1,-0.3498,-0.1693,-0.0517,24082
+head rotation speed,head,start_all,-23,-0.46,-0.6051,1.6371,1.5386,54199
+head rotation speed,head,start_short,-11,-0.22,-0.4956,1.7971,1.5386,17358
+head rotation speed,head,start_long,-23,-0.46,-0.7162,1.564,1.5386,36588
+head rotation speed,head,end_all,-2,-0.04,-0.4929,1.0668,1.5386,53705
+head rotation speed,head,sign_start,-10,-0.2,0.384,1.7123,1.5386,26021
+head rotation speed,head,sign_start_gap,59,1.18,0.3405,1.7478,1.5386,24082
+shoulder tilt,torso,start_all,-25,-0.5,-0.5646,1.4383,1.6948,54199
+shoulder tilt,torso,start_short,-9,-0.18,-0.4441,1.469,1.6948,17358
+shoulder tilt,torso,start_long,-24,-0.48,-0.6877,1.4253,1.6948,36588
+shoulder tilt,torso,end_all,65,1.3,-0.4887,1.2367,1.6948,53705
+shoulder tilt,torso,sign_start,-61,-1.22,-0.2184,1.8127,1.6948,26021
+shoulder tilt,torso,sign_start_gap,-61,-1.22,-0.2865,1.7783,1.6948,24082
+shoulder width change,torso,start_all,50,1.0,-0.1618,-0.1881,-0.1533,54199
+shoulder width change,torso,start_short,-2,-0.04,-0.4913,-0.3725,-0.1533,17358
+shoulder width change,torso,start_long,50,1.0,-0.2694,-0.1009,-0.1533,36588
+shoulder width change,torso,end_all,-56,-1.12,-0.155,-0.1344,-0.1533,53705
+shoulder width change,torso,sign_start,-49,-0.98,-0.2628,-0.128,-0.1533,26021
+shoulder width change,torso,sign_start_gap,13,0.26,-0.302,-0.1064,-0.1533,24082
+dom wrist height,hands,start_all,-16,-0.32,-1.873,1.2326,2.5891,54199
+dom wrist height,hands,start_short,-8,-0.16,-1.4331,1.2891,2.5891,17358
+dom wrist height,hands,start_long,-18,-0.36,-2.1472,1.2076,2.5891,36588
+dom wrist height,hands,end_all,15,0.3,-1.7384,1.0305,2.5891,53705
+dom wrist height,hands,sign_start,-75,-1.5,-0.7286,2.4716,2.5891,26021
+dom wrist height,hands,sign_start_gap,-75,-1.5,-0.7671,2.3541,2.5891,24082
+nondom wrist height,hands,start_all,-14,-0.28,-2.0998,1.3191,3.1706,54199
+nondom wrist height,hands,start_short,3,0.06,-1.7291,1.445,3.1706,17358
+nondom wrist height,hands,start_long,-16,-0.32,-2.3584,1.2593,3.1706,36588
+nondom wrist height,hands,end_all,18,0.36,-2.0909,1.3935,3.1706,53705
+nondom wrist height,hands,sign_start,-75,-1.5,-0.9506,2.9022,3.1706,26021
+nondom wrist height,hands,sign_start_gap,-75,-1.5,-1.028,2.7273,3.1706,24082
+dom wrist speed,hands,start_all,-21,-0.42,-3.261,4.4911,5.887,54199
+dom wrist speed,hands,start_short,-10,-0.2,-3.1569,3.8876,5.887,17358
+dom wrist speed,hands,start_long,-25,-0.5,-3.6048,4.796,5.887,36588
+dom wrist speed,hands,end_all,35,0.7,-2.9805,3.1072,5.887,53705
+dom wrist speed,hands,sign_start,-75,-1.5,-1.0303,5.5682,5.887,26021
+dom wrist speed,hands,sign_start_gap,-10,-0.2,-1.1938,5.7581,5.887,24082
+nondom wrist speed,hands,start_all,-24,-0.48,-4.1816,5.2095,7.343,54199
+nondom wrist speed,hands,start_short,-11,-0.22,-4.0613,4.8739,7.343,17358
+nondom wrist speed,hands,start_long,-24,-0.48,-4.5848,5.389,7.343,36588
+nondom wrist speed,hands,end_all,35,0.7,-3.8807,3.7105,7.343,53705
+nondom wrist speed,hands,sign_start,-75,-1.5,-1.4018,7.0379,7.343,26021
+nondom wrist speed,hands,sign_start_gap,-75,-1.5,-1.7198,7.2556,7.343,24082
+dom wrist acceleration,hands,start_all,-24,-0.48,-2.8429,3.6739,5.0607,54199
+dom wrist acceleration,hands,start_short,-12,-0.24,-2.1875,3.1538,5.0607,17358
+dom wrist acceleration,hands,start_long,-23,-0.46,-3.2287,3.9332,5.0607,36588
+dom wrist acceleration,hands,end_all,69,1.38,-2.5556,3.1108,5.0607,53705
+dom wrist acceleration,hands,sign_start,-75,-1.5,-0.9208,5.142,5.0607,26021
+dom wrist acceleration,hands,sign_start_gap,-73,-1.46,-1.0238,5.2262,5.0607,24082
+dom hold,hands,start_all,-26,-0.52,0.0763,0.0313,0.0525,54199
+dom hold,hands,start_short,-2,-0.04,-0.032,0.023,0.0525,17358
+dom hold,hands,start_long,-30,-0.6,0.1137,0.0348,0.0525,36588
+dom hold,hands,end_all,75,1.5,0.0346,0.0636,0.0525,53705
+dom hold,hands,sign_start,-4,-0.08,-0.0301,0.028,0.0525,26021
+dom hold,hands,sign_start_gap,-1,-0.02,-0.0336,0.0202,0.0525,24082
+hand distance,hands,start_all,-14,-0.28,-0.9757,1.2179,1.7727,54199
+hand distance,hands,start_short,-7,-0.14,-0.803,1.0624,1.7727,17358
+hand distance,hands,start_long,-16,-0.32,-1.086,1.2947,1.7727,36588
+hand distance,hands,end_all,75,1.5,-0.9179,1.1488,1.7727,53705
+hand distance,hands,sign_start,75,1.5,-0.3395,1.7309,1.7727,26021
+hand distance,hands,sign_start_gap,74,1.48,-0.4031,1.6616,1.7727,24082
+dom hand-to-face,hands,start_all,-16,-0.32,1.5,-0.9803,-2.007,54199
+dom hand-to-face,hands,start_short,-8,-0.16,1.098,-1.0305,-2.007,17358
+dom hand-to-face,hands,start_long,-18,-0.36,1.7462,-0.9582,-2.007,36588
+dom hand-to-face,hands,end_all,15,0.3,1.3646,-0.7967,-2.007,53705
+dom hand-to-face,hands,sign_start,-75,-1.5,0.5572,-1.9844,-2.007,26021
+dom hand-to-face,hands,sign_start_gap,-75,-1.5,0.5826,-1.9099,-2.007,24082
+dom reach (signing space),hands,start_all,-19,-0.38,1.7424,-1.1506,-2.2993,54199
+dom reach (signing space),hands,start_short,75,1.5,1.2858,-1.235,-2.2993,17358
+dom reach (signing space),hands,start_long,-20,-0.4,2.0159,-1.1123,-2.2993,36588
+dom reach (signing space),hands,end_all,75,1.5,1.5776,-0.8483,-2.2993,53705
+dom reach (signing space),hands,sign_start,-75,-1.5,0.6537,-2.2392,-2.2993,26021
+dom reach (signing space),hands,sign_start_gap,75,1.5,0.6889,-2.1757,-2.2993,24082
+two-handedness,hands,start_all,-4,-0.08,-0.1308,-0.0696,-0.0157,54199
+two-handedness,hands,start_short,-3,-0.06,-0.0813,-0.0443,-0.0157,17358
+two-handedness,hands,start_long,-5,-0.1,-0.162,-0.0819,-0.0157,36588
+two-handedness,hands,end_all,7,0.14,-0.0632,-0.022,-0.0157,53705
+two-handedness,hands,sign_start,-18,-0.36,-0.0369,0.0022,-0.0157,26021
+two-handedness,hands,sign_start_gap,-17,-0.34,-0.0452,-0.0226,-0.0157,24082
+velocity symmetry (mirrored),hands,start_all,-14,-0.28,0.0977,-0.2217,-0.2051,49989
+velocity symmetry (mirrored),hands,start_short,-12,-0.24,0.1057,-0.234,-0.2051,16238
+velocity symmetry (mirrored),hands,start_long,-23,-0.46,0.1003,-0.2163,-0.2051,33540
+velocity symmetry (mirrored),hands,end_all,-2,-0.04,0.1488,-0.067,-0.2051,46889
+velocity symmetry (mirrored),hands,sign_start,-1,-0.02,-0.0502,-0.2526,-0.2051,24256
+velocity symmetry (mirrored),hands,sign_start_gap,-1,-0.02,-0.0658,-0.2683,-0.2051,22682
+MP dom hand detected,handshape,start_all,-3,-0.06,0.0024,0.9983,0.9968,54199
+MP dom hand detected,handshape,start_short,-3,-0.06,0.003,0.9995,0.9968,17358
+MP dom hand detected,handshape,start_long,-4,-0.08,0.0022,0.9978,0.9968,36588
+MP dom hand detected,handshape,end_all,7,0.14,0.0025,0.9982,0.9968,53705
+MP dom hand detected,handshape,sign_start,-4,-0.08,0.0017,0.9972,0.9968,26021
+MP dom hand detected,handshape,sign_start_gap,-4,-0.08,0.0018,0.9977,0.9968,24082
+MP nondom hand detected,handshape,start_all,3,0.06,0.0006,0.9993,0.9991,54199
+MP nondom hand detected,handshape,start_short,-33,-0.66,-0.0006,0.9992,0.9991,17358
+MP nondom hand detected,handshape,start_long,-13,-0.26,0.0006,0.9993,0.9991,36588
+MP nondom hand detected,handshape,end_all,4,0.08,0.0007,0.9989,0.9991,53705
+MP nondom hand detected,handshape,sign_start,-8,-0.16,0.0006,0.9992,0.9991,26021
+MP nondom hand detected,handshape,sign_start_gap,-13,-0.26,-0.0009,0.9988,0.9991,24082
+dom hand openness,handshape,start_all,-14,-0.28,0.4297,-0.1176,-0.0661,54109
+dom hand openness,handshape,start_short,-10,-0.2,0.3549,-0.1771,-0.0661,17349
+dom hand openness,handshape,start_long,-17,-0.34,0.5298,-0.0917,-0.0661,36507
+dom hand openness,handshape,end_all,1,0.02,0.4652,0.3673,-0.0661,53610
+dom hand openness,handshape,sign_start,56,1.12,0.2322,-0.1685,-0.0661,25949
+dom hand openness,handshape,sign_start_gap,56,1.12,0.196,-0.1954,-0.0661,24026
+dom finger spread,handshape,start_all,-60,-1.2,-0.308,0.5718,0.7567,54109
+dom finger spread,handshape,start_short,-56,-1.12,-0.269,0.5824,0.7567,17349
+dom finger spread,handshape,start_long,-71,-1.42,-0.3421,0.5646,0.7567,36507
+dom finger spread,handshape,end_all,48,0.96,-0.3249,0.7751,0.7567,53610
+dom finger spread,handshape,sign_start,2,0.04,-0.1313,0.6526,0.7567,25949
+dom finger spread,handshape,sign_start_gap,2,0.04,-0.145,0.6304,0.7567,24026
+dom handshape change,handshape,start_all,-61,-1.22,-2.7843,3.7327,5.6572,54109
+dom handshape change,handshape,start_short,20,0.4,-2.5747,3.7159,5.6572,17349
+dom handshape change,handshape,start_long,-60,-1.2,-2.9249,3.7465,5.6572,36507
+dom handshape change,handshape,end_all,44,0.88,-2.8525,4.6487,5.6572,53610
+dom handshape change,handshape,sign_start,51,1.02,1.1474,4.6912,5.6572,25949
+dom handshape change,handshape,sign_start_gap,1,0.02,-1.0924,4.6387,5.6572,24026
+nondom handshape change,handshape,start_all,-22,-0.44,-2.4817,5.0659,6.4931,54160
+nondom handshape change,handshape,start_short,-56,-1.12,-2.2606,5.5924,6.4931,17344
+nondom handshape change,handshape,start_long,-42,-0.84,-2.8067,4.8273,6.4931,36563
+nondom handshape change,handshape,end_all,71,1.42,-2.554,5.8135,6.4931,53646
+nondom handshape change,handshape,sign_start,44,0.88,1.1297,6.4909,6.4931,25999
+nondom handshape change,handshape,sign_start_gap,32,0.64,1.1599,6.653,6.4931,24054
+HaMeR dom detected,hamer,start_all,-6,-0.12,-0.0324,0.942,0.945,54199
+HaMeR dom detected,hamer,start_short,1,0.02,0.0189,0.9596,0.945,17358
+HaMeR dom detected,hamer,start_long,-6,-0.12,-0.0487,0.9335,0.945,36588
+HaMeR dom detected,hamer,end_all,-4,-0.08,-0.0312,0.9344,0.945,53705
+HaMeR dom detected,hamer,sign_start,0,0.0,0.0166,0.9616,0.945,26021
+HaMeR dom detected,hamer,sign_start_gap,1,0.02,0.0143,0.9589,0.945,24082
+HaMeR dom finger flexion,hamer,start_all,-17,-0.34,-0.1901,0.057,0.063,51055
+HaMeR dom finger flexion,hamer,start_short,-13,-0.26,-0.2673,0.0765,0.063,16656
+HaMeR dom finger flexion,hamer,start_long,-27,-0.54,-0.1667,0.0503,0.063,34156
+HaMeR dom finger flexion,hamer,end_all,-2,-0.04,-0.2773,-0.2065,0.063,50181
+HaMeR dom finger flexion,hamer,sign_start,-8,-0.16,0.082,0.0644,0.063,25021
+HaMeR dom finger flexion,hamer,sign_start_gap,-8,-0.16,0.0941,0.0648,0.063,23092
+HaMeR dom articulation speed,hamer,start_all,-23,-0.46,-0.9403,1.5989,1.858,49785
+HaMeR dom articulation speed,hamer,start_short,-12,-0.24,-0.6454,1.7538,1.858,16342
+HaMeR dom articulation speed,hamer,start_long,-25,-0.5,-1.2003,1.5283,1.858,33203
+HaMeR dom articulation speed,hamer,end_all,44,0.88,-0.6787,1.2114,1.858,48756
+HaMeR dom articulation speed,hamer,sign_start,-4,-0.08,0.7513,1.9133,1.858,24636
+HaMeR dom articulation speed,hamer,sign_start_gap,-4,-0.08,1.0659,2.172,1.858,22703
+HaMeR dom wrist rotation speed,hamer,start_all,-21,-0.42,-1.3247,2.6198,2.9552,49785
+HaMeR dom wrist rotation speed,hamer,start_short,-12,-0.24,-0.8591,2.6752,2.9552,16342
+HaMeR dom wrist rotation speed,hamer,start_long,-25,-0.5,-1.694,2.6011,2.9552,33203
+HaMeR dom wrist rotation speed,hamer,end_all,38,0.76,-1.1112,2.1341,2.9552,48756
+HaMeR dom wrist rotation speed,hamer,sign_start,-4,-0.08,1.0113,3.0245,2.9552,24636
+HaMeR dom wrist rotation speed,hamer,sign_start_gap,-4,-0.08,1.292,3.3586,2.9552,22703
+HaMeR nondom articulation speed,hamer,start_all,-24,-0.48,-0.8904,2.0003,2.3054,50320
+HaMeR nondom articulation speed,hamer,start_short,-12,-0.24,-0.5858,2.0693,2.3054,16253
+HaMeR nondom articulation speed,hamer,start_long,-24,-0.48,-1.1496,1.9731,2.3054,33831
+HaMeR nondom articulation speed,hamer,end_all,30,0.6,-0.771,1.7637,2.3054,49506
+HaMeR nondom articulation speed,hamer,sign_start,-5,-0.1,0.5311,2.3944,2.3054,24622
+HaMeR nondom articulation speed,hamer,sign_start_gap,-4,-0.08,0.6763,2.5268,2.3054,22739
+whole-body motion energy,body,start_all,-22,-0.44,-2.5108,2.8673,4.2464,54199
+whole-body motion energy,body,start_short,-11,-0.22,-2.3267,2.6132,4.2464,17358
+whole-body motion energy,body,start_long,-26,-0.52,-2.7963,3.0001,4.2464,36588
+whole-body motion energy,body,end_all,30,0.6,-2.3086,2.1074,4.2464,53705
+whole-body motion energy,body,sign_start,-75,-1.5,-0.7819,3.8959,4.2464,26021
+whole-body motion energy,body,sign_start_gap,-75,-1.5,-0.8938,4.0504,4.2464,24082
