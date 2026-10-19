@@ -191,6 +191,16 @@ def build_model_kwargs(config, detected_hamer_dim=None, detected_dinov2_dim=None
         for key in ("body_hands_proj_dim", "face_proj_dim"):  # hamer_proj_dim is handled above
             if config.get(key) is not None:
                 model_kwargs[key] = int(config[key])
+        # Front-end options (src/frontend.py). Defaults = the original model, so older
+        # configs / checkpoints rebuild unchanged.
+        model_kwargs["vertex_pooling"] = config.get("vertex_pooling", "flatten")
+        model_kwargs["stream_dropout"] = float(config.get("stream_dropout", 0.0))
+        if streams["use_stream_hamer"]:
+            model_kwargs["hamer_rep"] = config.get("hamer_rep", "matrix")
+            model_kwargs["hamer_mask"] = bool(config.get("hamer_mask", False))
+            model_kwargs["hamer_motion"] = bool(config.get("hamer_motion", False))
+            model_kwargs["hamer_motion_lag"] = int(config.get("hamer_motion_lag", 1))
+            model_kwargs["hamer_temporal_kernel"] = int(config.get("hamer_temporal_kernel", 1))
         if not streams["use_stream_hamer"]:
             model_kwargs.pop("hamer_dim", None)
         if model_name == "multistream_bilstm_attn":

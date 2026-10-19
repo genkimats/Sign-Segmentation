@@ -32,7 +32,7 @@ import time
 import numpy as np
 import torch
 
-from src.dataset import SignSegmentationDataset, cue_dataset_kwargs
+from src.dataset import SignSegmentationDataset, extra_dataset_kwargs
 from src.model_factory import build_model_kwargs
 from src.evaluation import predict_split
 from src.metrics import evaluate_videos, pct_score, extract_segments, decode_threshold_2023, segment_iou
@@ -112,7 +112,7 @@ def dataset_key(config):
         "hamer_dir": config.get("hamer_dir"),
         "use_dinov2_features": config.get("use_dinov2_features", False),
         "dinov2_dir": config.get("dinov2_dir"),
-        "cues": cue_dataset_kwargs(config),
+        "extras": extra_dataset_kwargs(config),
     }, sort_keys=True)
 
 
@@ -153,7 +153,7 @@ def get_dataset(config, split):
             hamer_dir=config.get("hamer_dir", "processed_data/hamer_features"),
             use_dinov2_features=config.get("use_dinov2_features", False),
             dinov2_dir=config.get("dinov2_dir", "processed_data/dinov2_features"),
-            **cue_dataset_kwargs(config),
+            **extra_dataset_kwargs(config),
         )
         print(f"  labels: {labels_dir_for(config)}")
         print(f"  [time] loading {split} data: {time.time() - t0:.1f}s "

@@ -14,7 +14,7 @@ CHOSEN_TYPE = 'mamba'
 # ==============================================================================
 MAMBA_DEFAULTS = {
     "basename": "stgcn_mamba",  
-    "window_size": 512,
+    "window_size": 256,
     "overlap": 0,
     "batch_size": 16,
     "epochs": 100,
@@ -22,11 +22,11 @@ MAMBA_DEFAULTS = {
     "patience": 10,
     "learning_rate": 0.0001,
     "num_vertices": 65,
-    "tolerance_window": 1,
+    "tolerance_window": 5,
     "temporal_downsample_factor": 1, 
     "loss_function": "weighted_ce",  
     "ctc_weight": 0.5,             
-    "class_weights": [1.0, 1.1, 8.5], 
+    "class_weights": [0.6, 0.8, 1.0], 
     "tmse_weight": 0.15,            
     "tmse_threshold": 0.1,          
     "base_features": ["x-cord", "y-cord", "z-cord"], 
@@ -91,6 +91,25 @@ MAMBA_DEFAULTS = {
     # 1 = per-frame projection only; 9 = + depthwise temporal conv over each cue (same
     # temporal kernel as the ST-GCN), residual, initialised as identity
     "cue_temporal_kernel": 1,
+    # --- Front-end options (src/frontend.py; multistream models). Defaults = original. ---
+    # Handedness: mirror every video whose dominant hand is MediaPipe "left", so the
+    # dominant hand is always on the same side (all splits, no labels involved) ...
+    "hand_canonicalize": False,
+    # ... or instead randomly mirror training windows with this probability.
+    "mirror_augment_p": 0.0,
+    # ST-GCN output -> branch: "flatten" (V x C -> Linear, original) | "part_mean" |
+    # "part_attn" (body-part tokens: head, arms, hands; face: eyes, brows, mouth)
+    "vertex_pooling": "flatten",
+    # HaMeR branch: "matrix" (raw 288) | "rot6d" (192); + detected-hand mask; + per-joint
+    # rotation speed (lag in frames; HaMeR was extracted at the full frame rate);
+    # temporal kernel > 1 = residual temporal conv after the HaMeR projection
+    "hamer_rep": "matrix",
+    "hamer_mask": False,
+    "hamer_motion": False,
+    "hamer_motion_lag": 1,
+    "hamer_temporal_kernel": 1,
+    # Training only: zero each stream of each sample with this probability
+    "stream_dropout": 0.0,
     "d_model": 256,
     "n_layers": 4,     
     "mamba_d_state": 16,
@@ -310,14 +329,14 @@ _MS_CUE_STUDY = {**_MS_BODY_HAMER, "basename": "multistream_bilstm", "window_siz
 _CUES_ONLY = {**_MS_CUE_STUDY, "use_stream_body_hands": False, "use_stream_hamer": False,
               "use_stream_face": False, "use_stream_cues": True}
 
-EXPERIMENTS_TO_RUN = [
-    # # Q1: how far do ~36 interpretable numbers per frame get on their own (vs Body .676 test)?
-    # {**_CUES_ONLY, "cue_set": "selected",
-    #  "description": "Cues: cues only (selected 36), projection only"},
-    # {**_CUES_ONLY, "cue_set": "selected", "cue_temporal_kernel": 9,
-    #  "description": "Cues: cues only (selected 36), + temporal conv k=9"},
-    # {**_CUES_ONLY, "cue_set": "all",
-    #  "description": "Cues: cues only (all 48), projection only"},
+CUE_STUDY = [  # already run (multistream_bilstm 157-177)
+    # Q1: how far do ~36 interpretable numbers per frame get on their own (vs Body .676 test)?
+    {**_CUES_ONLY, "cue_set": "selected",
+     "description": "Cues: cues only (selected 36), projection only"},
+    {**_CUES_ONLY, "cue_set": "selected", "cue_temporal_kernel": 9,
+     "description": "Cues: cues only (selected 36), + temporal conv k=9"},
+    {**_CUES_ONLY, "cue_set": "all",
+     "description": "Cues: cues only (all 48), projection only"},
     # Q2: can explicit facial cues replace the raw face ST-GCN stream?
     {**_MS_CUE_STUDY, "use_stream_cues": True, "cue_set": "face",
      "description": "Cues: Body + HaMeR + face cues (12) instead of the face stream"},
@@ -331,10 +350,48 @@ EXPERIMENTS_TO_RUN = [
      "description": "Cues: Body + HaMeR + Face(compact) + selected cues (4 streams)"},
 ]
 
+# ------------------------------------------------------------------------------
+# FRONT-END STUDY: changes between the raw inputs and the encoder (src/frontend.py).
+# Everything is on top of the best model, Body + HaMeR + Face(compact), same setup as
+# before (multistream_bilstm, window 512, v2 labels, tolerance 1, weights [1.0, 1.1, 12.4]).
+# Each idea is one switch, so they can be compared one by one and then combined.
+# ------------------------------------------------------------------------------
+_MS_BEST = {**_MS_CUE_STUDY, "use_stream_face": True, "face_subset": "compact"}
+_HAMER_FRONTEND = {"hamer_rep": "rot6d", "hamer_mask": True, "hamer_motion": True,
+                   "hamer_motion_lag": 1, "hamer_temporal_kernel": 9}
+_MS_HAMER_ONLY = {**_MS_CUE_STUDY, "use_stream_body_hands": False, "use_stream_face": False,
+                  "use_stream_hamer": True}
+
+EXPERIMENTS_TO_RUN = [
+    # 1. Handedness: does it cost anything that left-dominant signers use the other hand block?
+    {**_MS_BEST, "hand_canonicalize": True,
+     "description": "FE: B+H+Fc, dominant-hand canonicalization"},
+    {**_MS_BEST, "mirror_augment_p": 0.5,
+     "description": "FE: B+H+Fc, mirror augmentation p=0.5"},
+    # 2. HaMeR branch: 6D rotations + detected mask + rotation speed + temporal conv k=9
+    {**_MS_BEST, **_HAMER_FRONTEND,
+     "description": "FE: B+H+Fc, HaMeR front-end (rot6d + mask + motion + temporal k9)"},
+    {**_MS_HAMER_ONLY, **_HAMER_FRONTEND,
+     "description": "FE: HaMeR only, HaMeR front-end (rot6d + mask + motion + temporal k9)"},
+    # 3. Stream dropout
+    {**_MS_BEST, "stream_dropout": 0.2,
+     "description": "FE: B+H+Fc, stream dropout 0.2"},
+    # 4. Body-part pooling instead of flattening all vertices
+    {**_MS_BEST, "vertex_pooling": "part_mean",
+     "description": "FE: B+H+Fc, part pooling (mean)"},
+    {**_MS_BEST, "vertex_pooling": "part_attn",
+     "description": "FE: B+H+Fc, part pooling (attention)"},
+    # All four together
+    {**_MS_BEST, **_HAMER_FRONTEND, "hand_canonicalize": True, "stream_dropout": 0.2,
+     "vertex_pooling": "part_attn",
+     "description": "FE: B+H+Fc, canonicalization + HaMeR front-end + stream dropout + part attn"},
+]
+
+# References (already trained: B+H+Fc = multistream_bilstm 124-126, HaMeR only = 133-135).
+# Re-queue only if their settings differ; otherwise just re-evaluate them on the current val.
 REFERENCES = [
-    {**_MS_CUE_STUDY, "description": "Cues ref: Body + HaMeR"},
-    {**_MS_CUE_STUDY, "use_stream_face": True, "face_subset": "compact",
-     "description": "Cues ref: Body + HaMeR + Face(compact)"},
+    {**_MS_BEST, "description": "FE ref: Body + HaMeR + Face(compact)"},
+    {**_MS_HAMER_ONLY, "description": "FE ref: HaMeR only"},
 ]
 # EXPERIMENTS_TO_RUN += REFERENCES   # uncomment if the reference runs need redoing
 

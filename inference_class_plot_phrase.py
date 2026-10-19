@@ -24,7 +24,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
-from src.dataset import SignSegmentationDataset, cue_dataset_kwargs
+from src.dataset import SignSegmentationDataset, extra_dataset_kwargs
 from src.model_factory import build_model_kwargs
 from src.evaluation import predict_video_probs
 from src.metrics import (extract_segments, decode_threshold_2023, segment_iou,
@@ -93,7 +93,7 @@ def build_dataset(hp, split):
         hamer_dir=hp.get("hamer_dir", "processed_data/hamer_features"),
         use_dinov2_features=hp.get("use_dinov2_features", False),
         dinov2_dir=hp.get("dinov2_dir", "processed_data/dinov2_features"),
-        **cue_dataset_kwargs(hp),
+        **extra_dataset_kwargs(hp),
     )
 
 

@@ -6,6 +6,8 @@ from mamba_ssm import Mamba
 from src.graph import SkeletonGraph
 from src.stgcn import STGCNBlock
 from src.stgcn import DecoupledSTGCNBlock
+from src.frontend import HaMeRFrontEnd, TemporalResidual, VertexPooling, BODY_PARTS, face_parts
+from src.face_subsets import face_subset_for_vertex_count
 from src.skeleton_angles import skeleton_angle_features, ANGLE_FEATURE_DIM
 
 
@@ -2275,6 +2277,18 @@ class MultiStreamSegmenter(nn.Module):
 
     For check_stream_balance.py the model can report each stream's contribution to the
     fused representation (set_capture) and replace one stream by a constant (set_ablation).
+
+    Front-end options (src/frontend.py; all off by default = the original model):
+      vertex_pooling      "flatten" (V x C -> Linear, original) | "part_mean" | "part_attn":
+                          ST-GCN output pooled into body-part tokens (head, left/right arm,
+                          left/right hand; face: eyes, brows, mouth) before the branch
+      hamer_rep           "matrix" (raw 288) | "rot6d" (192, continuous 6D rotations)
+      hamer_mask          + per-hand "detected" channel
+      hamer_motion        + per-joint rotation speed between t and t - hamer_motion_lag
+      hamer_temporal_kernel  > 1: residual temporal conv after the HaMeR branch (the body /
+                          face streams get temporal context from their ST-GCN; HaMeR had none)
+      stream_dropout      training only: each stream of each sample is zeroed with this
+                          probability (at least one stream is always kept)
     """
     STREAM_ORDER = ("body_hands", "face", "hamer", "cues")
 
@@ -2285,7 +2299,9 @@ class MultiStreamSegmenter(nn.Module):
                  hamer_dim=None, encoder="bilstm", nhead=8, dim_feedforward=None,
                  pos_encoding="sinusoidal", transformer_norm="post", rope_base=10000.0,
                  face_channels=None, attn_layers=1,
-                 use_stream_cues=False, cue_dim=None, cue_proj_dim=128, cue_temporal_kernel=1):
+                 use_stream_cues=False, cue_dim=None, cue_proj_dim=128, cue_temporal_kernel=1,
+                 vertex_pooling="flatten", hamer_rep="matrix", hamer_mask=False, hamer_motion=False,
+                 hamer_motion_lag=1, hamer_temporal_kernel=1, stream_dropout=0.0):
         super().__init__()
         if fusion not in ("concat", "gated_sum"):
             raise ValueError(f"fusion must be 'concat' or 'gated_sum', got '{fusion}'.")
@@ -2300,6 +2316,10 @@ class MultiStreamSegmenter(nn.Module):
         self.fusion = fusion
         self.encoder_type = encoder
         self.d_model = d_model
+        self.vertex_pooling = vertex_pooling
+        if vertex_pooling not in ("flatten", "part_mean", "part_attn"):
+            raise ValueError(f"vertex_pooling must be 'flatten', 'part_mean' or 'part_attn', got '{vertex_pooling}'.")
+        self.stream_dropout = float(stream_dropout)
 
         def branch(in_dim, out_dim):
             return nn.Sequential(nn.Linear(in_dim, out_dim), nn.LayerNorm(out_dim), nn.GELU(), nn.Dropout(dropout))
@@ -2319,7 +2339,12 @@ class MultiStreamSegmenter(nn.Module):
                 STGCNBlock(in_channels, stgcn_channels, A_bh),
                 STGCNBlock(stgcn_channels, stgcn_channels, A_bh),
             )
-            self.branches["body_hands"] = branch(65 * stgcn_channels, out_dims["body_hands"])
+            if vertex_pooling == "flatten":
+                bh_in = 65 * stgcn_channels
+            else:
+                self.body_hands_pool = VertexPooling(stgcn_channels, BODY_PARTS, vertex_pooling)
+                bh_in = self.body_hands_pool.out_dim
+            self.branches["body_hands"] = branch(bh_in, out_dims["body_hands"])
 
         if "face" in self.streams:
             self.num_face = num_vertices - 65
@@ -2335,13 +2360,26 @@ class MultiStreamSegmenter(nn.Module):
                 STGCNBlock(face_in, stgcn_channels, A_face),
                 STGCNBlock(stgcn_channels, stgcn_channels, A_face),
             )
-            self.branches["face"] = branch(self.num_face * stgcn_channels, out_dims["face"])
+            if vertex_pooling == "flatten":
+                face_in_dim = self.num_face * stgcn_channels
+            else:
+                self.face_pool = VertexPooling(stgcn_channels, face_parts(face_subset_for_vertex_count(self.num_face)),
+                                               vertex_pooling)
+                face_in_dim = self.face_pool.out_dim
+            self.branches["face"] = branch(face_in_dim, out_dims["face"])
 
         if "hamer" in self.streams:
             if hamer_dim is None:
                 raise ValueError("hamer stream is on but hamer_dim is None -- set use_hamer_features=True.")
             self.hamer_dim = hamer_dim
-            self.branches["hamer"] = branch(hamer_dim, out_dims["hamer"])
+            hamer_in = hamer_dim
+            if hamer_rep != "matrix" or hamer_mask or hamer_motion:
+                self.hamer_frontend = HaMeRFrontEnd(hamer_dim, rep=hamer_rep, mask=hamer_mask,
+                                                    motion=hamer_motion, motion_lag=hamer_motion_lag)
+                hamer_in = self.hamer_frontend.out_dim
+            self.branches["hamer"] = branch(hamer_in, out_dims["hamer"])
+            if int(hamer_temporal_kernel) > 1:
+                self.hamer_temporal = TemporalResidual(out_dims["hamer"], hamer_temporal_kernel, dropout)
 
         if "cues" in self.streams:
             if not cue_dim:
@@ -2421,31 +2459,49 @@ class MultiStreamSegmenter(nn.Module):
         return {name: float(g) for name, g in zip(self.streams, self.gates.detach().cpu())}
 
     # ---- forward ------------------------------------------------------------
-    def _graph_stream(self, stgcn, x):
+    def _graph_stream(self, stgcn, x, pool=None):
         B, C, T, V = x.shape
         h = stgcn(x)                                   # (B, stgcn_channels, T, V)
+        if pool is not None:
+            return pool(h)                             # (B, T, parts * stgcn_channels)
         return h.permute(0, 2, 3, 1).reshape(B, T, -1)  # (B, T, V * stgcn_channels)
 
     def forward(self, x, hamer=None, dinov2=None, cues=None):
         B, C, T, V = x.shape
         z = {}
         if "body_hands" in self.streams:
-            z["body_hands"] = self.branches["body_hands"](self._graph_stream(self.body_hands_stgcn, x[..., :65]))
+            z["body_hands"] = self.branches["body_hands"](self._graph_stream(
+                self.body_hands_stgcn, x[..., :65], getattr(self, "body_hands_pool", None)))
         if "face" in self.streams:
             xf = x[..., 65:]
             if self.face_channels is not None:
                 xf = xf[:, self.face_channels]
-            z["face"] = self.branches["face"](self._graph_stream(self.face_stgcn, xf))
+            z["face"] = self.branches["face"](self._graph_stream(self.face_stgcn, xf,
+                                                                 getattr(self, "face_pool", None)))
         if "hamer" in self.streams:
             if hamer is None:
                 raise ValueError("hamer stream is on but forward() got no `hamer` tensor.")
-            z["hamer"] = self.branches["hamer"](hamer.permute(0, 2, 1))   # (B, T, dim)
+            if hasattr(self, "hamer_frontend"):
+                z["hamer"] = self.branches["hamer"](self.hamer_frontend(hamer))   # (B, T, dim)
+            else:
+                z["hamer"] = self.branches["hamer"](hamer.permute(0, 2, 1))       # (B, T, dim)
+            if hasattr(self, "hamer_temporal"):
+                z["hamer"] = self.hamer_temporal(z["hamer"])
         if "cues" in self.streams:
             if cues is None:
                 raise ValueError("cues stream is on but forward() got no `cues` tensor.")
             if self.cue_temporal_kernel > 1:
                 cues = cues + self.cue_temporal(cues)                     # (B, C, T)
             z["cues"] = self.branches["cues"](cues.permute(0, 2, 1))      # (B, T, cue_proj_dim)
+
+        if self.training and self.stream_dropout > 0 and len(self.streams) > 1:
+            keep = (torch.rand(B, len(self.streams), device=x.device) >= self.stream_dropout)
+            none_kept = ~keep.any(dim=1)
+            if none_kept.any():   # never drop every stream of a sample: keep one at random
+                pick = torch.randint(len(self.streams), (int(none_kept.sum()),), device=x.device)
+                keep[none_kept.nonzero(as_tuple=True)[0], pick] = True
+            for j, name in enumerate(self.streams):
+                z[name] = z[name] * keep[:, j].to(z[name].dtype)[:, None, None]
 
         if self._ablation is not None:
             name, value = self._ablation

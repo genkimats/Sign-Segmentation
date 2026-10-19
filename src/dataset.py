@@ -7,15 +7,25 @@ from tqdm import tqdm
 
 from src.face_subsets import face_subset_positions, SAVED_FACE_INDICES
 from src.cue_sets import resolve_cue_set
+from src.frontend import dominant_wrist, mirror_graph_tv, mirror_hamer, face_mirror_perm, L_WRIST, R_WRIST
 
 CUE_DEFAULT_DIR = "processed_data/cue_features"
 
 
-def cue_dataset_kwargs(config):
-    """Dataset arguments for the interpretable-cue stream, read from a run config."""
+def extra_dataset_kwargs(config):
+    """
+    Dataset arguments beyond the original ones, read from a run config (so training,
+    evaluation and the viewers always build the SAME data): the interpretable-cue stream
+    and the handedness options. mirror_augment_p only acts on the train split.
+    """
     return {"use_cue_features": bool(config.get("use_cue_features", False)),
             "cue_dir": config.get("cue_dir", CUE_DEFAULT_DIR),
-            "cue_set": config.get("cue_set", "selected")}
+            "cue_set": config.get("cue_set", "selected"),
+            "hand_canonicalize": bool(config.get("hand_canonicalize", False)),
+            "mirror_augment_p": float(config.get("mirror_augment_p", 0.0))}
+
+
+cue_dataset_kwargs = extra_dataset_kwargs  # old name
 
 def apply_label_smoothing(labels_array, window_size=5):
     """
@@ -59,7 +69,7 @@ def apply_label_smoothing(labels_array, window_size=5):
     return soft_labels
 
 class SignSegmentationDataset(Dataset):
-    def __init__(self, keypoints_dir, labels_dir, split_file="dataset_splits.json", split="train", window_size=16, overlap=0, tolerance_window=5, use_full_length=False, base_features=None, kinematic_features=None, temporal_downsample_factor=1, use_face_keypoints=False, face_dir="processed_data/face_keypoints_normalized_v2", face_subset="full", face_only=False, face_dims=2, use_hamer_features=False, hamer_dir="processed_data/hamer_features", use_dinov2_features=False, dinov2_dir="processed_data/dinov2_features", use_cue_features=False, cue_dir=CUE_DEFAULT_DIR, cue_set="selected"):
+    def __init__(self, keypoints_dir, labels_dir, split_file="dataset_splits.json", split="train", window_size=16, overlap=0, tolerance_window=5, use_full_length=False, base_features=None, kinematic_features=None, temporal_downsample_factor=1, use_face_keypoints=False, face_dir="processed_data/face_keypoints_normalized_v2", face_subset="full", face_only=False, face_dims=2, use_hamer_features=False, hamer_dir="processed_data/hamer_features", use_dinov2_features=False, dinov2_dir="processed_data/dinov2_features", use_cue_features=False, cue_dir=CUE_DEFAULT_DIR, cue_set="selected", hand_canonicalize=False, mirror_augment_p=0.0):
         self.labels_dir = labels_dir
         self.kinetic_dir = "processed_data/kinematic_features" 
         self.split_file = split_file
@@ -148,6 +158,43 @@ class SignSegmentationDataset(Dataset):
             if self.kinematic_features:
                 print(f"[{split.upper()}] pure_hamer mode: ignoring kinematic_features "
                       f"{self.kinematic_features} (they are MediaPipe-based).")
+
+        # HANDEDNESS (src/frontend.py):
+        #   hand_canonicalize=True : every video whose dominant hand (the pose wrist that
+        #       moves more) is MediaPipe's "left" (15) is mirrored, so the dominant hand is
+        #       always the "right" one (pose 16, hand block 44-64, HaMeR slot 1). Uses no
+        #       labels; applied identically to every split.
+        #   mirror_augment_p > 0   : TRAIN split only -- each window is mirrored with this
+        #       probability (the model sees both handednesses instead).
+        self.hand_canonicalize = bool(hand_canonicalize)
+        self.mirror_augment_p = float(mirror_augment_p) if split == "train" else 0.0
+        self.mirrored_videos = set()
+        if self.hand_canonicalize or float(mirror_augment_p) > 0:
+            if self.pure_hamer or face_only:
+                raise ValueError("hand_canonicalize / mirror_augment_p need the body + hands keypoints "
+                                 "(not pure_hamer / face_only).")
+            if use_dinov2_features:
+                raise ValueError("hand_canonicalize / mirror_augment_p cannot mirror DINOv2 appearance "
+                                 "features -- turn DINOv2 off for these runs.")
+            unsupported = [f for f in self.kinematic_features
+                           if f not in ("velocity", "acceleration", "jerk", "velocity-mag")]
+            if unsupported:
+                raise ValueError(f"Mirroring is only defined for velocity / acceleration / jerk / "
+                                 f"velocity-mag, not {unsupported}.")
+            if "x-cord" not in self.base_features:
+                raise ValueError("Mirroring needs 'x-cord' in base_features.")
+        # channels carrying x (positions + their derivatives), in the cached tensor's layout
+        _coords = [f for f in self.base_features if f in ("x-cord", "y-cord", "z-cord")]
+        self._mirror_x_channels = []
+        if "x-cord" in _coords:
+            self._mirror_x_channels.append(_coords.index("x-cord"))
+            _off = len(_coords)
+            for _f in ("velocity", "acceleration", "jerk"):
+                if _f in self.kinematic_features:
+                    self._mirror_x_channels.append(_off + _coords.index("x-cord"))
+                    _off += len(_coords)
+        self._face_mirror_perm = (face_mirror_perm(face_subset)
+                                  if use_face_keypoints and not face_only else None)
 
         if self.use_face_keypoints:
             # Face points are appended along the VERTEX axis: 65 + subset size. Graph models
@@ -427,6 +474,17 @@ class SignSegmentationDataset(Dataset):
                     continue
                 cue_full = torch.from_numpy(np.ascontiguousarray(cue_arr[:, self.cue_indices])).to(torch.float16)
 
+            # --- OPTIONAL: HANDEDNESS CANONICALIZATION (dominant hand -> MediaPipe "right") ---
+            if self.hand_canonicalize:
+                base_xy = kin_data["base"][:, :, :2]
+                base_xy = base_xy.numpy() if hasattr(base_xy, "numpy") else np.asarray(base_xy)
+                if dominant_wrist(base_xy) == L_WRIST:
+                    final_tensor = mirror_graph_tv(final_tensor.to(torch.float32), self._mirror_x_channels,
+                                                   self._face_mirror_perm)
+                    if hamer_full is not None:
+                        hamer_full = mirror_hamer(hamer_full.to(torch.float32)).to(torch.float16)
+                    self.mirrored_videos.add(vid)
+
             # Compress to FP16 to keep RAM super low, and save it to the dictionary!
             final_tensor = final_tensor.to(torch.float16)
             
@@ -457,6 +515,11 @@ class SignSegmentationDataset(Dataset):
             else:
                 self.windows.append({'video_id': vid, 'start_idx': 0, 'end_idx': num_frames})
 
+        if self.hand_canonicalize:
+            print(f"[{split.upper()}] hand canonicalization: {len(self.mirrored_videos)}/{len(self.video_cache)} "
+                  f"videos mirrored (dominant hand moved to MediaPipe 'right')")
+        if self.mirror_augment_p > 0:
+            print(f"[{split.upper()}] mirror augmentation: p = {self.mirror_augment_p}")
         total_attempted = len(self.video_ids)
         total_cached = len(self.video_cache)
         if total_cached < total_attempted:
@@ -515,6 +578,14 @@ class SignSegmentationDataset(Dataset):
 
         if self.use_cue_features:
             cue_tensor = cached_data['cue_features'][start_idx:end_idx].to(torch.float32).permute(1, 0)  # (C, T_win)
+
+        # Mirror augmentation (train split only). The cue stream is dominant/non-dominant
+        # based and left/right symmetric, so it needs no change.
+        if self.mirror_augment_p > 0 and torch.rand(1).item() < self.mirror_augment_p:
+            final_input_tensor = mirror_graph_tv(final_input_tensor.permute(1, 2, 0), self._mirror_x_channels,
+                                                 self._face_mirror_perm).permute(2, 0, 1)
+            if self.use_hamer_features:
+                hamer_tensor = mirror_hamer(hamer_tensor.permute(1, 0)).permute(1, 0)
         
         # 4. Handle Downsampling & Padding
         if self.temporal_downsample_factor > 1:

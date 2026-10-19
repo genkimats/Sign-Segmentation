@@ -17,7 +17,7 @@ import seaborn as sns
 from sklearn.metrics import confusion_matrix
 
 # Import our custom modules
-from src.dataset import SignSegmentationDataset, cue_dataset_kwargs
+from src.dataset import SignSegmentationDataset, extra_dataset_kwargs
 from src.model_factory import MODEL_REGISTRY, build_model_kwargs
 # Full-video validation: same windows as training, probabilities stitched per video,
 # metrics against HARD gold labels (never the tolerance-smoothed ones).
@@ -200,7 +200,7 @@ def train_model(config, selection_metric="combined"):
         hamer_dir=HAMER_DIR,
         use_dinov2_features=USE_DINOV2_FEATURES,
         dinov2_dir=DINOV2_DIR,
-        **cue_dataset_kwargs(config),
+        **extra_dataset_kwargs(config),
     )
     
     val_dataset = SignSegmentationDataset(
@@ -224,7 +224,7 @@ def train_model(config, selection_metric="combined"):
         hamer_dir=HAMER_DIR,
         use_dinov2_features=USE_DINOV2_FEATURES,
         dinov2_dir=DINOV2_DIR,
-        **cue_dataset_kwargs(config),
+        **extra_dataset_kwargs(config),
     )
     
     loader_batch_size = 1 if USE_FULL_LENGTH else BATCH_SIZE
