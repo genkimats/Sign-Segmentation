@@ -311,7 +311,7 @@ _MS_BODY_HAMER = {
     "nhead": 8,
     "overlap": 0,
     "loss_function": "weighted_ce",
-    "class_weights": [1.0, 1.1, 12.4],
+    "class_weights": [1.0, 1.1, 8.5],
     "tolerance_window": 1,
     "kinematic_features": [],
     "phrase_labels_dir": "processed_data/BIO_tags_phrase_v2",
