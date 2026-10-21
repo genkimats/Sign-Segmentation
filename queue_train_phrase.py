@@ -22,7 +22,7 @@ MAMBA_DEFAULTS = {
     "patience": 10,
     "learning_rate": 0.0001,
     "num_vertices": 65,
-    "tolerance_window": 1,
+    "tolerance_window": 5,
     "temporal_downsample_factor": 1, 
     "loss_function": "weighted_ce",  
     "ctc_weight": 0.5,             
@@ -114,6 +114,12 @@ MAMBA_DEFAULTS = {
     "hamer_temporal_kernel": 1,
     # Training only: zero each stream of each sample with this probability
     "stream_dropout": 0.0,
+    # Change-point layer after fusion: future-minus-past feature differences at these
+    # scales (frames, 50 fps) before the encoder. None = off.
+    "change_point_scales": None,
+    # Per-job override of the selection metric asked at train_phrase.py start:
+    # None (use the prompt) | "combined" | "frame_f1" | "bnd5" (boundary F1 within +-5 frames)
+    "force_selection_metric": None,
     "d_model": 256,
     "n_layers": 4,     
     "mamba_d_state": 16,
@@ -442,8 +448,28 @@ FACE_FULL_STUDY = [
      "description": "FullFace: B+H+F compact + blendshapes (52)"},
 ]
 
-# What runs now. FRONTEND_STUDY is kept above; add it back if it has not been trained yet:
-#   EXPERIMENTS_TO_RUN = FRONTEND_STUDY + FACE_FULL_STUDY
+# ------------------------------------------------------------------------------
+# CHANGE-POINT STUDY (Tier 2): explicit "what comes next vs what came before" features
+# at several time scales, between fusion and the BiLSTM (src/frontend.py ChangePointLayer).
+# Target: the ~40% of phrase starts that are missed (mostly after SHORT pauses), so judge
+# it by boundary F1 +-5 (bnd_f1_5) and short-pause recall at tuned thresholds, not Frame F1.
+# Base = the best model, Body + HaMeR + Face(compact), 83-point face files.
+# ------------------------------------------------------------------------------
+CHANGE_POINT_STUDY = [
+    {**_MS_BEST, "change_point_scales": [5, 10, 25],
+     "description": "CP: B+H+Fc, change-point scales 5/10/25 (0.1-0.5 s)"},
+    {**_MS_BEST, "change_point_scales": [10, 25, 50],
+     "description": "CP: B+H+Fc, change-point scales 10/25/50 (0.2-1 s)"},
+    # Selecting the saved epoch by boundary F1 instead of the combined score: separates the
+    # effect of the selection criterion from the effect of the layer.
+    {**_MS_BEST, "force_selection_metric": "bnd5",
+     "description": "CP ref: B+H+Fc, no change-point, best epoch by boundary F1@5"},
+    {**_MS_BEST, "change_point_scales": [5, 10, 25], "force_selection_metric": "bnd5",
+     "description": "CP: B+H+Fc, change-point 5/10/25, best epoch by boundary F1@5"},
+]
+
+# What runs now (FRONTEND_STUDY / CUE_STUDY above are already trained):
+# EXPERIMENTS_TO_RUN = CHANGE_POINT_STUDY + FACE_FULL_STUDY
 EXPERIMENTS_TO_RUN = FACE_FULL_STUDY
 
 if CHOSEN_TYPE == 'mamba':

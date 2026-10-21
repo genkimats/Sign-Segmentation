@@ -91,6 +91,7 @@ def set_seed(seed):
 SELECTION_METRICS = {
     "combined": "Combined score (Frame F1 + IoU + %-score)",
     "frame_f1": "Frame F1 only",
+    "bnd5": "Boundary F1 within +-5 frames (phrase starts, argmax decoding)",
 }
 
 
@@ -103,20 +104,29 @@ def ask_selection_metric():
     print("\n📏 Which validation score should pick the best epoch and drive early stopping?")
     print("   [Enter] combined  -> Frame F1 + IoU + %-score (current method)")
     print("   f1               -> Frame F1 only")
+    print("   bnd              -> Boundary F1 within +-5 frames (phrase starts)")
     while True:
         choice = input("Selection metric: ").strip().lower()
         if choice in ("", "combined", "c"):
             metric = "combined"
         elif choice in ("f1", "frame_f1", "frame f1"):
             metric = "frame_f1"
+        elif choice in ("bnd", "bnd5", "b"):
+            metric = "bnd5"
         else:
-            print("⚠️  Please press Enter (combined) or type 'f1'.")
+            print("⚠️  Please press Enter (combined) or type 'f1' or 'bnd'.")
             continue
         print(f"✅ Using: {SELECTION_METRICS[metric]}\n")
         return metric
 
 
 def train_model(config, selection_metric="combined"):
+    # A queue entry can force its own selection metric (e.g. "bnd5"), overriding the prompt.
+    if config.get("force_selection_metric"):
+        selection_metric = config["force_selection_metric"]
+        if selection_metric not in SELECTION_METRICS:
+            raise ValueError(f"force_selection_metric must be one of {sorted(SELECTION_METRICS)}.")
+        print(f"📏 This job selects its best epoch by: {SELECTION_METRICS[selection_metric]} (forced by its config)")
     print(f"\n{'='*60}\n🚀 STARTING QUEUED JOB\n{'='*60}")
     print(json.dumps(config, indent=4))
 
@@ -303,7 +313,8 @@ def train_model(config, selection_metric="combined"):
         with open(metrics_log_path, mode='w', newline='') as file:
             writer = csv.writer(file)
             writer.writerow(['epoch', 'train_loss', 'val_loss', 'frame_f1', 'iou', 'segment_pct',
-                             'segment_f1_05', 'combined_score', 'epoch_time', 'epoch_nan_count'])
+                             'segment_f1_05', 'combined_score', 'epoch_time', 'epoch_nan_count',
+                             'bnd_f1_5'])
         
         best_combined_score = -1.0
         best_epoch = 0
@@ -477,7 +488,8 @@ def train_model(config, selection_metric="combined"):
             # Frame F1 + IoU + %-score, where %-score = max(0, 1 - |% - 1|) (1.0 = perfect count)
             combined_score = val_metrics["Combined"]
             # The score that decides "New Best" and early stopping (chosen at startup).
-            selection_score = epoch_f1 if selection_metric == "frame_f1" else combined_score
+            selection_score = {"frame_f1": epoch_f1, "bnd5": val_metrics["BndF1_5"]}.get(selection_metric,
+                                                                                        combined_score)
             
             if selection_score > best_combined_score:
                 best_combined_score = selection_score
@@ -523,12 +535,14 @@ def train_model(config, selection_metric="combined"):
                   f"IoU: {epoch_iou:.4f} | "
                   f"%: {epoch_pct:.4f} | "
                   f"SegF1@0.5: {epoch_seg_f1:.4f} | "
+                  f"BndF1@5: {val_metrics['BndF1_5']:.4f} | "
                   f"Time: {epoch_duration}s{nan_string}" + (" 🌟 (New Best!)" if is_best else f" (No improvement x{epochs_without_improvement})"))
                   
             with open(metrics_log_path, mode='a', newline='') as file:
                 writer = csv.writer(file)
                 writer.writerow([epoch, avg_train_loss, avg_val_loss, epoch_f1, epoch_iou, epoch_pct,
-                                 epoch_seg_f1, combined_score, epoch_duration, epoch_nan_count])
+                                 epoch_seg_f1, combined_score, epoch_duration, epoch_nan_count,
+                                 round(val_metrics["BndF1_5"], 4)])
 
             if EARLY_STOPPING and epochs_without_improvement >= PATIENCE and epoch >= MIN_EPOCHS:
                 print(f"\n🛑 Early stopping triggered! No improvement in combined score for {PATIENCE} epochs (Minimum {MIN_EPOCHS} epochs met).")
@@ -584,7 +598,7 @@ def train_model(config, selection_metric="combined"):
     model_save_path = os.path.join(model_dir, f"{run_name}.pth")
     if best_model_state:
         torch.save(best_model_state, model_save_path)
-        score_name = "Frame F1" if selection_metric == "frame_f1" else "Combined Score"
+        score_name = {"frame_f1": "Frame F1", "bnd5": "Boundary F1@5"}.get(selection_metric, "Combined Score")
         print(f"✅ Best Model (Epoch {best_epoch} | {score_name}: {best_combined_score:.4f}) saved to {model_save_path}")
     else:
         torch.save(model.state_dict(), model_save_path)

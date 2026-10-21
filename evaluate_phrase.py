@@ -36,7 +36,7 @@ from src.dataset import SignSegmentationDataset, extra_dataset_kwargs
 from src.model_factory import build_model_kwargs
 from src.evaluation import predict_split
 from src.metrics import evaluate_videos, pct_score, extract_segments, decode_threshold_2023, segment_iou
-from src.metrics import boundary_type_analysis, BOUNDARY_TYPES, BOUNDARY_TYPE_LABELS
+from src.metrics import boundary_type_analysis, BOUNDARY_TYPES, BOUNDARY_TYPE_LABELS, BND_TOLERANCES
 
 EXP_DIR = "experiments_phrase"
 MODEL_DIR = "saved_models_phrase"
@@ -165,19 +165,27 @@ def get_dataset(config, split):
 # ==============================================================================
 # Evaluation of one run
 # ==============================================================================
-def sweep_thresholds(video_probs, video_gold, grid):
+SWEEP_SCORES = {
+    "iou_pct": ("IoU + %-score (2023 style)", lambda m: m["IoU"] + pct_score(m["Pct"])),
+    "bnd5": ("boundary F1 within +-5 frames", lambda m: m["BndF1_5"]),
+}
+
+
+def sweep_thresholds(video_probs, video_gold, grid, score="iou_pct"):
     """
-    Tunes (b, o) thresholds on THIS split by IoU + %-score. Results on the same split
-    are optimistic. Each grid point only computes IoU and % (light mode, gold segments
-    computed once); full metrics are computed once for the best pair.
+    Tunes (b, o) thresholds on the given predictions by SWEEP_SCORES[score]. Tuning and
+    reporting on the same split is optimistic -- use --tune-on val with --split test for
+    honest test numbers. Each grid point runs in light mode (gold segments computed once);
+    full metrics are computed once for the best pair.
     """
+    score_fn = SWEEP_SCORES[score][1]
     gold_cache = {}
     best = None
     for b in grid:
         for o in grid:
             m = evaluate_videos(video_probs, video_gold, decoder="threshold", b_threshold=b,
                                 o_threshold=o, light=True, gold_segments_cache=gold_cache)
-            score = m["IoU"] + pct_score(m["Pct"])
+            score = score_fn(m)
             if best is None or score > best[0]:
                 best = (score, b, o)
     _, b_best, o_best = best
@@ -238,7 +246,7 @@ def diagnose(video_probs, video_gold, b_threshold, o_threshold):
 
 
 def evaluate_run(run_name, split, device, b_threshold, o_threshold, do_sweep, batch_size_override,
-                 sweep_step=0.1, do_diagnose=False, swap_ib=False):
+                 sweep_step=0.1, do_diagnose=False, swap_ib=False, sweep_score="iou_pct", tune_on=None):
     cfg_path = os.path.join(EXP_DIR, run_name, "hyperparameters.json")
     ckpt_path = os.path.join(MODEL_DIR, f"{run_name}.pth")
     with open(cfg_path) as f:
@@ -280,16 +288,29 @@ def evaluate_run(run_name, split, device, b_threshold, o_threshold, do_sweep, ba
         diagnose(video_probs, video_gold, b_threshold, o_threshold)
 
     best_thresholds = None
+    grid = [round(x, 4) for x in np.arange(0.3, 0.9 + 1e-9, sweep_step)]
     if do_sweep:
         t0 = time.time()
-        grid = [round(x, 4) for x in np.arange(0.3, 0.9 + 1e-9, sweep_step)]
-        _, b_best, o_best, m_best = sweep_thresholds(video_probs, video_gold, grid)
+        _, b_best, o_best, m_best = sweep_thresholds(video_probs, video_gold, grid, sweep_score)
         results["swept"] = m_best
         best_thresholds = (b_best, o_best)
-        print(f"  [time] threshold sweep ({len(grid)}x{len(grid)} = {len(grid) ** 2} pairs): "
-              f"{time.time() - t0:.1f}s")
+        print(f"  [time] threshold sweep by {SWEEP_SCORES[sweep_score][0]} "
+              f"({len(grid)}x{len(grid)} = {len(grid) ** 2} pairs): {time.time() - t0:.1f}s")
 
-    return config, results, best_thresholds, dataset, video_probs, video_gold
+    tuned_thresholds = None
+    if tune_on and tune_on != split:
+        # Honest tuning: thresholds chosen on another split (e.g. val), applied here (e.g. test).
+        t0 = time.time()
+        tune_ds = get_dataset(config, tune_on)
+        tp, tg = predict_split(model, config, tune_ds, device, batch_size=batch_size)
+        _, b_t, o_t, _ = sweep_thresholds(tp, tg, grid, sweep_score)
+        results["tuned"] = evaluate_videos(video_probs, video_gold, decoder="threshold",
+                                           b_threshold=b_t, o_threshold=o_t)
+        tuned_thresholds = (b_t, o_t)
+        print(f"  [time] thresholds tuned on {tune_on} by {SWEEP_SCORES[sweep_score][0]}: "
+              f"b={b_t} o={o_t} ({time.time() - t0:.1f}s)")
+
+    return config, results, (best_thresholds, tuned_thresholds), dataset, video_probs, video_gold
 
 
 def print_boundary_types(bt):
@@ -362,6 +383,12 @@ def main():
     parser.add_argument("--b-threshold", type=float, default=0.5, help="B threshold for 2023-style decoding.")
     parser.add_argument("--o-threshold", type=float, default=0.5, help="O threshold for 2023-style decoding.")
     parser.add_argument("--sweep", action="store_true", help="Also tune thresholds on this split (0.3..0.9).")
+    parser.add_argument("--sweep-metric", choices=sorted(SWEEP_SCORES), default="iou_pct",
+                        help="What the threshold sweep / --tune-on maximizes: iou_pct (IoU + %%-score, "
+                             "2023 style, default) or bnd5 (boundary F1 within +-5 frames).")
+    parser.add_argument("--tune-on", choices=["val", "test"], default=None,
+                        help="Tune thresholds on THIS split and apply them to --split (e.g. --split test "
+                             "--tune-on val): an extra 'tuned(val)' row with honest, non-optimistic numbers.")
     parser.add_argument("--batch-size", type=int, default=None,
                         help="Inference batch size (default: the run's training batch_size). "
                              "Larger = faster, more GPU memory; results are identical.")
@@ -418,9 +445,10 @@ def main():
         print(f"\n--- {run_name} ---")
         try:
             t_run = time.time()
-            config, results, best_thr, dataset, video_probs, video_gold = evaluate_run(
+            config, results, (best_thr, tuned_thr), dataset, video_probs, video_gold = evaluate_run(
                 run_name, args.split, device, args.b_threshold, args.o_threshold,
-                args.sweep, args.batch_size, args.sweep_step, args.diagnose, args.swap_ib)
+                args.sweep, args.batch_size, args.sweep_step, args.diagnose, args.swap_ib,
+                args.sweep_metric, args.tune_on)
         except Exception as e:
             print(f"⚠️  Skipped {run_name}: {type(e).__name__}: {e}")
             continue
@@ -435,18 +463,24 @@ def main():
                     ("threshold", f"thr b={args.b_threshold} o={args.o_threshold}", None)]
         if best_thr:
             decoders.append(("swept", f"swept b={best_thr[0]} o={best_thr[1]}", best_thr))
+        if tuned_thr:
+            decoders.append(("tuned", f"tuned({args.tune_on}) b={tuned_thr[0]} o={tuned_thr[1]}", tuned_thr))
 
         for key, label, _ in decoders:
             m = results[key]
             print(f"  [{label:<22}] Frame F1 {m['Frame_F1']:.4f} | IoU {m['IoU']:.4f} | "
                   f"% (ratio) {m['Pct']:.4f} | SegF1@0.5 {m['Segment_F1_05']:.4f}")
+            print(f"  {'':<24} Boundary F1 (+-1/2/5/10/25 fr): "
+                  + " / ".join(f"{m[f'BndF1_{k}']:.3f}" for k in BND_TOLERANCES)
+                  + f"   (P/R @5: {m['BndP_5']:.3f} / {m['BndR_5']:.3f}, "
+                    f"{m['Bnd_n_pred']} predicted vs {m['Bnd_n_gold']} gold starts)")
             if key == "argmax":  # per-class F1 is decoder-independent (always argmax)
                 print(f"  {'':<24} Frame F1 per class: O {m['F1_O']:.4f} | I {m['F1_I']:.4f} | "
                       f"B {m['F1_B']:.4f}  (Frame F1 = their average)")
             if args.per_video:
                 print_per_video(m["per_video"])
             if args.boundary_types:
-                thr = best_thr if key == "swept" else (args.b_threshold, args.o_threshold)
+                thr = {"swept": best_thr, "tuned": tuned_thr}.get(key, (args.b_threshold, args.o_threshold))
                 bt = boundary_type_analysis(
                     video_probs, video_gold, decoder="argmax" if key == "argmax" else "threshold",
                     b_threshold=thr[0], o_threshold=thr[1], tolerances=args.tolerances,
@@ -479,6 +513,11 @@ def main():
                 "iou": round(m["IoU"], 4),
                 "segment_pct": round(m["Pct"], 4),
                 "segment_f1_05": round(m["Segment_F1_05"], 4),
+                **{f"bnd_f1_{k}": round(m[f"BndF1_{k}"], 4) for k in BND_TOLERANCES},
+                "bnd_p_5": round(m["BndP_5"], 4),
+                "bnd_r_5": round(m["BndR_5"], 4),
+                "bnd_n_pred": m["Bnd_n_pred"],
+                "bnd_n_gold": m["Bnd_n_gold"],
                 "videos_evaluated": len(dataset.video_cache),
                 "videos_skipped": sum(len(v) for v in getattr(dataset, "skipped_videos", {}).values()),
                 "window_size": config["window_size"],

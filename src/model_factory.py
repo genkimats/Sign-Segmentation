@@ -196,6 +196,8 @@ def build_model_kwargs(config, detected_hamer_dim=None, detected_dinov2_dim=None
         # configs / checkpoints rebuild unchanged.
         model_kwargs["vertex_pooling"] = config.get("vertex_pooling", "flatten")
         model_kwargs["stream_dropout"] = float(config.get("stream_dropout", 0.0))
+        if config.get("change_point_scales"):
+            model_kwargs["change_point_scales"] = [int(w) for w in config["change_point_scales"]]
         if streams["use_stream_hamer"]:
             model_kwargs["hamer_rep"] = config.get("hamer_rep", "matrix")
             model_kwargs["hamer_mask"] = bool(config.get("hamer_mask", False))

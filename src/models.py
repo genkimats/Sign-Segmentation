@@ -6,7 +6,7 @@ from mamba_ssm import Mamba
 from src.graph import SkeletonGraph
 from src.stgcn import STGCNBlock
 from src.stgcn import DecoupledSTGCNBlock
-from src.frontend import HaMeRFrontEnd, TemporalResidual, VertexPooling, BODY_PARTS, face_parts
+from src.frontend import HaMeRFrontEnd, TemporalResidual, VertexPooling, BODY_PARTS, face_parts, ChangePointLayer
 from src.face_subsets import face_subset_for_vertex_count
 from src.skeleton_angles import skeleton_angle_features, ANGLE_FEATURE_DIM
 
@@ -2289,6 +2289,9 @@ class MultiStreamSegmenter(nn.Module):
                           face streams get temporal context from their ST-GCN; HaMeR had none)
       stream_dropout      training only: each stream of each sample is zeroed with this
                           probability (at least one stream is always kept)
+      change_point_scales e.g. (5, 10, 25): after fusion, add future-minus-past feature
+                          differences at these scales (frames) before the encoder
+                          (ChangePointLayer; identity at initialization). None/() = off.
     """
     STREAM_ORDER = ("body_hands", "face", "hamer", "cues")
 
@@ -2301,7 +2304,8 @@ class MultiStreamSegmenter(nn.Module):
                  face_channels=None, attn_layers=1,
                  use_stream_cues=False, cue_dim=None, cue_proj_dim=128, cue_temporal_kernel=1,
                  vertex_pooling="flatten", hamer_rep="matrix", hamer_mask=False, hamer_motion=False,
-                 hamer_motion_lag=1, hamer_temporal_kernel=1, stream_dropout=0.0):
+                 hamer_motion_lag=1, hamer_temporal_kernel=1, stream_dropout=0.0,
+                 change_point_scales=None):
         super().__init__()
         if fusion not in ("concat", "gated_sum"):
             raise ValueError(f"fusion must be 'concat' or 'gated_sum', got '{fusion}'.")
@@ -2403,6 +2407,9 @@ class MultiStreamSegmenter(nn.Module):
             self.stream_dims = {name: d_model for name in self.streams}
             self.gates = nn.Parameter(torch.ones(len(self.streams)))
             self.fusion_norm = nn.Sequential(nn.LayerNorm(d_model), nn.Dropout(dropout))
+
+        if change_point_scales:
+            self.change_point = ChangePointLayer(d_model, change_point_scales, dropout)
 
         if encoder == "bilstm":
             self.lstm = nn.LSTM(input_size=d_model, hidden_size=d_model, num_layers=n_layers,
@@ -2523,6 +2530,9 @@ class MultiStreamSegmenter(nn.Module):
             fused = self.fusion_norm(sum(contrib.values()))
             if self._capture is not None:
                 self._capture(z, contrib)
+
+        if hasattr(self, "change_point"):
+            fused = self.change_point(fused)
 
         if self.encoder_type == "bilstm":
             emb, _ = self.lstm(fused)

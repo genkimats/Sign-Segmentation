@@ -300,3 +300,51 @@ class VertexPooling(nn.Module):
             a = torch.softmax(s, dim=-1)
             pooled = torch.einsum("bctv,btpv->btpc", h, a)
         return pooled.reshape(B, T, self.num_parts * C)
+
+
+# ==============================================================================
+# Change-point layer (between fusion and encoder)
+# ==============================================================================
+class ChangePointLayer(nn.Module):
+    """
+    Phrase boundaries are CHANGES (hands relax / start, head lifts, brows rise ...). This
+    layer gives the encoder explicit "how different is what comes next from what came
+    before" features at several time scales:
+        d_w(t) = mean(h[t : t+w]) - mean(h[t-w : t])          for w in scales
+    (edges use the frames that exist; 0 where one side is empty), plus the norm of each
+    d_w. They are projected back to the model width and added residually:
+        h_out = LayerNorm(h + Linear([d_w1, ..., |d_w1|, ...]))
+    The Linear starts at zero, so at initialization the layer is an exact identity and
+    the model can only gain from it. Computed with cumulative sums (O(T) per scale).
+    """
+
+    def __init__(self, dim, scales=(5, 10, 25), dropout=0.0):
+        super().__init__()
+        self.scales = [int(w) for w in scales]
+        if not self.scales or min(self.scales) < 1:
+            raise ValueError(f"change_point_scales must be positive frame counts, got {scales}.")
+        n = len(self.scales)
+        self.proj = nn.Linear(n * dim + n, dim)
+        nn.init.zeros_(self.proj.weight)
+        nn.init.zeros_(self.proj.bias)
+        self.drop = nn.Dropout(dropout)
+        self.norm = nn.LayerNorm(dim)
+
+    @staticmethod
+    def _diffs(h, w):
+        B, T, D = h.shape
+        c = torch.cat([h.new_zeros(B, 1, D), h.cumsum(dim=1)], dim=1)           # (B, T+1, D)
+        t = torch.arange(T, device=h.device)
+        lo = (t - w).clamp(min=0)
+        hi = (t + w).clamp(max=T)
+        past_n = (t - lo).to(h.dtype)                                            # frames in [t-w, t)
+        fut_n = (hi - t).to(h.dtype)                                             # frames in [t, t+w)
+        past = (c[:, t] - c[:, lo]) / past_n.clamp(min=1)[None, :, None]
+        fut = (c[:, hi] - c[:, t]) / fut_n.clamp(min=1)[None, :, None]
+        valid = ((past_n > 0) & (fut_n > 0)).to(h.dtype)[None, :, None]
+        return (fut - past) * valid
+
+    def forward(self, h):
+        diffs = [self._diffs(h, w) for w in self.scales]
+        norms = [d.norm(dim=-1, keepdim=True) for d in diffs]
+        return self.norm(h + self.drop(self.proj(torch.cat(diffs + norms, dim=-1))))

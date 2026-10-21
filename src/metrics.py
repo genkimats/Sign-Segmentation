@@ -217,8 +217,11 @@ def pct_score(pct):
 # ==============================================================================
 # Split-level evaluation
 # ==============================================================================
+BND_TOLERANCES = (1, 2, 5, 10, 25)
+
+
 def evaluate_videos(video_probs, video_gold, decoder="argmax", b_threshold=0.5, o_threshold=0.5,
-                    light=False, gold_segments_cache=None):
+                    light=False, gold_segments_cache=None, bnd_tolerances=BND_TOLERANCES):
     """
     video_probs: dict vid -> (3, T) numpy array of stitched class probabilities (O, I, B)
     video_gold:  dict vid -> (T,) numpy int array of HARD gold labels (0/1/2)
@@ -231,12 +234,19 @@ def evaluate_videos(video_probs, video_gold, decoder="argmax", b_threshold=0.5, 
     change segments, exactly like in the 2023 paper, where tuned decoding leaves F1
     unchanged).
 
-    light=True: only IoU and % (what a threshold sweep needs); Frame F1 and
-    Segment F1@0.5 are skipped (returned as NaN). Same IoU/% values as the full mode.
+    light=True: only IoU, % and boundary F1 (what a threshold sweep needs); Frame F1 and
+    Segment F1@0.5 are skipped (returned as NaN). Same values as the full mode.
+
+    Boundary F1@k (BndF1_k, BndP_k, BndR_k): predicted phrase STARTS (segment starts of the
+    decoded prediction) matched one-to-one to gold phrase starts within +-k frames, counts
+    pooled over all videos. Unlike the frame-level B F1, a start found 3 frames early counts
+    as found at k >= 3.
     gold_segments_cache: optional dict vid -> gold segments, filled/reused across calls.
     """
     all_true, all_pred = [], []
     ious, pcts, seg_f1s = [], [], []
+    bnd_tp = {k: 0 for k in bnd_tolerances}
+    bnd_n_pred = bnd_n_gold = 0
     per_video = {}
 
     for vid, probs in video_probs.items():
@@ -262,6 +272,14 @@ def evaluate_videos(video_probs, video_gold, decoder="argmax", b_threshold=0.5, 
             pred_segments = decode_threshold_2023(probs, b_threshold, o_threshold)
         else:
             raise ValueError(f"Unknown decoder '{decoder}'")
+
+        gold_starts = [s for s, _ in gold_segments]
+        pred_starts = [s for s, _ in pred_segments]
+        bnd_n_gold += len(gold_starts)
+        bnd_n_pred += len(pred_starts)
+        for k in bnd_tolerances:
+            g_ok, _, _ = match_boundaries(gold_starts, pred_starts, k)
+            bnd_tp[k] += int(g_ok.sum())
 
         iou = segment_iou(pred_segments, gold_segments, T)
         pct = segment_percentage(pred_segments, gold_segments)
@@ -303,7 +321,16 @@ def evaluate_videos(video_probs, video_gold, decoder="argmax", b_threshold=0.5, 
     mean_iou = float(np.mean(ious))
     mean_pct = float(np.mean(pcts)) if pcts else float("nan")
 
+    bnd = {}
+    for k in bnd_tolerances:
+        prec = bnd_tp[k] / bnd_n_pred if bnd_n_pred else 0.0
+        rec = bnd_tp[k] / bnd_n_gold if bnd_n_gold else 0.0
+        bnd[f"BndP_{k}"], bnd[f"BndR_{k}"] = prec, rec
+        bnd[f"BndF1_{k}"] = 2 * prec * rec / (prec + rec) if prec + rec > 0 else 0.0
+    bnd["Bnd_n_pred"], bnd["Bnd_n_gold"] = bnd_n_pred, bnd_n_gold
+
     return {
+        **bnd,
         "Frame_F1": float(frame_f1),
         "F1_O": float(per_class_f1[0]),
         "F1_I": float(per_class_f1[1]),
