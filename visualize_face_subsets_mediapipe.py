@@ -101,7 +101,9 @@ def _make_detector(model_path):
         from mediapipe.tasks import python as mp_python
         from mediapipe.tasks.python import vision
         opts = vision.FaceLandmarkerOptions(base_options=mp_python.BaseOptions(model_asset_path=_find_model(model_path)),
-                                            running_mode=vision.RunningMode.IMAGE, num_faces=1)
+                                            running_mode=vision.RunningMode.IMAGE, num_faces=1,
+                                            min_face_detection_confidence=0.3,
+                                            min_face_presence_confidence=0.3)
         lm = vision.FaceLandmarker.create_from_options(opts)
 
         def detect(rgb):
@@ -120,20 +122,44 @@ def _make_detector(model_path):
     return detect, hol.close
 
 
-def mean_mediapipe_face(video, n_frames, model_path=None):
+def _detect_with_crops(detect, rgb):
+    """Full frame first; if no face, retry on upscaled crops (small faces in wide frames).
+    Returns normalized (x, y) in FULL-frame coordinates, or None."""
+    H, W = rgb.shape[:2]
+    lm = detect(rgb)
+    if lm is not None:
+        return lm
+    # (x0, y0, x1, y1) as fractions: upper half, upper-centre, left / right upper halves
+    for fx0, fy0, fx1, fy1 in [(0, 0, 1, .6), (.2, 0, .8, .6), (0, 0, .6, .6), (.4, 0, 1, .6)]:
+        x0, y0, x1, y1 = int(fx0 * W), int(fy0 * H), int(fx1 * W), int(fy1 * H)
+        crop = cv2.resize(rgb[y0:y1, x0:x1], None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
+        lm = detect(crop)
+        if lm is not None:
+            return np.stack([(x0 + lm[:, 0] * (x1 - x0)) / W, (y0 + lm[:, 1] * (y1 - y0)) / H], axis=1)
+    return None
+
+
+def mean_mediapipe_face(video, n_frames, model_path=None, detector=None):
+    """Median face-local face over ~n_frames evenly spaced frames (reads frames sequentially,
+    so a missing / wrong frame count in the container does not matter)."""
     cap = cv2.VideoCapture(video)
+    if not cap.isOpened():
+        print(f"  cannot open {video}")
+        return None, 0
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    W, H = cap.get(cv2.CAP_PROP_FRAME_WIDTH), cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
-    targets = set(np.linspace(0, max(total - 1, 0), n_frames).astype(int).tolist())
-    detect, close = _make_detector(model_path)
-    faces = []
-    for i in range(total):
+    stride = max(1, total // n_frames) if total > 0 else 25
+    detect = detector
+    faces, read, tried = [], 0, 0
+    while len(faces) < n_frames:
         ok, frame = cap.read()
         if not ok:
             break
-        if i not in targets:
+        read += 1
+        if (read - 1) % stride:
             continue
-        lm = detect(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+        tried += 1
+        H, W = frame.shape[:2]
+        lm = _detect_with_crops(detect, cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
         if lm is None:
             continue
         xy = lm[:468] * np.array([W, H])                                     # pixels, mesh points only
@@ -143,9 +169,9 @@ def mean_mediapipe_face(video, n_frames, model_path=None):
         R = np.array([[np.cos(a), -np.sin(a)], [np.sin(a), np.cos(a)]])
         faces.append(((xy - origin) @ R.T) / np.linalg.norm(eye))
     cap.release()
-    close()
+    print(f"  {os.path.basename(video)}: {read} frames read, {tried} tried, face found in {len(faces)}")
     if not faces:
-        raise SystemExit(f"MediaPipe found no face in the sampled frames of {video}.")
+        return None, 0
     return np.median(np.stack(faces), axis=0), len(faces)
 
 
@@ -191,10 +217,19 @@ def main():
     p.add_argument("--out-dir", default=os.path.join("evaluation_phrase", "face_subsets"))
     args = p.parse_args()
 
-    video = args.video or next(iter(sorted(glob.glob(os.path.join("raw_data", "videos", "*.mp4")))), None)
-    if video is None:
+    videos = [args.video] if args.video else sorted(glob.glob(os.path.join("raw_data", "videos", "*.mp4")))[:8]
+    if not videos:
         raise SystemExit("No video found -- pass --video.")
-    face, n = mean_mediapipe_face(video, args.frames, args.model)
+    detect, close = _make_detector(args.model)
+    face = None
+    for video in videos:                      # without --video: try up to 8 videos
+        face, n = mean_mediapipe_face(video, args.frames, args.model, detector=detect)
+        if face is not None:
+            break
+    close()
+    if face is None:
+        raise SystemExit("MediaPipe found no face. Check that the video plays (e.g. open one frame with "
+                         "cv2) and pass a clear frontal video with --video.")
     os.makedirs(args.out_dir, exist_ok=True)
 
     overlap = len(set(CONTOUR_POINTS) & set(SAVED_FACE_INDICES))
