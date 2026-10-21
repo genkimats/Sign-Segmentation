@@ -36,6 +36,7 @@ saved in _detection/ for analysis.
 
 Run from the repo root:
     python data_processing/normalize_face_keypoints_v2.py
+    python data_processing/normalize_face_keypoints_v2.py --layout full   # 478-point files -> face_keypoints_full_normalized_v2
     python data_processing/normalize_face_keypoints_v2.py --no-roll-align --scale per_frame --overwrite
 """
 import argparse
@@ -56,9 +57,28 @@ RAW_FACE_DIR = "processed_data/face_keypoints"
 OUTPUT_DIR = "processed_data/face_keypoints_normalized_v2"
 RAW_VIDEO_DIR = "raw_data/videos"
 
-_POS = {raw: i for i, raw in enumerate(SAVED_FACE_INDICES)}
+# --layout saved83 (default): the 83-point files of extract_face_keypoints.py
+# --layout full            : the 478-point files of extract_face_keypoints_full.py
+#                            (vertex index = MediaPipe index)
+LAYOUTS = {
+    "saved83": {"in": "processed_data/face_keypoints", "out": "processed_data/face_keypoints_normalized_v2",
+                "n": len(SAVED_FACE_INDICES), "pos": {raw: i for i, raw in enumerate(SAVED_FACE_INDICES)}},
+    "full": {"in": "processed_data/face_keypoints_full", "out": "processed_data/face_keypoints_full_normalized_v2",
+             "n": 478, "pos": {i: i for i in range(478)}},
+}
+_POS = LAYOUTS["saved83"]["pos"]
 LEFT_INNER, RIGHT_INNER = _POS[133], _POS[362]   # inner eye corners  -> origin
 LEFT_OUTER, RIGHT_OUTER = _POS[33], _POS[263]    # outer eye corners  -> scale / roll
+N_POINTS = len(SAVED_FACE_INDICES)
+
+
+def set_layout(name, in_dir=None, out_dir=None):
+    global RAW_FACE_DIR, OUTPUT_DIR, LEFT_INNER, RIGHT_INNER, LEFT_OUTER, RIGHT_OUTER, N_POINTS
+    L = LAYOUTS[name]
+    RAW_FACE_DIR, OUTPUT_DIR = in_dir or L["in"], out_dir or L["out"]
+    LEFT_INNER, RIGHT_INNER = L["pos"][133], L["pos"][362]
+    LEFT_OUTER, RIGHT_OUTER = L["pos"][33], L["pos"][263]
+    N_POINTS = L["n"]
 
 
 def find_video_size(vid):
@@ -97,8 +117,11 @@ def interpolate_missing(x, detected):
     return out.reshape(x.shape)
 
 
-def normalize(raw, width, height, roll_align=True, scale_mode="video"):
-    detected = detection_mask(raw)
+def normalize(raw, width, height, roll_align=True, scale_mode="video", detected=None):
+    if detected is None:
+        detected = detection_mask(raw)       # 83-point files: infer zero / forward-filled frames
+    else:
+        detected = np.asarray(detected, dtype=bool)[:len(raw)] & np.any(raw.reshape(len(raw), -1) != 0, axis=1)
     if not detected.any():
         return None, detected, None
 
@@ -130,18 +153,21 @@ def normalize(raw, width, height, roll_align=True, scale_mode="video"):
 
 
 def process_one(args):
-    fname, roll_align, scale_mode, overwrite = args
+    fname, roll_align, scale_mode, overwrite, layout, in_dir, out_dir = args
+    set_layout(layout, in_dir, out_dir)          # explicit, so worker processes agree
     vid = fname[:-4]
     out_path = os.path.join(OUTPUT_DIR, fname)
     if os.path.exists(out_path) and not overwrite:
         return vid, "exists", None
     raw = np.load(os.path.join(RAW_FACE_DIR, fname))
-    if raw.ndim != 3 or raw.shape[1] != len(SAVED_FACE_INDICES) or raw.shape[2] < 2:
+    if raw.ndim != 3 or raw.shape[1] != N_POINTS or raw.shape[2] < 2:
         return vid, f"bad_shape {raw.shape}", None
     size = find_video_size(vid)
+    det_path = os.path.join(RAW_FACE_DIR, "_detection", fname)   # saved by extract_face_keypoints_full.py
+    saved_det = np.load(det_path) if os.path.exists(det_path) else None
     if size is None:
         return vid, "no_video_for_size", None
-    out, detected, info = normalize(raw, size[0], size[1], roll_align, scale_mode)
+    out, detected, info = normalize(raw, size[0], size[1], roll_align, scale_mode, saved_det)
     if out is None:
         return vid, "no_face_detected", None
     np.save(out_path, out)
@@ -156,14 +182,21 @@ def main():
                         help="Inter-ocular scale: per-video median (default) or per frame.")
     parser.add_argument("--workers", type=int, default=8)
     parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument("--layout", choices=sorted(LAYOUTS), default="saved83",
+                        help="saved83 = the 83-point files (default, as before); full = all 478 landmarks "
+                             "from extract_face_keypoints_full.py")
+    parser.add_argument("--input-dir", default=None, help="override the layout's input folder")
+    parser.add_argument("--output-dir", default=None, help="override the layout's output folder")
     args = parser.parse_args()
+    set_layout(args.layout, args.input_dir, args.output_dir)
 
     os.makedirs(os.path.join(OUTPUT_DIR, "_detection"), exist_ok=True)
-    files = sorted(f for f in os.listdir(RAW_FACE_DIR) if f.endswith(".npy"))
+    files = sorted(f for f in os.listdir(RAW_FACE_DIR) if f.endswith(".npy") and not f.startswith("_"))
     print(f"{len(files)} raw face files -> {OUTPUT_DIR} "
           f"(2D, origin=inner eye corners, roll_align={not args.no_roll_align}, scale={args.scale})")
 
-    jobs = [(f, not args.no_roll_align, args.scale, args.overwrite) for f in files]
+    jobs = [(f, not args.no_roll_align, args.scale, args.overwrite, args.layout, RAW_FACE_DIR, OUTPUT_DIR)
+            for f in files]
     skips, infos = {}, {}
     with mproc.Pool(max(1, args.workers)) as pool:
         for vid, reason, info in tqdm(pool.imap_unordered(process_one, jobs), total=len(jobs)):
