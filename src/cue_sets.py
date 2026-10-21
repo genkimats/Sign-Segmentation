@@ -118,12 +118,28 @@ CUE_SETS = {
 }
 
 
+def cue_names_path(cue_dir):
+    """Channel-name file of a cue directory: <dir>/_names.json (extract_cue_features.py), or
+    for the blendshape scores of extract_face_keypoints_full.py (<face dir>/_blendshapes/)
+    the parent's _blendshape_names.json."""
+    import os
+    own = os.path.join(cue_dir, "_names.json")
+    if os.path.exists(own):
+        return own
+    parent = os.path.join(os.path.dirname(os.path.normpath(cue_dir)), "_blendshape_names.json")
+    return parent if os.path.exists(parent) else own
+
+
 def resolve_cue_set(cue_set, file_names=None):
     """
     cue_set: a name from CUE_SETS, or an explicit list of cue names.
     file_names: the channel names stored in the cue files (_names.json); used to check
     availability and to return channel indices. Returns (names, indices or None).
     """
+    if cue_set == "file":            # every channel the files hold (e.g. the 52 blendshapes)
+        if file_names is None:
+            raise ValueError("cue_set='file' needs the cue directory's channel-name file.")
+        return list(file_names), list(range(len(file_names)))
     if isinstance(cue_set, str):
         if cue_set not in CUE_SETS:
             raise ValueError(f"Unknown cue_set '{cue_set}'. Options: {sorted(CUE_SETS)} or a list of names.")

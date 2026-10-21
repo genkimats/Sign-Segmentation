@@ -5,8 +5,8 @@ import numpy as np
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
-from src.face_subsets import face_subset_positions, SAVED_FACE_INDICES
-from src.cue_sets import resolve_cue_set
+from src.face_subsets import face_subset_positions, SAVED_FACE_INDICES, FACE_LAYOUTS
+from src.cue_sets import resolve_cue_set, cue_names_path
 from src.frontend import dominant_wrist, mirror_graph_tv, mirror_hamer, face_mirror_perm, L_WRIST, R_WRIST
 
 CUE_DEFAULT_DIR = "processed_data/cue_features"
@@ -22,6 +22,7 @@ def extra_dataset_kwargs(config):
             "cue_dir": config.get("cue_dir", CUE_DEFAULT_DIR),
             "cue_set": config.get("cue_set", "selected"),
             "hand_canonicalize": bool(config.get("hand_canonicalize", False)),
+            "face_layout": config.get("face_layout", "saved83"),
             "mirror_augment_p": float(config.get("mirror_augment_p", 0.0))}
 
 
@@ -69,7 +70,7 @@ def apply_label_smoothing(labels_array, window_size=5):
     return soft_labels
 
 class SignSegmentationDataset(Dataset):
-    def __init__(self, keypoints_dir, labels_dir, split_file="dataset_splits.json", split="train", window_size=16, overlap=0, tolerance_window=5, use_full_length=False, base_features=None, kinematic_features=None, temporal_downsample_factor=1, use_face_keypoints=False, face_dir="processed_data/face_keypoints_normalized_v2", face_subset="full", face_only=False, face_dims=2, use_hamer_features=False, hamer_dir="processed_data/hamer_features", use_dinov2_features=False, dinov2_dir="processed_data/dinov2_features", use_cue_features=False, cue_dir=CUE_DEFAULT_DIR, cue_set="selected", hand_canonicalize=False, mirror_augment_p=0.0):
+    def __init__(self, keypoints_dir, labels_dir, split_file="dataset_splits.json", split="train", window_size=16, overlap=0, tolerance_window=5, use_full_length=False, base_features=None, kinematic_features=None, temporal_downsample_factor=1, use_face_keypoints=False, face_dir="processed_data/face_keypoints_normalized_v2", face_subset="full", face_only=False, face_dims=2, use_hamer_features=False, hamer_dir="processed_data/hamer_features", use_dinov2_features=False, dinov2_dir="processed_data/dinov2_features", use_cue_features=False, cue_dir=CUE_DEFAULT_DIR, cue_set="selected", hand_canonicalize=False, mirror_augment_p=0.0, face_layout="saved83"):
         self.labels_dir = labels_dir
         self.kinetic_dir = "processed_data/kinematic_features" 
         self.split_file = split_file
@@ -95,7 +96,13 @@ class SignSegmentationDataset(Dataset):
             if kinematic_features:
                 raise ValueError("face_only=True with kinematic_features: the face has no kinematic "
                                  "channels (they would be all zeros). Use kinematic_features=[].")
-        self.face_positions = face_subset_positions(face_subset) if use_face_keypoints else None
+        # face_layout: "saved83" = the 83-point files (extract_face_keypoints.py), "full478" =
+        # all landmarks (extract_face_keypoints_full.py; needed for the 2023 contour subset,
+        # the face oval and the irises).
+        if face_layout not in FACE_LAYOUTS:
+            raise ValueError(f"face_layout must be one of {sorted(FACE_LAYOUTS)}, got '{face_layout}'.")
+        self.face_layout = face_layout
+        self.face_positions = face_subset_positions(face_subset, face_layout) if use_face_keypoints else None
         # Face coordinates used: 2 = x, y only (z dropped; the default, matching
         # face_keypoints_normalized_v2), 3 = legacy x, y, z (only so runs trained on the old
         # 3D face files can still be evaluated).
@@ -114,7 +121,7 @@ class SignSegmentationDataset(Dataset):
         self.cue_set = cue_set
         self.cue_names, self.cue_indices = None, None
         if use_cue_features:
-            names_path = os.path.join(cue_dir, "_names.json")
+            names_path = cue_names_path(cue_dir)
             if not os.path.exists(names_path):
                 raise FileNotFoundError(f"{names_path} not found -- run data_processing/extract_cue_features.py first.")
             with open(names_path) as f:
@@ -193,15 +200,16 @@ class SignSegmentationDataset(Dataset):
                 if _f in self.kinematic_features:
                     self._mirror_x_channels.append(_off + _coords.index("x-cord"))
                     _off += len(_coords)
+        mirroring = self.hand_canonicalize or float(mirror_augment_p) > 0
         self._face_mirror_perm = (face_mirror_perm(face_subset)
-                                  if use_face_keypoints and not face_only else None)
+                                  if mirroring and use_face_keypoints and not face_only else None)
 
         if self.use_face_keypoints:
             # Face points are appended along the VERTEX axis: 65 + subset size. Graph models
             # build the matching face graph from num_vertices (src/graph.py).
             n_vertices = len(self.face_positions) + (0 if face_only else 65)
             print(f"[{split.upper()}] face keypoints: subset '{face_subset}' "
-                  f"({len(self.face_positions)} of {len(SAVED_FACE_INDICES)} saved points) -> "
+                  f"({len(self.face_positions)} of {FACE_LAYOUTS[face_layout]} saved points, layout {face_layout}) -> "
                   f"{n_vertices} vertices, {face_dims}D from {face_dir}"
                   + (" (FACE ONLY: body + hands dropped)" if face_only else ""))
 
@@ -311,11 +319,11 @@ class SignSegmentationDataset(Dataset):
                     skipped_videos.setdefault("face_frame_mismatch", []).append((vid, f"face frames={face_raw.shape[0]}, label frames={num_frames}"))
                     continue  # frame count doesn't match labels/body -- skip rather than risk misaligning them
 
-                if face_raw.shape[1] != len(SAVED_FACE_INDICES):
+                if face_raw.shape[1] != FACE_LAYOUTS[self.face_layout]:
                     raise ValueError(
                         f"{face_path} has {face_raw.shape[1]} face points, expected "
-                        f"{len(SAVED_FACE_INDICES)} (the layout src/face_subsets.py assumes). "
-                        f"Keep face_subsets.py in sync with extract_face_keypoints.py."
+                        f"{FACE_LAYOUTS[self.face_layout]} for face_layout='{self.face_layout}' "
+                        f"(83-point files -> 'saved83', face_keypoints_full* files -> 'full478')."
                     )
                 face_raw = face_raw[:, self.face_positions, :]  # keep only the chosen subset
 

@@ -71,7 +71,8 @@ def resolve_cue_dim(config, detected_cue_dim=None):
     if detected_cue_dim:
         return int(detected_cue_dim)
     from src.cue_sets import resolve_cue_set
-    names_path = os.path.join(config.get("cue_dir", "processed_data/cue_features"), "_names.json")
+    from src.cue_sets import cue_names_path
+    names_path = cue_names_path(config.get("cue_dir", "processed_data/cue_features"))
     file_names = None
     if os.path.exists(names_path):
         with open(names_path) as f:

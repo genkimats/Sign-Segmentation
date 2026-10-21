@@ -1,6 +1,7 @@
 import numpy as np
 
 from src.face_subsets import (FACE_REGIONS, ANCHOR_LEFT_EYE_INNER, ANCHOR_RIGHT_EYE_INNER,
+                              CONTOURS_2023, CONTOUR_GRAPH_SUBSETS, IRIS_A, IRIS_B,
                               LIPS_INDICES, LEFT_EYE_INDICES, RIGHT_EYE_INDICES,
                               face_subset_for_vertex_count, face_subset_raw_indices)
 
@@ -92,6 +93,22 @@ class SkeletonGraph:
         """
         pos = self._face_local_pos()
         edges = []
+        if self.face_subset in CONTOUR_GRAPH_SUBSETS:
+            # 2023 contour subsets: MediaPipe's own contour connections (FACEMESH_CONTOURS)
+            for i, j in CONTOURS_2023["edges"]:
+                if i in pos and j in pos:
+                    edges.append((pos[i], pos[j]))
+            # the two anchors are not connected by any contour edge in the oval-only subset
+            edges.append((pos[ANCHOR_LEFT_EYE_INNER], pos[ANCHOR_RIGHT_EYE_INNER]))
+            edges = sorted(set(tuple(sorted(e)) for e in edges if e[0] != e[1]))
+            return [(i + offset, j + offset) for i, j in edges]
+        # iris: centre -> 4 ring points, ring closed, centre -> the inner corner of its eye
+        for iris, anchor in ((IRIS_A, ANCHOR_LEFT_EYE_INNER), (IRIS_B, ANCHOR_RIGHT_EYE_INNER)):
+            if all(r in pos for r in iris):
+                c, ring = iris[0], iris[1:]
+                edges += [(pos[c], pos[r]) for r in ring]
+                edges += [(pos[ring[k]], pos[ring[(k + 1) % 4]]) for k in range(4)]
+                edges.append((pos[c], pos[anchor]))
         for raw_list, close_loop in FACE_REGIONS:
             kept = []
             for raw in raw_list:

@@ -14,7 +14,7 @@ CHOSEN_TYPE = 'mamba'
 # ==============================================================================
 MAMBA_DEFAULTS = {
     "basename": "stgcn_mamba",  
-    "window_size": 256,
+    "window_size": 512,
     "overlap": 0,
     "batch_size": 16,
     "epochs": 100,
@@ -22,11 +22,11 @@ MAMBA_DEFAULTS = {
     "patience": 10,
     "learning_rate": 0.0001,
     "num_vertices": 65,
-    "tolerance_window": 5,
+    "tolerance_window": 1,
     "temporal_downsample_factor": 1, 
     "loss_function": "weighted_ce",  
     "ctc_weight": 0.5,             
-    "class_weights": [0.6, 0.8, 1.0], 
+    "class_weights": [1.0, 1.1, 8.5], 
     "tmse_weight": 0.15,            
     "tmse_threshold": 0.1,          
     "base_features": ["x-cord", "y-cord", "z-cord"], 
@@ -39,6 +39,10 @@ MAMBA_DEFAULTS = {
     # Which saved face points to load when use_face_keypoints=True (see src/face_subsets.py):
     #   "full" 83 | "compact" 31 (eyes, brows, mouth) | "eyes_brows" 22 | "minimal" 18
     "face_subset": "full",
+    # "saved83" = the 83-point files above; "full478" = all landmarks from
+    # data_processing/extract_face_keypoints_full.py (+ normalize ... --layout full), needed for
+    # the 2023 subset ("contours2023"), "contours2023_no_oval", "face_oval", "compact_iris"
+    "face_layout": "saved83",
     # True = face vertices ONLY (body + hands dropped); needs use_face_keypoints=True and
     # kinematic_features=[]. Works with stgcn_bilstm / stgcn_transformer / *_baseline.
     "face_only": False,
@@ -362,7 +366,7 @@ _HAMER_FRONTEND = {"hamer_rep": "rot6d", "hamer_mask": True, "hamer_motion": Tru
 _MS_HAMER_ONLY = {**_MS_CUE_STUDY, "use_stream_body_hands": False, "use_stream_face": False,
                   "use_stream_hamer": True}
 
-EXPERIMENTS_TO_RUN = [
+FRONTEND_STUDY = [
     # 1. Handedness: does it cost anything that left-dominant signers use the other hand block?
     {**_MS_BEST, "hand_canonicalize": True,
      "description": "FE: B+H+Fc, dominant-hand canonicalization"},
@@ -373,27 +377,74 @@ EXPERIMENTS_TO_RUN = [
      "description": "FE: B+H+Fc, HaMeR front-end (rot6d + mask + motion + temporal k9)"},
     {**_MS_HAMER_ONLY, **_HAMER_FRONTEND,
      "description": "FE: HaMeR only, HaMeR front-end (rot6d + mask + motion + temporal k9)"},
-    # # 3. Stream dropout
-    # {**_MS_BEST, "stream_dropout": 0.2,
-    #  "description": "FE: B+H+Fc, stream dropout 0.2"},
-    # # 4. Body-part pooling instead of flattening all vertices
-    # {**_MS_BEST, "vertex_pooling": "part_mean",
-    #  "description": "FE: B+H+Fc, part pooling (mean)"},
-    # {**_MS_BEST, "vertex_pooling": "part_attn",
-    #  "description": "FE: B+H+Fc, part pooling (attention)"},
-    # # All four together
-    # {**_MS_BEST, **_HAMER_FRONTEND, "hand_canonicalize": True, "stream_dropout": 0.2,
-    #  "vertex_pooling": "part_attn",
-    #  "description": "FE: B+H+Fc, canonicalization + HaMeR front-end + stream dropout + part attn"},
+    # 3. Stream dropout
+    {**_MS_BEST, "stream_dropout": 0.2,
+     "description": "FE: B+H+Fc, stream dropout 0.2"},
+    # 4. Body-part pooling instead of flattening all vertices
+    {**_MS_BEST, "vertex_pooling": "part_mean",
+     "description": "FE: B+H+Fc, part pooling (mean)"},
+    {**_MS_BEST, "vertex_pooling": "part_attn",
+     "description": "FE: B+H+Fc, part pooling (attention)"},
+    # All four together
+    {**_MS_BEST, **_HAMER_FRONTEND, "hand_canonicalize": True, "stream_dropout": 0.2,
+     "vertex_pooling": "part_attn",
+     "description": "FE: B+H+Fc, canonicalization + HaMeR front-end + stream dropout + part attn"},
 ]
 
 # References (already trained: B+H+Fc = multistream_bilstm 124-126, HaMeR only = 133-135).
 # Re-queue only if their settings differ; otherwise just re-evaluate them on the current val.
-REFERENCES = [
+FRONTEND_REFERENCES = [
     {**_MS_BEST, "description": "FE ref: Body + HaMeR + Face(compact)"},
     {**_MS_HAMER_ONLY, "description": "FE ref: HaMeR only"},
 ]
-# EXPERIMENTS_TO_RUN += REFERENCES   # uncomment if the reference runs need redoing
+# EXPERIMENTS_TO_RUN += FRONTEND_REFERENCES   # uncomment if the reference runs need redoing
+
+# ------------------------------------------------------------------------------
+# FULL-FACE STUDY: the 2023 paper's face subset (MediaPipe FACEMESH_CONTOURS, 128 points)
+# and what the full-mesh files make possible. Needs, once:
+#   python data_processing/extract_face_keypoints_full.py --blendshapes --workers 4
+#   python data_processing/normalize_face_keypoints_v2.py --layout full
+# Same setup as before: multistream_bilstm, window 512, v2 labels, tolerance 1,
+# weights [1.0, 1.1, 12.4]. References: B+H+Fc 124-126 (.6802 test), B+H 127-129 (.6764),
+# Face only 136-138 (.5234, B F1 0).
+# ------------------------------------------------------------------------------
+_FULL_FACE = {"face_layout": "full478", "face_dir": "processed_data/face_keypoints_full_normalized_v2"}
+_MS_BH_FULLFACE = {**_MS_CUE_STUDY, **_FULL_FACE, "use_stream_face": True}
+_BLENDSHAPES = {"use_stream_cues": True, "cue_dir": "processed_data/face_keypoints_full/_blendshapes",
+                "cue_set": "file"}
+
+FACE_FULL_STUDY = [
+    # 0. Control: our compact subset cut from the NEW files. Should match 124-126; if not, the
+    #    re-extraction itself (no forward-fill, different missing frames) changed something.
+    {**_MS_BH_FULLFACE, "face_subset": "compact",
+     "description": "FullFace: B+H+F compact (from full-mesh files) -- extraction control"},
+    # 1. The 2023 paper's face subset
+    {**_MS_BH_FULLFACE, "face_subset": "contours2023",
+     "description": "FullFace: B+H+F contours2023 (2023 paper, 128)"},
+    # 2./3. Which part of it matters: everything but the oval (= our 83 + outer upper lip) vs
+    #       the oval alone (head shape / pose seen through the face outline)
+    {**_MS_BH_FULLFACE, "face_subset": "contours2023_no_oval",
+     "description": "FullFace: B+H+F contours2023 without face oval (92)"},
+    {**_MS_BH_FULLFACE, "face_subset": "face_oval",
+     "description": "FullFace: B+H+F face oval only (36 + 2 anchors)"},
+    # 4. Does the 2023 subset carry boundary information on its own? (ours: B F1 = 0)
+    {**_MS_BH_FULLFACE, "use_stream_body_hands": False, "use_stream_hamer": False,
+     "face_subset": "contours2023",
+     "description": "FullFace: Face only, contours2023"},
+    # 5. Eye gaze: compact + both irises (gaze shifts are a known prosodic marker)
+    {**_MS_BH_FULLFACE, "face_subset": "compact_iris",
+     "description": "FullFace: B+H+F compact + irises (41)"},
+    # 6./7. MediaPipe's 52 blendshape scores (eye blink, brow raise, jaw open ...): learned
+    #       expression features, unlike the hand-made face cues that added nothing
+    {**_MS_CUE_STUDY, **_BLENDSHAPES,
+     "description": "FullFace: B+H + blendshapes (52) instead of the face stream"},
+    {**_MS_BH_FULLFACE, **_BLENDSHAPES, "face_subset": "compact",
+     "description": "FullFace: B+H+F compact + blendshapes (52)"},
+]
+
+# What runs now. FRONTEND_STUDY is kept above; add it back if it has not been trained yet:
+#   EXPERIMENTS_TO_RUN = FRONTEND_STUDY + FACE_FULL_STUDY
+EXPERIMENTS_TO_RUN = FACE_FULL_STUDY
 
 if CHOSEN_TYPE == 'mamba':
     defaults = MAMBA_DEFAULTS

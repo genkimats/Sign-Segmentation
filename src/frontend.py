@@ -30,7 +30,7 @@ import torch.nn as nn
 
 from src.face_subsets import (SAVED_FACE_INDICES, LEFT_EYE_INDICES, RIGHT_EYE_INDICES,
                               LEFT_EYEBROW_INDICES, RIGHT_EYEBROW_INDICES, LIPS_INDICES,
-                              face_subset_raw_indices)
+                              face_subset_raw_indices, CONTOURS_2023, IRIS_A, IRIS_B)
 
 # ==============================================================================
 # Left/right correspondences
@@ -228,13 +228,30 @@ BODY_PARTS = [
 ]
 
 
+def _face_regions():
+    """Part definitions; with the full-mesh layout each part also takes the matching
+    MediaPipe contour region (found by a shared point) and the iris of that eye."""
+    regions = {"left eye": set(LEFT_EYE_INDICES) | set(IRIS_A), "right eye": set(RIGHT_EYE_INDICES) | set(IRIS_B),
+               "left brow": set(LEFT_EYEBROW_INDICES), "right brow": set(RIGHT_EYEBROW_INDICES),
+               "mouth": set(LIPS_INDICES)}
+    if CONTOURS_2023 is not None:
+        for key, pts in CONTOURS_2023["regions"].items():
+            pts = set(pts)
+            if key == "face_oval":
+                regions["face oval"] = pts
+                continue
+            for name in ("left eye", "right eye", "left brow", "right brow", "mouth"):
+                if pts & regions[name]:
+                    regions[name] |= pts
+                    break
+    return regions
+
+
 def face_parts(face_subset):
     raw = face_subset_raw_indices(face_subset)
     pos = {r: i for i, r in enumerate(raw)}
     parts = []
-    for name, region in [("left eye", LEFT_EYE_INDICES), ("right eye", RIGHT_EYE_INDICES),
-                         ("left brow", LEFT_EYEBROW_INDICES), ("right brow", RIGHT_EYEBROW_INDICES),
-                         ("mouth", LIPS_INDICES)]:
+    for name, region in _face_regions().items():
         idx = sorted({pos[r] for r in region if r in pos})
         if idx:
             parts.append((name, idx))
