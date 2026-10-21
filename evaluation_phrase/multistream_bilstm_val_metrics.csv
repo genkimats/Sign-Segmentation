@@ -1,5 +1,43 @@
 run,prefix,decoder,frame_f1,f1_O,f1_I,f1_B,iou,segment_pct,segment_f1_05,videos_evaluated,videos_skipped,window_size,seed,description
-multistream_bilstm-115,115,argmax,0.6712,0.9411,0.9196,0.153,0.8468,2.1356,0.264,13,0,512,42,"New: MS: Body + Face + HaMeR, compact face [seed=42]"
-multistream_bilstm-115,115,thr b=0.5 o=0.5,0.6712,0.9411,0.9196,0.153,0.5928,0.4234,0.3389,13,0,512,42,"New: MS: Body + Face + HaMeR, compact face [seed=42]"
-multistream_bilstm-116,116,argmax,0.6737,0.9415,0.92,0.1596,0.8479,1.9126,0.2776,13,0,512,123,"New: MS: Body + Face + HaMeR, compact face [seed=123]"
-multistream_bilstm-116,116,thr b=0.5 o=0.5,0.6737,0.9415,0.92,0.1596,0.553,0.3634,0.3016,13,0,512,123,"New: MS: Body + Face + HaMeR, compact face [seed=123]"
+multistream_bilstm-157,157,argmax,0.6484,0.9337,0.9067,0.1048,0.8206,2.4537,0.193,14,0,512,42,"Cues: cues only (selected 36), projection only [seed=42]"
+multistream_bilstm-157,157,thr b=0.5 o=0.5,0.6484,0.9337,0.9067,0.1048,0.5129,0.3,0.251,14,0,512,42,"Cues: cues only (selected 36), projection only [seed=42]"
+multistream_bilstm-158,158,argmax,0.6476,0.9351,0.9095,0.0981,0.8204,1.7474,0.1854,14,0,512,123,"Cues: cues only (selected 36), projection only [seed=123]"
+multistream_bilstm-158,158,thr b=0.5 o=0.5,0.6476,0.9351,0.9095,0.0981,0.3292,0.1481,0.1367,14,0,512,123,"Cues: cues only (selected 36), projection only [seed=123]"
+multistream_bilstm-159,159,argmax,0.6463,0.9351,0.9095,0.0943,0.8227,1.8484,0.1684,14,0,512,2024,"Cues: cues only (selected 36), projection only [seed=2024]"
+multistream_bilstm-159,159,thr b=0.5 o=0.5,0.6463,0.9351,0.9095,0.0943,0.3532,0.1439,0.125,14,0,512,2024,"Cues: cues only (selected 36), projection only [seed=2024]"
+multistream_bilstm-160,160,argmax,0.649,0.9344,0.907,0.1057,0.8179,2.0721,0.1781,14,0,512,42,"Cues: cues only (selected 36), + temporal conv k=9 [seed=42]"
+multistream_bilstm-160,160,thr b=0.5 o=0.5,0.649,0.9344,0.907,0.1057,0.3889,0.2079,0.1747,14,0,512,42,"Cues: cues only (selected 36), + temporal conv k=9 [seed=42]"
+multistream_bilstm-161,161,argmax,0.6458,0.9337,0.9033,0.1002,0.8091,2.3475,0.184,14,0,512,123,"Cues: cues only (selected 36), + temporal conv k=9 [seed=123]"
+multistream_bilstm-161,161,thr b=0.5 o=0.5,0.6458,0.9337,0.9033,0.1002,0.4991,0.2926,0.2503,14,0,512,123,"Cues: cues only (selected 36), + temporal conv k=9 [seed=123]"
+multistream_bilstm-162,162,argmax,0.6481,0.9343,0.9079,0.102,0.8189,1.6821,0.1774,14,0,512,2024,"Cues: cues only (selected 36), + temporal conv k=9 [seed=2024]"
+multistream_bilstm-162,162,thr b=0.5 o=0.5,0.6481,0.9343,0.9079,0.102,0.4404,0.2062,0.1667,14,0,512,2024,"Cues: cues only (selected 36), + temporal conv k=9 [seed=2024]"
+multistream_bilstm-163,163,argmax,0.6449,0.9336,0.9079,0.0932,0.821,2.0282,0.1601,14,0,512,42,"Cues: cues only (all 48), projection only [seed=42]"
+multistream_bilstm-163,163,thr b=0.5 o=0.5,0.6449,0.9336,0.9079,0.0932,0.4731,0.2148,0.1815,14,0,512,42,"Cues: cues only (all 48), projection only [seed=42]"
+multistream_bilstm-164,164,argmax,0.646,0.933,0.9044,0.1006,0.8002,2.1519,0.187,14,0,512,123,"Cues: cues only (all 48), projection only [seed=123]"
+multistream_bilstm-164,164,thr b=0.5 o=0.5,0.646,0.933,0.9044,0.1006,0.4099,0.2271,0.1974,14,0,512,123,"Cues: cues only (all 48), projection only [seed=123]"
+multistream_bilstm-165,165,argmax,0.6451,0.9349,0.9064,0.0939,0.8134,1.7719,0.203,14,0,512,2024,"Cues: cues only (all 48), projection only [seed=2024]"
+multistream_bilstm-165,165,thr b=0.5 o=0.5,0.6451,0.9349,0.9064,0.0939,0.3088,0.1585,0.1431,14,0,512,2024,"Cues: cues only (all 48), projection only [seed=2024]"
+multistream_bilstm-166,166,argmax,0.6692,0.9424,0.9142,0.1509,0.8378,3.5295,0.2202,14,0,512,42,Cues: Body + HaMeR + face cues (12) instead of the face stream [seed=42]
+multistream_bilstm-166,166,thr b=0.5 o=0.5,0.6692,0.9424,0.9142,0.1509,0.7456,0.7069,0.4691,14,0,512,42,Cues: Body + HaMeR + face cues (12) instead of the face stream [seed=42]
+multistream_bilstm-167,167,argmax,0.6703,0.9429,0.9173,0.1508,0.8414,3.1499,0.2249,14,0,512,123,Cues: Body + HaMeR + face cues (12) instead of the face stream [seed=123]
+multistream_bilstm-167,167,thr b=0.5 o=0.5,0.6703,0.9429,0.9173,0.1508,0.7286,0.6484,0.446,14,0,512,123,Cues: Body + HaMeR + face cues (12) instead of the face stream [seed=123]
+multistream_bilstm-168,168,argmax,0.6715,0.9408,0.9167,0.1572,0.8381,2.3091,0.2333,14,0,512,2024,Cues: Body + HaMeR + face cues (12) instead of the face stream [seed=2024]
+multistream_bilstm-168,168,thr b=0.5 o=0.5,0.6715,0.9408,0.9167,0.1572,0.672,0.4156,0.3439,14,0,512,2024,Cues: Body + HaMeR + face cues (12) instead of the face stream [seed=2024]
+multistream_bilstm-169,169,argmax,0.6708,0.9428,0.9173,0.1522,0.8371,2.6984,0.2399,14,0,512,42,"Cues: Body + HaMeR + non-manual cues (face + head, 19) [seed=42]"
+multistream_bilstm-169,169,thr b=0.5 o=0.5,0.6708,0.9428,0.9173,0.1522,0.6798,0.5209,0.3808,14,0,512,42,"Cues: Body + HaMeR + non-manual cues (face + head, 19) [seed=42]"
+multistream_bilstm-170,170,argmax,0.6699,0.9417,0.9151,0.1529,0.8361,3.1125,0.233,14,0,512,123,"Cues: Body + HaMeR + non-manual cues (face + head, 19) [seed=123]"
+multistream_bilstm-170,170,thr b=0.5 o=0.5,0.6699,0.9417,0.9151,0.1529,0.7313,0.6345,0.4687,14,0,512,123,"Cues: Body + HaMeR + non-manual cues (face + head, 19) [seed=123]"
+multistream_bilstm-171,171,argmax,0.6714,0.9424,0.9167,0.1551,0.8413,3.1322,0.2361,14,0,512,2024,"Cues: Body + HaMeR + non-manual cues (face + head, 19) [seed=2024]"
+multistream_bilstm-171,171,thr b=0.5 o=0.5,0.6714,0.9424,0.9167,0.1551,0.7707,0.6446,0.4813,14,0,512,2024,"Cues: Body + HaMeR + non-manual cues (face + head, 19) [seed=2024]"
+multistream_bilstm-172,172,argmax,0.6693,0.9405,0.9142,0.1533,0.8411,2.8045,0.2402,14,0,512,42,Cues: Body + HaMeR + selected cues (36) [seed=42]
+multistream_bilstm-172,172,thr b=0.5 o=0.5,0.6693,0.9405,0.9142,0.1533,0.718,0.5906,0.4274,14,0,512,42,Cues: Body + HaMeR + selected cues (36) [seed=42]
+multistream_bilstm-173,173,argmax,0.6697,0.9421,0.9145,0.1526,0.8394,3.0685,0.2384,14,0,512,123,Cues: Body + HaMeR + selected cues (36) [seed=123]
+multistream_bilstm-173,173,thr b=0.5 o=0.5,0.6697,0.9421,0.9145,0.1526,0.7286,0.6345,0.4649,14,0,512,123,Cues: Body + HaMeR + selected cues (36) [seed=123]
+multistream_bilstm-174,174,argmax,0.6689,0.9412,0.9151,0.1503,0.8377,3.1103,0.2242,14,0,512,2024,Cues: Body + HaMeR + selected cues (36) [seed=2024]
+multistream_bilstm-174,174,thr b=0.5 o=0.5,0.6689,0.9412,0.9151,0.1503,0.7268,0.5865,0.4237,14,0,512,2024,Cues: Body + HaMeR + selected cues (36) [seed=2024]
+multistream_bilstm-175,175,argmax,0.6702,0.9423,0.9163,0.1521,0.8449,3.2013,0.2366,14,0,512,42,Cues: Body + HaMeR + Face(compact) + selected cues (4 streams) [seed=42]
+multistream_bilstm-175,175,thr b=0.5 o=0.5,0.6702,0.9423,0.9163,0.1521,0.7631,0.7013,0.4746,14,0,512,42,Cues: Body + HaMeR + Face(compact) + selected cues (4 streams) [seed=42]
+multistream_bilstm-176,176,argmax,0.6697,0.9408,0.9159,0.1524,0.8397,3.118,0.2181,14,0,512,123,Cues: Body + HaMeR + Face(compact) + selected cues (4 streams) [seed=123]
+multistream_bilstm-176,176,thr b=0.5 o=0.5,0.6697,0.9408,0.9159,0.1524,0.746,0.6193,0.419,14,0,512,123,Cues: Body + HaMeR + Face(compact) + selected cues (4 streams) [seed=123]
+multistream_bilstm-177,177,argmax,0.6716,0.9416,0.9169,0.1562,0.8392,2.766,0.2365,14,0,512,2024,Cues: Body + HaMeR + Face(compact) + selected cues (4 streams) [seed=2024]
+multistream_bilstm-177,177,thr b=0.5 o=0.5,0.6716,0.9416,0.9169,0.1562,0.72,0.5642,0.4378,14,0,512,2024,Cues: Body + HaMeR + Face(compact) + selected cues (4 streams) [seed=2024]
