@@ -17,7 +17,8 @@ Outputs (evaluation_phrase/face_subsets/):
   face_subsets_vs_2023.png             2023 contours + full / compact / eyes_brows / minimal
                                        (ring = point also in our 83 saved points)
 
-Usage (repo root, needs mediapipe + opencv):
+Usage (repo root, needs mediapipe + opencv; with the Tasks API also the
+face_landmarker.task model file, searched for in the repo or passed with --model):
   python visualize_face_subsets_mediapipe.py                       # first video in raw_data/videos
   python visualize_face_subsets_mediapipe.py --video raw_data/videos/1234_1a1.mp4 --frames 60
   python visualize_face_subsets_mediapipe.py --labels
@@ -38,8 +39,31 @@ from src.face_subsets import (FACE_SUBSETS, SAVED_FACE_INDICES, LEFT_EYE_INDICES
                               ANCHOR_LEFT_EYE_INNER, ANCHOR_RIGHT_EYE_INNER, face_subset_raw_indices)
 from src.graph import SkeletonGraph  # noqa: E402
 
-FMC = mp.solutions.face_mesh_connections
-CONTOUR_EDGES = sorted(tuple(e) for e in mp.solutions.holistic.FACEMESH_CONTOURS)
+# ---- MediaPipe connections: new Tasks API (mediapipe >= 0.10.x without `solutions`) or the
+# legacy Solutions API. FACEMESH_CONTOURS (2023 paper) == FACE_LANDMARKS_CONTOURS (Tasks).
+def _load_connections():
+    try:
+        from mediapipe.tasks.python.vision.face_landmarker import FaceLandmarksConnections as C
+        def e(conns):
+            return [(c.start, c.end) for c in conns]
+        return {"contours": e(C.FACE_LANDMARKS_CONTOURS), "lips": e(C.FACE_LANDMARKS_LIPS),
+                "left_eye": e(C.FACE_LANDMARKS_LEFT_EYE), "right_eye": e(C.FACE_LANDMARKS_RIGHT_EYE),
+                "left_brow": e(C.FACE_LANDMARKS_LEFT_EYEBROW), "right_brow": e(C.FACE_LANDMARKS_RIGHT_EYEBROW),
+                "oval": e(C.FACE_LANDMARKS_FACE_OVAL)}, "tasks"
+    except (ImportError, AttributeError):
+        pass
+    if hasattr(mp, "solutions"):
+        F = mp.solutions.face_mesh_connections
+        return {"contours": list(mp.solutions.holistic.FACEMESH_CONTOURS), "lips": list(F.FACEMESH_LIPS),
+                "left_eye": list(F.FACEMESH_LEFT_EYE), "right_eye": list(F.FACEMESH_RIGHT_EYE),
+                "left_brow": list(F.FACEMESH_LEFT_EYEBROW), "right_brow": list(F.FACEMESH_RIGHT_EYEBROW),
+                "oval": list(F.FACEMESH_FACE_OVAL)}, "solutions"
+    raise SystemExit("This mediapipe version has neither the Tasks face-landmark connections nor "
+                     "mp.solutions -- please report `pip show mediapipe`.")
+
+
+CONN, MP_API = _load_connections()
+CONTOUR_EDGES = sorted({tuple(sorted(e)) for e in CONN["contours"]})
 CONTOUR_POINTS = sorted({i for e in CONTOUR_EDGES for i in e})
 
 
@@ -49,39 +73,77 @@ def _pts(edges):
 
 # region colours shared by both kinds of subset
 REGIONS = [
-    ("eyes", _pts(FMC.FACEMESH_LEFT_EYE) | _pts(FMC.FACEMESH_RIGHT_EYE)
+    ("eyes", _pts(CONN["left_eye"]) | _pts(CONN["right_eye"])
      | set(LEFT_EYE_INDICES) | set(RIGHT_EYE_INDICES), "#1f77b4"),
-    ("brows", _pts(FMC.FACEMESH_LEFT_EYEBROW) | _pts(FMC.FACEMESH_RIGHT_EYEBROW)
+    ("brows", _pts(CONN["left_brow"]) | _pts(CONN["right_brow"])
      | set(LEFT_EYEBROW_INDICES) | set(RIGHT_EYEBROW_INDICES), "#17a589"),
-    ("mouth", _pts(FMC.FACEMESH_LIPS) | set(LIPS_INDICES), "#d6336c"),
-    ("face oval", _pts(FMC.FACEMESH_FACE_OVAL), "#e67e22"),
+    ("mouth", _pts(CONN["lips"]) | set(LIPS_INDICES), "#d6336c"),
+    ("face oval", _pts(CONN["oval"]), "#e67e22"),
 ]
+MODEL_URL = ("https://storage.googleapis.com/mediapipe-models/face_landmarker/"
+             "face_landmarker/float16/1/face_landmarker.task")
 OUR_ORDER = ["full", "compact", "eyes_brows", "minimal"]
 
 
-def mean_mediapipe_face(video, n_frames):
+def _find_model(path):
+    cands = [path] if path else []
+    cands += glob.glob("**/face_landmarker*.task", recursive=True)[:5]
+    for c in cands:
+        if c and os.path.exists(c):
+            return c
+    raise SystemExit(f"Face Landmarker model not found. Download it (e.g. into models/):\n  {MODEL_URL}\n"
+                     f"then pass --model models/face_landmarker.task")
+
+
+def _make_detector(model_path):
+    """Returns detect(rgb_uint8) -> (468+, 2) normalized x, y or None."""
+    if MP_API == "tasks":
+        from mediapipe.tasks import python as mp_python
+        from mediapipe.tasks.python import vision
+        opts = vision.FaceLandmarkerOptions(base_options=mp_python.BaseOptions(model_asset_path=_find_model(model_path)),
+                                            running_mode=vision.RunningMode.IMAGE, num_faces=1)
+        lm = vision.FaceLandmarker.create_from_options(opts)
+
+        def detect(rgb):
+            res = lm.detect(mp.Image(image_format=mp.ImageFormat.SRGB, data=np.ascontiguousarray(rgb)))
+            if not res.face_landmarks:
+                return None
+            return np.array([[p.x, p.y] for p in res.face_landmarks[0]])
+        return detect, lm.close
+    hol = mp.solutions.holistic.Holistic(static_image_mode=True, model_complexity=1)
+
+    def detect(rgb):
+        res = hol.process(rgb)
+        if res.face_landmarks is None:
+            return None
+        return np.array([[p.x, p.y] for p in res.face_landmarks.landmark])
+    return detect, hol.close
+
+
+def mean_mediapipe_face(video, n_frames, model_path=None):
     cap = cv2.VideoCapture(video)
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     W, H = cap.get(cv2.CAP_PROP_FRAME_WIDTH), cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
     targets = set(np.linspace(0, max(total - 1, 0), n_frames).astype(int).tolist())
+    detect, close = _make_detector(model_path)
     faces = []
-    with mp.solutions.holistic.Holistic(static_image_mode=False, model_complexity=1) as hol:
-        for i in range(total):
-            ok, frame = cap.read()
-            if not ok:
-                break
-            if i not in targets:
-                continue
-            res = hol.process(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-            if res.face_landmarks is None:
-                continue
-            xy = np.array([[p.x * W, p.y * H] for p in res.face_landmarks.landmark])   # pixels
-            origin = (xy[133] + xy[362]) / 2
-            eye = xy[263] - xy[33]
-            a = -np.arctan2(eye[1], eye[0])
-            R = np.array([[np.cos(a), -np.sin(a)], [np.sin(a), np.cos(a)]])
-            faces.append(((xy - origin) @ R.T) / np.linalg.norm(eye))
+    for i in range(total):
+        ok, frame = cap.read()
+        if not ok:
+            break
+        if i not in targets:
+            continue
+        lm = detect(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+        if lm is None:
+            continue
+        xy = lm[:468] * np.array([W, H])                                     # pixels, mesh points only
+        origin = (xy[133] + xy[362]) / 2
+        eye = xy[263] - xy[33]
+        a = -np.arctan2(eye[1], eye[0])
+        R = np.array([[np.cos(a), -np.sin(a)], [np.sin(a), np.cos(a)]])
+        faces.append(((xy - origin) @ R.T) / np.linalg.norm(eye))
     cap.release()
+    close()
     if not faces:
         raise SystemExit(f"MediaPipe found no face in the sampled frames of {video}.")
     return np.median(np.stack(faces), axis=0), len(faces)
@@ -125,17 +187,18 @@ def main():
     p.add_argument("--video", default=None, help="video file (default: first in raw_data/videos)")
     p.add_argument("--frames", type=int, default=40, help="frames to sample and take the median of")
     p.add_argument("--labels", action="store_true", help="annotate MediaPipe indices")
+    p.add_argument("--model", default=None, help="face_landmarker.task (Tasks API; searched for if omitted)")
     p.add_argument("--out-dir", default=os.path.join("evaluation_phrase", "face_subsets"))
     args = p.parse_args()
 
     video = args.video or next(iter(sorted(glob.glob(os.path.join("raw_data", "videos", "*.mp4")))), None)
     if video is None:
         raise SystemExit("No video found -- pass --video.")
-    face, n = mean_mediapipe_face(video, args.frames)
+    face, n = mean_mediapipe_face(video, args.frames, args.model)
     os.makedirs(args.out_dir, exist_ok=True)
 
     overlap = len(set(CONTOUR_POINTS) & set(SAVED_FACE_INDICES))
-    print(f"FACEMESH_CONTOURS: {len(CONTOUR_POINTS)} points, {len(CONTOUR_EDGES)} edges; "
+    print(f"[mediapipe {MP_API} API] FACEMESH_CONTOURS: {len(CONTOUR_POINTS)} points, {len(CONTOUR_EDGES)} edges; "
           f"{overlap} of them are among our 83 saved points")
 
     fig, ax = plt.subplots(figsize=(5.5, 6))
