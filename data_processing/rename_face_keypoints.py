@@ -7,7 +7,9 @@ import os
 # Renaming is pure metadata -- file CONTENT is untouched, so this is safe to run
 # on already-normalized files without recomputing anything.
 TARGET_DIRS = [
-    "processed_data/face_keypoints_normalized_v2",
+    "processed_data/face_keypoints_full_normalized_v2",
+    "processed_data/face_keypoints_full",
+    "processed_data/face_keypoints_full/_blendshapes"
 ]
 
 RENAME_SUFFIXES = [
