@@ -502,7 +502,10 @@ _RECIPE_2023 = {"use_full_length": True, "full_length_batch_size": 8, "batch_siz
                 "window_size": 100000, "overlap": 0, "temporal_downsample_factor": 2,
                 "optimizer": "Adam", "learning_rate": 0.001, "scheduler": "none",
                 "grad_clip_norm": None, "epochs": 100, "patience": 20, "min_epochs": 1,
-                "class_weights": "inverse_ratio"}
+                "class_weights": "inverse_ratio",
+                # batch of 8 videos run one video at a time with gradient accumulation (same
+                # update, ~1/8 of the memory, and no padding inside the BiLSTM)
+                "micro_batch_size": 1}
 _RECIPE_MINE = {"use_full_length": False, "batch_size": 16, "window_size": 512, "overlap": 0,
                 "temporal_downsample_factor": 1, "optimizer": "AdamW", "learning_rate": 0.0001,
                 "scheduler": "CosineAnnealingLR", "grad_clip_norm": 1.0, "epochs": 100,
@@ -512,14 +515,14 @@ _E2S_FACE = {"use_face_keypoints": True, "face_layout": "full478",
              "face_subset": "contours2023", "face_dims": 2}
 
 BASELINE_2023_STUDY = [
-    # {**_BL2023_BASE, **_RECIPE_2023,
-    #  "description": "BL2023: E1s (body+hands), 2023 recipe"},
-    # {**_BL2023_BASE, **_RECIPE_2023, **_E2S_FACE,
-    #  "description": "BL2023: E2s (body+hands+face contours2023), 2023 recipe"},
-    {**_BL2023_BASE, **_RECIPE_MINE,
-     "description": "BL2023: E1s (body+hands), my recipe"},
-    {**_BL2023_BASE, **_RECIPE_MINE, **_E2S_FACE,
-     "description": "BL2023: E2s (body+hands+face contours2023), my recipe"},
+    {**_BL2023_BASE, **_RECIPE_2023,
+     "description": "BL2023: E1s (body+hands), 2023 recipe"},
+    {**_BL2023_BASE, **_RECIPE_2023, **_E2S_FACE,
+     "description": "BL2023: E2s (body+hands+face contours2023), 2023 recipe"},
+    # {**_BL2023_BASE, **_RECIPE_MINE,
+    #  "description": "BL2023: E1s (body+hands), my recipe"},
+    # {**_BL2023_BASE, **_RECIPE_MINE, **_E2S_FACE,
+    #  "description": "BL2023: E2s (body+hands+face contours2023), my recipe"},
 ]
 
 # Optional 5th cell -- YOUR model with THEIR recipe (completes the model x recipe table).

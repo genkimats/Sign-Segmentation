@@ -95,6 +95,53 @@ def mask_padding(hard_labels, soft_labels):
     return hard_labels.masked_fill(soft_labels.sum(dim=1) == 0, -100)
 
 
+def micro_batches(labels, micro_size):
+    """
+    Splits a padded full-video batch into chunks of `micro_size` videos, each trimmed to the
+    longest REAL length inside the chunk (padding = all-zero soft labels). Returns a list of
+    (sample_indices, T_real). With micro_size = 1 every video runs at its own length, so the
+    backward LSTM direction never sees padding.
+    """
+    real = labels.sum(dim=1) != 0                                   # (B, T)
+    lengths = [int(r.nonzero().max().item()) + 1 if r.any() else 0 for r in real]
+    order = list(range(labels.shape[0]))
+    return [(order[i:i + micro_size], max(lengths[j] for j in order[i:i + micro_size]) or 1)
+            for i in range(0, len(order), micro_size)]
+
+
+def accumulated_ce(call, features, labels, hamer, dinov2, cues, class_weights, micro_size,
+                   backward=True):
+    """
+    Weighted cross-entropy over a padded batch, computed in micro-batches to bound GPU
+    memory, with gradients IDENTICAL to one pass over the whole batch: every chunk's
+    summed weighted loss is divided by the weight total of the WHOLE batch (= PyTorch's
+    weighted-mean reduction), and gradients accumulate. Returns the batch loss (float),
+    or None if a chunk produced NaN/Inf (the caller then skips the step).
+    """
+    hard = mask_padding(torch.argmax(labels, dim=1), labels)
+    valid = hard != -100
+    w = class_weights if class_weights is not None else torch.ones(3, device=labels.device)
+    w_total = w[hard[valid]].sum().clamp_min(1e-8)
+    total = 0.0
+    for idx, T in micro_batches(labels, micro_size):
+        def take(x, time_dim):
+            if x is None:
+                return None
+            x = x[idx]
+            return x.narrow(time_dim, 0, min(T, x.shape[time_dim]))
+        out = call(take(features, 2), take(hamer, 2), take(dinov2, 2), take(cues, 2))
+        logits = out[0] if isinstance(out, tuple) else out          # (b, 3, T)
+        tgt = hard[idx][:, :logits.shape[-1]]
+        loss = torch.nn.functional.cross_entropy(logits, tgt, weight=w, ignore_index=-100,
+                                                 reduction="sum") / w_total
+        if torch.isnan(loss) or torch.isinf(loss):
+            return None
+        if backward:
+            loss.backward()
+        total += loss.item()
+    return total
+
+
 def set_seed(seed):
     """
     Seeds every source of randomness that affects a run: model weight init,
@@ -296,6 +343,18 @@ def train_model(config, selection_metric="combined"):
         with open(os.path.join(exp_dir, "hyperparameters.json"), 'w') as f:
             json.dump(config, f, indent=4)
     GRAD_CLIP = config.get("grad_clip_norm", 1.0)
+    # micro_batch_size (full-video batches only): run a batch of full_length_batch_size
+    # videos in chunks of this many videos, accumulating gradients -- same update as the
+    # whole batch at a fraction of the memory. None = whole batch at once.
+    MICRO_BATCH = config.get("micro_batch_size")
+    USE_MICRO = bool(USE_FULL_LENGTH and FULL_LENGTH_BATCH > 1 and MICRO_BATCH
+                     and int(MICRO_BATCH) < FULL_LENGTH_BATCH)
+    if USE_MICRO:
+        if LOSS_FUNCTION not in ("weighted_ce", "standard_ce"):
+            raise ValueError(f"micro_batch_size needs weighted_ce or standard_ce, not '{LOSS_FUNCTION}'.")
+        MICRO_BATCH = int(MICRO_BATCH)
+        print(f"🧩 Full-video batches of {FULL_LENGTH_BATCH} run in chunks of {MICRO_BATCH} "
+              f"(gradient accumulation, identical update).")
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -424,7 +483,28 @@ def train_model(config, selection_metric="combined"):
                 
                 features = torch.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
                 optimizer.zero_grad()
-                
+
+                if USE_MICRO:
+                    acc = accumulated_ce(call_model, features, labels, hamer, dinov2, cues,
+                                         weights if LOSS_FUNCTION == "weighted_ce" else None, MICRO_BATCH)
+                    if acc is None:
+                        optimizer.zero_grad()
+                        epoch_nan_count += 1
+                        total_nan_this_run += 1
+                        loop.set_postfix(loss="NaN", nans=epoch_nan_count)
+                        if epoch_nan_count > 50 and redo_count < MAX_REDOS:
+                            print(f"\n⚠️ CRITICAL: Epoch {epoch} encountered >50 NaN losses ({epoch_nan_count}). Aborting run.")
+                            needs_restart = True
+                            break
+                        continue
+                    if GRAD_CLIP:
+                        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=float(GRAD_CLIP))
+                    optimizer.step()
+                    train_loss += acc
+                    valid_batches += 1
+                    loop.set_postfix(loss=acc, nans=epoch_nan_count)
+                    continue
+
                 if LOSS_FUNCTION == "bcl":
                     logits, embeddings = call_model(features, hamer, dinov2, cues)
                     loss, _, _ = criterion(logits, embeddings, labels)
@@ -498,7 +578,14 @@ def train_model(config, selection_metric="combined"):
                     features = features.to(device)
                     labels = labels.to(device)
                     features = torch.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
-                    
+
+                    if USE_MICRO:
+                        acc = accumulated_ce(call_model, features, labels, hamer, dinov2, cues,
+                                             weights if LOSS_FUNCTION == "weighted_ce" else None,
+                                             MICRO_BATCH, backward=False)
+                        val_loss += acc if acc is not None else 0.0
+                        continue
+
                     if LOSS_FUNCTION == "bcl":
                         logits, embeddings = call_model(features, hamer, dinov2, cues)
                         loss, _, _ = criterion(logits, embeddings, labels)
