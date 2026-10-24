@@ -63,6 +63,38 @@ def get_next_job():
     return next_job
 
 
+def pad_collate(batch):
+    """
+    Batches FULL videos of different lengths (use_full_length + full_length_batch_size > 1,
+    as in the 2023 recipe: batch of 8 zero-padded videos). Every tensor is padded along
+    its time axis (dim 1); padded LABEL frames are all-zero, which the training loop turns
+    into ignore_index (-100) so they never enter the loss (the 2023 code masks them too).
+    """
+    out = []
+    for field in zip(*batch):
+        first = field[0]
+        if torch.is_tensor(first) and first.dim() >= 2:
+            T = max(t.shape[1] for t in field)
+            padded = []
+            for t in field:
+                if t.shape[1] < T:
+                    pad_shape = list(t.shape)
+                    pad_shape[1] = T - t.shape[1]
+                    t = torch.cat([t, torch.zeros(pad_shape, dtype=t.dtype)], dim=1)
+                padded.append(t)
+            out.append(torch.stack(padded))
+        elif isinstance(first, str):
+            out.append(list(field))
+        else:
+            out.append(torch.as_tensor(field))
+    return out
+
+
+def mask_padding(hard_labels, soft_labels):
+    """Frames whose soft label is all-zero are batch padding -> ignore_index -100."""
+    return hard_labels.masked_fill(soft_labels.sum(dim=1) == 0, -100)
+
+
 def set_seed(seed):
     """
     Seeds every source of randomness that affects a run: model weight init,
@@ -237,9 +269,33 @@ def train_model(config, selection_metric="combined"):
         **extra_dataset_kwargs(config),
     )
     
-    loader_batch_size = 1 if USE_FULL_LENGTH else BATCH_SIZE
-    train_loader = DataLoader(train_dataset, batch_size=loader_batch_size, shuffle=True, num_workers=4, pin_memory=True)
-    val_loader = DataLoader(val_dataset, batch_size=loader_batch_size, shuffle=False, num_workers=4, pin_memory=True)
+    # Full-video training: batch 1 (as before) unless full_length_batch_size > 1, which pads
+    # the videos of a batch to the same length and masks the padding out of the loss.
+    FULL_LENGTH_BATCH = int(config.get("full_length_batch_size", 1))
+    if USE_FULL_LENGTH and FULL_LENGTH_BATCH > 1:
+        if LOSS_FUNCTION not in ("weighted_ce", "standard_ce", "weighted_nll"):
+            raise ValueError(f"full_length_batch_size > 1 needs a loss that ignores label -100 "
+                             f"(weighted_ce / standard_ce / weighted_nll), not '{LOSS_FUNCTION}'.")
+        train_loader = DataLoader(train_dataset, batch_size=FULL_LENGTH_BATCH, shuffle=True, num_workers=4,
+                                  pin_memory=True, collate_fn=pad_collate)
+        val_loader = DataLoader(val_dataset, batch_size=FULL_LENGTH_BATCH, shuffle=False, num_workers=4,
+                                pin_memory=True, collate_fn=pad_collate)
+    else:
+        loader_batch_size = 1 if USE_FULL_LENGTH else BATCH_SIZE
+        train_loader = DataLoader(train_dataset, batch_size=loader_batch_size, shuffle=True, num_workers=4, pin_memory=True)
+        val_loader = DataLoader(val_dataset, batch_size=loader_batch_size, shuffle=False, num_workers=4, pin_memory=True)
+
+    # class_weights = "inverse_ratio": total / count per class on the training targets,
+    # exactly how Moryossef et al. (2023) weight their loss. Resolved once and saved.
+    if isinstance(CLASS_WEIGHTS, str):
+        if CLASS_WEIGHTS != "inverse_ratio":
+            raise ValueError(f"class_weights must be a list or 'inverse_ratio', got '{CLASS_WEIGHTS}'.")
+        CLASS_WEIGHTS = [round(w, 4) for w in train_dataset.inverse_class_ratio()]
+        print(f"⚖️  Class weights (inverse class ratio, O/I/B): {CLASS_WEIGHTS}")
+        config["class_weights_resolved"] = CLASS_WEIGHTS
+        with open(os.path.join(exp_dir, "hyperparameters.json"), 'w') as f:
+            json.dump(config, f, indent=4)
+    GRAD_CLIP = config.get("grad_clip_norm", 1.0)
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -374,13 +430,13 @@ def train_model(config, selection_metric="combined"):
                     loss, _, _ = criterion(logits, embeddings, labels)
                 elif LOSS_FUNCTION == "unified_ctc":
                     logits, _ = call_model(features, hamer, dinov2, cues)
-                    hard_labels = torch.argmax(labels, dim=1)
+                    hard_labels = mask_padding(torch.argmax(labels, dim=1), labels)
                     loss, _, _ = criterion(logits, hard_labels)
                 else:
                     # Depending on the model, it might return (logits, embeddings) or just logits
                     output = call_model(features, hamer, dinov2, cues)
                     logits = output[0] if isinstance(output, tuple) else output
-                    hard_labels = torch.argmax(labels, dim=1)
+                    hard_labels = mask_padding(torch.argmax(labels, dim=1), labels)
                     loss = criterion(logits, hard_labels)
                 
                 if torch.isnan(loss) or torch.isinf(loss):
@@ -395,7 +451,8 @@ def train_model(config, selection_metric="combined"):
                     continue
                 
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                if GRAD_CLIP:
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=float(GRAD_CLIP))
                 optimizer.step()
                 
                 train_loss += loss.item()
@@ -447,12 +504,12 @@ def train_model(config, selection_metric="combined"):
                         loss, _, _ = criterion(logits, embeddings, labels)
                     elif LOSS_FUNCTION == "unified_ctc":
                         logits, _ = call_model(features, hamer, dinov2, cues)
-                        hard_labels = torch.argmax(labels, dim=1)
+                        hard_labels = mask_padding(torch.argmax(labels, dim=1), labels)
                         loss, _, _ = criterion(logits, hard_labels)
                     else:
                         output = call_model(features, hamer, dinov2, cues)
                         logits = output[0] if isinstance(output, tuple) else output
-                        hard_labels = torch.argmax(labels, dim=1)
+                        hard_labels = mask_padding(torch.argmax(labels, dim=1), labels)
                         loss = criterion(logits, hard_labels)
                         
                     val_loss += loss.item() if not (torch.isnan(loss) or torch.isinf(loss)) else 0.0

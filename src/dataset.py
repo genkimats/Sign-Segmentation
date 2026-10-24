@@ -69,8 +69,34 @@ def apply_label_smoothing(labels_array, window_size=5):
     soft_labels = soft_labels / sums
     return soft_labels
 
+def downsample_labels(labels, k):
+    """
+    Soft labels (3, T) -> (3, ceil(T / k)), keeping phrase STARTS: plain [::k] subsampling
+    drops every B that falls on a frame not divisible by k (B is a single frame). Here
+    each output frame is the first frame of its group of k, but if the group contains a
+    B, the output frame becomes B (with that B's probability; O/I rescaled).
+    """
+    if k <= 1:
+        return labels
+    C, T = labels.shape
+    sub = labels[:, ::k].clone()
+    Tp = sub.shape[1]
+    pad = Tp * k - T
+    b = labels[2]
+    if pad:
+        b = torch.cat([b, torch.zeros(pad, dtype=b.dtype)])
+    bmax = b.view(Tp, k).max(dim=1).values
+    upd = bmax > sub[2]
+    if upd.any():
+        rest = sub[:2, upd]
+        tot = rest.sum(dim=0).clamp(min=1e-8)
+        sub[:2, upd] = rest / tot * (1 - bmax[upd])
+        sub[2, upd] = bmax[upd]
+    return sub
+
+
 class SignSegmentationDataset(Dataset):
-    def __init__(self, keypoints_dir, labels_dir, split_file="dataset_splits.json", split="train", window_size=16, overlap=0, tolerance_window=5, use_full_length=False, base_features=None, kinematic_features=None, temporal_downsample_factor=1, use_face_keypoints=False, face_dir="processed_data/face_keypoints_normalized_v2", face_subset="full", face_only=False, face_dims=2, use_hamer_features=False, hamer_dir="processed_data/hamer_features", use_dinov2_features=False, dinov2_dir="processed_data/dinov2_features", use_cue_features=False, cue_dir=CUE_DEFAULT_DIR, cue_set="selected", hand_canonicalize=False, mirror_augment_p=0.0, face_layout="saved83"):
+    def __init__(self, keypoints_dir, labels_dir, split_file="dataset_splits.json", split="train", window_size=16, overlap=0, tolerance_window=1, use_full_length=False, base_features=None, kinematic_features=None, temporal_downsample_factor=1, use_face_keypoints=False, face_dir="processed_data/face_keypoints_normalized_v2", face_subset="full", face_only=False, face_dims=2, use_hamer_features=False, hamer_dir="processed_data/hamer_features", use_dinov2_features=False, dinov2_dir="processed_data/dinov2_features", use_cue_features=False, cue_dir=CUE_DEFAULT_DIR, cue_set="selected", hand_canonicalize=False, mirror_augment_p=0.0, face_layout="saved83"):
         self.labels_dir = labels_dir
         self.kinetic_dir = "processed_data/kinematic_features" 
         self.split_file = split_file
@@ -551,6 +577,22 @@ class SignSegmentationDataset(Dataset):
                 f"how body/hand keypoints are named is the most common cause."
             )
 
+    def inverse_class_ratio(self):
+        """
+        Class weights as in Moryossef et al. (2023) (data.py inverse_classes_ratio):
+        weight_c = total frames / frames of class c, counted on the TRAINING targets
+        (hard labels, after this dataset's temporal downsampling). Returns [O, I, B].
+        """
+        counts = np.zeros(3, dtype=np.float64)
+        k = max(1, int(self.temporal_downsample_factor))
+        for cached in self.video_cache.values():
+            lab = torch.as_tensor(np.asarray(cached["labels"]), dtype=torch.float32).permute(1, 0)  # (3, T)
+            hard = downsample_labels(lab, k).argmax(dim=0).numpy()
+            counts += np.bincount(hard, minlength=3)[:3]
+        if (counts == 0).any():
+            raise RuntimeError(f"A class never occurs in the training labels: counts {counts}.")
+        return (counts.sum() / counts).tolist()
+
     def __len__(self):
         if self.use_full_length:
             return len(self.samples)
@@ -598,7 +640,7 @@ class SignSegmentationDataset(Dataset):
         # 4. Handle Downsampling & Padding
         if self.temporal_downsample_factor > 1:
             final_input_tensor = final_input_tensor[:, ::self.temporal_downsample_factor, :]
-            labels_tensor = labels_tensor[:, ::self.temporal_downsample_factor]
+            labels_tensor = downsample_labels(labels_tensor, self.temporal_downsample_factor)
             if self.use_hamer_features:
                 hamer_tensor = hamer_tensor[:, ::self.temporal_downsample_factor]
             if self.use_dinov2_features:

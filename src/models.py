@@ -2246,6 +2246,36 @@ class RelPosTransformerEncoder(nn.Module):
 # ==============================================================================
 # MULTI-STREAM MODELS: (body + hands) / face / HaMeR as separately switchable streams
 # ==============================================================================
+class Moryossef2023_BiLSTM(nn.Module):
+    """
+    Faithful re-implementation of the phrase part of Moryossef et al. (2023) E1s / E2s
+    (sign-language-processing/segmentation, src/model.py at the 2024 migration commit):
+      per frame: flatten (C, V) -> plain Linear to pose_projection_dim (256; no norm,
+      activation or dropout) -> BiLSTM with hidden_dim // 2 = 128 units PER DIRECTION,
+      encoder_depth = 4 layers, no dropout -> Linear(256 -> 3) BIO head.
+    Differences to the paper, by design: only the phrase head is trained (theirs also has
+    a sign head on the same encoder, trained jointly).
+    d_model = pose projection size = total BiLSTM output size (their hidden_dim);
+    n_layers = encoder depth.
+    """
+
+    def __init__(self, in_channels, num_vertices, num_classes=3, d_model=256, n_layers=4, **unused):
+        super().__init__()
+        if d_model % 2:
+            raise ValueError("d_model (their hidden_dim) must be even.")
+        self.pose_projection = nn.Linear(in_channels * num_vertices, d_model)
+        self.encoder = nn.LSTM(d_model, d_model // 2, num_layers=n_layers, batch_first=True,
+                               bidirectional=True)
+        self.phrase_bio_head = nn.Linear(d_model, num_classes)
+
+    def forward(self, x, **unused):
+        B, C, T, V = x.shape
+        h = self.pose_projection(x.permute(0, 2, 1, 3).reshape(B, T, C * V))
+        enc, _ = self.encoder(h)
+        logits = self.phrase_bio_head(enc)
+        return logits.permute(0, 2, 1), enc.permute(0, 2, 1)
+
+
 class MultiStreamSegmenter(nn.Module):
     """
     Up to four input streams, each switchable on/off:

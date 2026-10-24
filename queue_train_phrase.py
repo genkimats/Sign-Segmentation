@@ -12,9 +12,13 @@ CHOSEN_TYPE = 'mamba'
 # ==============================================================================
 # 🐍 MAMBA-BASED DEFAULT HYPERPARAMETERS
 # ==============================================================================
+# Default [O, I, B] class weights for weighted_ce (your recipe). Runs before 2026-10-25
+# used [1.0, 1.1, 12.4]; re-queued references now train with these.
+DEFAULT_CLASS_WEIGHTS = [1.0, 1.1, 8.5]
+
 MAMBA_DEFAULTS = {
     "basename": "stgcn_mamba",  
-    "window_size": 512,
+    "window_size": 256,
     "overlap": 0,
     "batch_size": 16,
     "epochs": 100,
@@ -22,11 +26,11 @@ MAMBA_DEFAULTS = {
     "patience": 10,
     "learning_rate": 0.0001,
     "num_vertices": 65,
-    "tolerance_window": 5,
+    "tolerance_window": 1,
     "temporal_downsample_factor": 1, 
     "loss_function": "weighted_ce",  
     "ctc_weight": 0.5,             
-    "class_weights": [1.0, 1.1, 8.5], 
+    "class_weights": list(DEFAULT_CLASS_WEIGHTS),
     "tmse_weight": 0.15,            
     "tmse_threshold": 0.1,          
     "base_features": ["x-cord", "y-cord", "z-cord"], 
@@ -321,7 +325,7 @@ _MS_BODY_HAMER = {
     "nhead": 8,
     "overlap": 0,
     "loss_function": "weighted_ce",
-    "class_weights": [1.0, 1.1, 8.5],
+    "class_weights": list(DEFAULT_CLASS_WEIGHTS),
     "tolerance_window": 1,
     "kinematic_features": [],
     "phrase_labels_dir": "processed_data/BIO_tags_phrase_v2",
@@ -331,7 +335,7 @@ _MS_BODY_HAMER = {
 # CUE-STREAM STUDY: do the interpretable cues from boundary_cue_analysis.py help?
 # Run data_processing/extract_cue_features.py once before training.
 # Same setup as the stream study (multistream_bilstm, window 512, v2 labels, tolerance 1,
-# class weights [1.0, 1.1, 12.4]); the references are Body+HaMeR and
+# class weights DEFAULT_CLASS_WEIGHTS); the references are Body+HaMeR and
 # Body+HaMeR+Face(compact) -- re-queue them (REFERENCES below) only if your earlier runs
 # used different settings.
 # ------------------------------------------------------------------------------
@@ -468,9 +472,67 @@ CHANGE_POINT_STUDY = [
      "description": "CP: B+H+Fc, change-point 5/10/25, best epoch by boundary F1@5"},
 ]
 
-# What runs now (FRONTEND_STUDY / CUE_STUDY above are already trained):
-# EXPERIMENTS_TO_RUN = CHANGE_POINT_STUDY + FACE_FULL_STUDY
-EXPERIMENTS_TO_RUN = FACE_FULL_STUDY
+# ------------------------------------------------------------------------------
+# 2023 BASELINE STUDY: Moryossef et al. (2023) E1s / E2s re-implemented on OUR split and
+# v2 labels (model "bilstm_2023", src/models.py), each trained with
+#   (a) THEIR recipe -- taken from their released code (sign-language-processing/
+#       segmentation, jobs/job_batch.sh + src/args.py + src/train.py + src/model.py):
+#       25 fps, whole videos in batches of 8 (zero-padded, padding masked out of the loss),
+#       Adam lr 1e-3, no LR scheduler, no gradient clipping, up to 100 epochs, early
+#       stopping patience 20 on validation Frame F1, class weights = inverse class ratio
+#   (b) YOUR recipe -- the one used for all multistream runs: 50 fps, 512-frame windows,
+#       batch 16, AdamW lr 1e-4 + cosine schedule, grad clip 1.0, patience 10 (min 15
+#       epochs), weights DEFAULT_CLASS_WEIGHTS [1.0, 1.1, 8.5], best epoch by Frame F1
+# 2 x 2: {E1s body+hands, E2s + 2023 face contours} x {their recipe, your recipe}.
+# Compare (b) with your multistream runs 124-126 (same recipe, different model -- note
+# 124-126 used B weight 12.4, these use 8.5) and (a) with (b) (same model, different recipe).
+# Known differences to the paper, kept on purpose:
+#   - phrase head only (they train a sign head jointly on the same encoder)
+#   - our pose: 23 upper-body + 2 x 21 hand points (they drop the legs too), our labels v2
+#   - E2s face: our face-local 2D contour points (theirs: 3D, in the body frame)
+# Needs the full-mesh face files for E2s (see FULL-FACE STUDY).
+# ------------------------------------------------------------------------------
+_BL2023_BASE = {"basename": "bilstm_2023", "d_model": 256, "n_layers": 4,
+                "base_features": ["x-cord", "y-cord", "z-cord"], "kinematic_features": [],
+                "use_face_keypoints": False, "use_hamer_features": False,
+                "loss_function": "weighted_ce", "tolerance_window": 1,
+                "phrase_labels_dir": "processed_data/BIO_tags_phrase_v2",
+                "force_selection_metric": "frame_f1"}
+_RECIPE_2023 = {"use_full_length": True, "full_length_batch_size": 8, "batch_size": 8,
+                "window_size": 100000, "overlap": 0, "temporal_downsample_factor": 2,
+                "optimizer": "Adam", "learning_rate": 0.001, "scheduler": "none",
+                "grad_clip_norm": None, "epochs": 100, "patience": 20, "min_epochs": 1,
+                "class_weights": "inverse_ratio"}
+_RECIPE_MINE = {"use_full_length": False, "batch_size": 16, "window_size": 512, "overlap": 0,
+                "temporal_downsample_factor": 1, "optimizer": "AdamW", "learning_rate": 0.0001,
+                "scheduler": "CosineAnnealingLR", "grad_clip_norm": 1.0, "epochs": 100,
+                "patience": 10, "min_epochs": 15, "class_weights": list(DEFAULT_CLASS_WEIGHTS)}
+_E2S_FACE = {"use_face_keypoints": True, "face_layout": "full478",
+             "face_dir": "processed_data/face_keypoints_full_normalized_v2",
+             "face_subset": "contours2023", "face_dims": 2}
+
+BASELINE_2023_STUDY = [
+    {**_BL2023_BASE, **_RECIPE_2023,
+     "description": "BL2023: E1s (body+hands), 2023 recipe"},
+    {**_BL2023_BASE, **_RECIPE_2023, **_E2S_FACE,
+     "description": "BL2023: E2s (body+hands+face contours2023), 2023 recipe"},
+    {**_BL2023_BASE, **_RECIPE_MINE,
+     "description": "BL2023: E1s (body+hands), my recipe"},
+    {**_BL2023_BASE, **_RECIPE_MINE, **_E2S_FACE,
+     "description": "BL2023: E2s (body+hands+face contours2023), my recipe"},
+]
+
+# Optional 5th cell -- YOUR model with THEIR recipe (completes the model x recipe table).
+# Off by default: whole-video batches through the ST-GCN streams need a lot of GPU memory
+# (8 videos x ~11k frames x 96 vertices); try one run first if you want it.
+OPTIONAL_MY_MODEL_2023_RECIPE = [
+    {**_MS_BEST, **_RECIPE_2023, "force_selection_metric": "frame_f1",
+     "description": "BL2023: my B+H+Fc multistream, 2023 recipe"},
+]
+
+# What runs now (earlier studies above are already trained):
+EXPERIMENTS_TO_RUN = BASELINE_2023_STUDY
+# EXPERIMENTS_TO_RUN += OPTIONAL_MY_MODEL_2023_RECIPE
 
 if CHOSEN_TYPE == 'mamba':
     defaults = MAMBA_DEFAULTS

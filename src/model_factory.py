@@ -17,7 +17,7 @@ from src.models import (PureMambaBaseline, BiMambaBaseline, STGCN_Mamba, STGCN_M
                         CTRGCN_Mamba, InfoGCN_Mamba, ShiftGCN_Mamba, SpatialTransformer_Mamba,
                         HDGCN_Mamba, HyperSign_Mamba, STGCN_HybridSequential, STGCN_HybridParallel,
                         MultiStreamSegmenter, MultiStream_BiLSTM, MultiStream_Transformer,
-                        MultiStream_BiLSTMAttn)
+                        MultiStream_BiLSTMAttn, Moryossef2023_BiLSTM)
 
 MODEL_REGISTRY = {
     "pure_mamba": PureMambaBaseline,
@@ -42,6 +42,8 @@ MODEL_REGISTRY = {
     "multistream_bilstm": MultiStream_BiLSTM,
     "multistream_transformer": MultiStream_Transformer,
     "multistream_bilstm_attn": MultiStream_BiLSTMAttn,
+    # Moryossef et al. 2023 E1s / E2s (phrase head), see src/models.py
+    "bilstm_2023": Moryossef2023_BiLSTM,
 }
 
 MULTISTREAM_MODELS = ["multistream_bilstm", "multistream_transformer", "multistream_bilstm_attn"]

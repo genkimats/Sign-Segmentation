@@ -83,6 +83,11 @@ def predict_video_probs(model, config, cached, device, batch_size=16):
     target_T = window_size // k
 
     windows = video_windows(num_frames, window_size, overlap)
+    if config.get("use_full_length", False) and len(windows) == 1:
+        # Full-video runs (e.g. the 2023 recipe, window_size = 100000): predict on the real
+        # length instead of zero-padding every video to window_size, which would push tens
+        # of thousands of padding frames through the backward LSTM before the content.
+        target_T = -(-num_frames // k)
     prob_sum = np.zeros((3, num_frames), dtype=np.float64)
     counts = np.zeros(num_frames, dtype=np.float64)
 
