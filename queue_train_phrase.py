@@ -515,14 +515,14 @@ _E2S_FACE = {"use_face_keypoints": True, "face_layout": "full478",
              "face_subset": "contours2023", "face_dims": 2}
 
 BASELINE_2023_STUDY = [
-    {**_BL2023_BASE, **_RECIPE_2023,
-     "description": "BL2023: E1s (body+hands), 2023 recipe"},
-    {**_BL2023_BASE, **_RECIPE_2023, **_E2S_FACE,
-     "description": "BL2023: E2s (body+hands+face contours2023), 2023 recipe"},
-    # {**_BL2023_BASE, **_RECIPE_MINE,
-    #  "description": "BL2023: E1s (body+hands), my recipe"},
-    # {**_BL2023_BASE, **_RECIPE_MINE, **_E2S_FACE,
-    #  "description": "BL2023: E2s (body+hands+face contours2023), my recipe"},
+    # {**_BL2023_BASE, **_RECIPE_2023,
+    #  "description": "BL2023: E1s (body+hands), 2023 recipe"},
+    # {**_BL2023_BASE, **_RECIPE_2023, **_E2S_FACE,
+    #  "description": "BL2023: E2s (body+hands+face contours2023), 2023 recipe"},
+    {**_BL2023_BASE, **_RECIPE_MINE,
+     "description": "BL2023: E1s (body+hands), my recipe"},
+    {**_BL2023_BASE, **_RECIPE_MINE, **_E2S_FACE,
+     "description": "BL2023: E2s (body+hands+face contours2023), my recipe"},
 ]
 
 # Optional 5th cell -- YOUR model with THEIR recipe (completes the model x recipe table).
