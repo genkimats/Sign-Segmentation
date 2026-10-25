@@ -578,10 +578,10 @@ BL2023_COMBO_STUDY = [
 # Reference = your existing B+H+Fc runs (ST-GCN), e.g. multistream_bilstm 124-126.
 # ------------------------------------------------------------------------------
 ENCODER_STUDY = [
-    {**_MS_BEST, "stream_encoder": "blockgcn",
-     "description": "ENC: B+H+Fc, BlockGCN stream encoders"},
-    # {**_MS_BEST, "stream_encoder": "skateformer",
-    #  "description": "ENC: B+H+Fc, SkateFormer stream encoders"},
+    # {**_MS_BEST, "stream_encoder": "blockgcn",
+    #  "description": "ENC: B+H+Fc, BlockGCN stream encoders"},
+    {**_MS_BEST, "stream_encoder": "skateformer",
+     "description": "ENC: B+H+Fc, SkateFormer stream encoders"},
     # Optional controls:
     # {**_MS_BEST, "stream_encoder": "blockgcn", "blockgcn_ph": False,
     #  "description": "ENC: B+H+Fc, BlockGCN without persistent homology"},
