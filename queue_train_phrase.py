@@ -580,8 +580,8 @@ BL2023_COMBO_STUDY = [
 ENCODER_STUDY = [
     {**_MS_BEST, "stream_encoder": "blockgcn",
      "description": "ENC: B+H+Fc, BlockGCN stream encoders"},
-    {**_MS_BEST, "stream_encoder": "skateformer",
-     "description": "ENC: B+H+Fc, SkateFormer stream encoders"},
+    # {**_MS_BEST, "stream_encoder": "skateformer",
+    #  "description": "ENC: B+H+Fc, SkateFormer stream encoders"},
     # Optional controls:
     # {**_MS_BEST, "stream_encoder": "blockgcn", "blockgcn_ph": False,
     #  "description": "ENC: B+H+Fc, BlockGCN without persistent homology"},
