@@ -549,19 +549,19 @@ COMBO_FACE = {"use_face_keypoints": True, "face_subset": "compact", "face_dims":
 _C = {**_BL2023_BASE, **_RECIPE_MINE}
 _FS = COMBO_FACE["face_subset"]
 BL2023_COMBO_STUDY = [
-    {**_C, "description": "BL2023 combo: B"},
-    {**_C, "use_pose_input": False, "use_hamer_features": True,
-     "description": "BL2023 combo: H (HaMeR only)"},
-    {**_C, **COMBO_FACE, "face_only": True,
-     "description": f"BL2023 combo: F (face {_FS} only)"},
-    # {**_C, "use_hamer_features": True,
-    #  "description": "BL2023 combo: B+H"},
-    # {**_C, **COMBO_FACE,
-    #  "description": f"BL2023 combo: B+F ({_FS})"},
-    # {**_C, **COMBO_FACE, "face_only": True, "use_hamer_features": True,
-    #  "description": f"BL2023 combo: F+H ({_FS})"},
-    # {**_C, **COMBO_FACE, "use_hamer_features": True,
-    #  "description": f"BL2023 combo: B+F+H ({_FS})"},
+    # {**_C, "description": "BL2023 combo: B"},
+    # {**_C, "use_pose_input": False, "use_hamer_features": True,
+    #  "description": "BL2023 combo: H (HaMeR only)"},
+    # {**_C, **COMBO_FACE, "face_only": True,
+    #  "description": f"BL2023 combo: F (face {_FS} only)"},
+    {**_C, "use_hamer_features": True,
+     "description": "BL2023 combo: B+H"},
+    {**_C, **COMBO_FACE,
+     "description": f"BL2023 combo: B+F ({_FS})"},
+    {**_C, **COMBO_FACE, "face_only": True, "use_hamer_features": True,
+     "description": f"BL2023 combo: F+H ({_FS})"},
+    {**_C, **COMBO_FACE, "use_hamer_features": True,
+     "description": f"BL2023 combo: B+F+H ({_FS})"},
     # B alone = "BL2023: E1s (body+hands), my recipe" -- uncomment to re-train it here too:
 ]
 
