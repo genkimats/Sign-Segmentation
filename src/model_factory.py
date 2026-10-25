@@ -201,6 +201,11 @@ def build_model_kwargs(config, detected_hamer_dim=None, detected_dinov2_dim=None
         # Front-end options (src/frontend.py). Defaults = the original model, so older
         # configs / checkpoints rebuild unchanged.
         model_kwargs["vertex_pooling"] = config.get("vertex_pooling", "flatten")
+        model_kwargs["stream_encoder"] = config.get("stream_encoder", "stgcn")
+        model_kwargs["stream_encoder_layers"] = int(config.get("stream_encoder_layers", 2))
+        model_kwargs["blockgcn_groups"] = int(config.get("blockgcn_groups", 8))
+        model_kwargs["blockgcn_ph"] = bool(config.get("blockgcn_ph", True))
+        model_kwargs["skate_local_frames"] = int(config.get("skate_local_frames", 32))
         model_kwargs["stream_dropout"] = float(config.get("stream_dropout", 0.0))
         if config.get("change_point_scales"):
             model_kwargs["change_point_scales"] = [int(w) for w in config["change_point_scales"]]

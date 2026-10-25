@@ -8,6 +8,7 @@ from src.stgcn import STGCNBlock
 from src.stgcn import DecoupledSTGCNBlock
 from src.frontend import HaMeRFrontEnd, TemporalResidual, VertexPooling, BODY_PARTS, face_parts, ChangePointLayer
 from src.face_subsets import face_subset_for_vertex_count
+from src.skeleton_encoders import build_stream_encoder, SKATE_BODY_PARTS, STREAM_ENCODERS
 from src.skeleton_angles import skeleton_angle_features, ANGLE_FEATURE_DIM
 
 
@@ -2339,6 +2340,9 @@ class MultiStreamSegmenter(nn.Module):
                           face streams get temporal context from their ST-GCN; HaMeR had none)
       stream_dropout      training only: each stream of each sample is zeroed with this
                           probability (at least one stream is always kept)
+      stream_encoder      "stgcn" (original) | "blockgcn" | "skateformer" | "linear": the
+                          encoder of the body_hands and face streams (src/skeleton_encoders.py;
+                          same width stgcn_channels, depth stream_encoder_layers)
       change_point_scales e.g. (5, 10, 25): after fusion, add future-minus-past feature
                           differences at these scales (frames) before the encoder
                           (ChangePointLayer; identity at initialization). None/() = off.
@@ -2355,8 +2359,22 @@ class MultiStreamSegmenter(nn.Module):
                  use_stream_cues=False, cue_dim=None, cue_proj_dim=128, cue_temporal_kernel=1,
                  vertex_pooling="flatten", hamer_rep="matrix", hamer_mask=False, hamer_motion=False,
                  hamer_motion_lag=1, hamer_temporal_kernel=1, stream_dropout=0.0,
-                 change_point_scales=None):
+                 change_point_scales=None, stream_encoder="stgcn", stream_encoder_layers=2,
+                 blockgcn_groups=8, blockgcn_ph=True, skate_local_frames=32):
         super().__init__()
+        if stream_encoder not in STREAM_ENCODERS:
+            raise ValueError(f"stream_encoder must be one of {STREAM_ENCODERS}, got '{stream_encoder}'.")
+        self.stream_encoder = stream_encoder
+        enc_opts = dict(blockgcn_groups=blockgcn_groups, blockgcn_ph=blockgcn_ph,
+                        skate_local_frames=skate_local_frames)
+
+        def graph_encoder(c_in, A, parts):
+            """Keypoint stream encoder: the original 2 ST-GCN blocks, or an alternative
+            (src/skeleton_encoders.py) with the same in/out shape and width."""
+            if stream_encoder == "stgcn":
+                return nn.Sequential(STGCNBlock(c_in, stgcn_channels, A), STGCNBlock(stgcn_channels, stgcn_channels, A))
+            return build_stream_encoder(stream_encoder, c_in, A, parts, stgcn_channels,
+                                        int(stream_encoder_layers), dropout=0.0, **enc_opts)
         if fusion not in ("concat", "gated_sum"):
             raise ValueError(f"fusion must be 'concat' or 'gated_sum', got '{fusion}'.")
         if encoder not in ("bilstm", "transformer", "bilstm_attn"):
@@ -2389,10 +2407,7 @@ class MultiStreamSegmenter(nn.Module):
             if num_vertices < 65:
                 raise ValueError(f"body_hands stream needs the 65 body+hand vertices (num_vertices={num_vertices}).")
             A_bh = SkeletonGraph(num_vertices=65).A
-            self.body_hands_stgcn = nn.Sequential(
-                STGCNBlock(in_channels, stgcn_channels, A_bh),
-                STGCNBlock(stgcn_channels, stgcn_channels, A_bh),
-            )
+            self.body_hands_stgcn = graph_encoder(in_channels, A_bh, SKATE_BODY_PARTS)
             if vertex_pooling == "flatten":
                 bh_in = 65 * stgcn_channels
             else:
@@ -2410,10 +2425,10 @@ class MultiStreamSegmenter(nn.Module):
             # None = all channels (legacy 3D face runs).
             self.face_channels = list(face_channels) if face_channels is not None else None
             face_in = len(self.face_channels) if self.face_channels is not None else in_channels
-            self.face_stgcn = nn.Sequential(
-                STGCNBlock(face_in, stgcn_channels, A_face),
-                STGCNBlock(stgcn_channels, stgcn_channels, A_face),
-            )
+            self.face_stgcn = graph_encoder(
+                face_in, A_face,
+                [idx for _, idx in face_parts(face_subset_for_vertex_count(self.num_face))]
+                if stream_encoder == "skateformer" else None)
             if vertex_pooling == "flatten":
                 face_in_dim = self.num_face * stgcn_channels
             else:

@@ -49,7 +49,8 @@ MAMBA_DEFAULTS = {
     # True = face vertices ONLY (body + hands dropped); needs use_face_keypoints=True and
     # kinematic_features=[]. Works with stgcn_bilstm / stgcn_transformer / *_baseline.
     "face_only": False,
-    "use_pose_input": True,          # bilstm_2023 only: False = ignore the keypoints (HaMeR only)
+    "use_pose_input": True,
+    "stream_encoder": "stgcn",       # multistream keypoint streams: stgcn | blockgcn | skateformer | linear          # bilstm_2023 only: False = ignore the keypoints (HaMeR only)
     "use_hamer_features": False,
     "hamer_dir": "processed_data/hamer_features",
     # Phrase labels to train on. v2 = corrected boundaries (data_processing/
@@ -549,11 +550,10 @@ COMBO_FACE = {"use_face_keypoints": True, "face_subset": "compact", "face_dims":
 _C = {**_BL2023_BASE, **_RECIPE_MINE}
 _FS = COMBO_FACE["face_subset"]
 BL2023_COMBO_STUDY = [
-    # {**_C, "description": "BL2023 combo: B"},
-    # {**_C, "use_pose_input": False, "use_hamer_features": True,
-    #  "description": "BL2023 combo: H (HaMeR only)"},
-    # {**_C, **COMBO_FACE, "face_only": True,
-    #  "description": f"BL2023 combo: F (face {_FS} only)"},
+    {**_C, "use_pose_input": False, "use_hamer_features": True,
+     "description": "BL2023 combo: H (HaMeR only)"},
+    {**_C, **COMBO_FACE, "face_only": True,
+     "description": f"BL2023 combo: F (face {_FS} only)"},
     {**_C, "use_hamer_features": True,
      "description": "BL2023 combo: B+H"},
     {**_C, **COMBO_FACE,
@@ -563,10 +563,34 @@ BL2023_COMBO_STUDY = [
     {**_C, **COMBO_FACE, "use_hamer_features": True,
      "description": f"BL2023 combo: B+F+H ({_FS})"},
     # B alone = "BL2023: E1s (body+hands), my recipe" -- uncomment to re-train it here too:
+    # {**_C, "description": "BL2023 combo: B"},
+]
+
+# ------------------------------------------------------------------------------
+# STREAM-ENCODER STUDY: replace the 2-block ST-GCN of the body_hands and face streams of
+# the main model (B+H+Fc, multistream_bilstm, same recipe) by a modern skeleton encoder of
+# the SAME width (64) and depth (2) -- src/skeleton_encoders.py.
+#   blockgcn     BlockGCN (CVPR 2024): per-group learned adjacency + hop-distance encoding
+#                + per-frame persistent-homology encoding, block-diagonal projection
+#   skateformer  SkateFormer (ECCV 2024): G-Conv + T-Conv + partition attention over
+#                {same body part, same position across parts} x {32 consecutive frames,
+#                every 32nd frame}
+# Reference = your existing B+H+Fc runs (ST-GCN), e.g. multistream_bilstm 124-126.
+# ------------------------------------------------------------------------------
+ENCODER_STUDY = [
+    {**_MS_BEST, "stream_encoder": "blockgcn",
+     "description": "ENC: B+H+Fc, BlockGCN stream encoders"},
+    {**_MS_BEST, "stream_encoder": "skateformer",
+     "description": "ENC: B+H+Fc, SkateFormer stream encoders"},
+    # Optional controls:
+    # {**_MS_BEST, "stream_encoder": "blockgcn", "blockgcn_ph": False,
+    #  "description": "ENC: B+H+Fc, BlockGCN without persistent homology"},
+    # {**_MS_BEST, "stream_encoder": "linear",
+    #  "description": "ENC: B+H+Fc, per-vertex Linear (no graph, no temporal conv)"},
 ]
 
 # What runs now (earlier studies above are already trained):
-EXPERIMENTS_TO_RUN = BL2023_COMBO_STUDY
+EXPERIMENTS_TO_RUN = ENCODER_STUDY
 # EXPERIMENTS_TO_RUN += OPTIONAL_MY_MODEL_2023_RECIPE
 
 if CHOSEN_TYPE == 'mamba':
