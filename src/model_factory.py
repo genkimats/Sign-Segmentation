@@ -55,7 +55,7 @@ MAMBA_BASED_MODELS = ["pure_mamba", "bi_mamba", "stgcn_mamba", "stgcn_mlp_mamba"
 
 HAMER_SUPPORTED_MODELS = ["stgcn_mamba", "latent_stgcn_mamba", "ctrgcn_mamba", "infogcn_mamba",
                           "shiftgcn_mamba", "spatial_transformer_mamba", "hdgcn_mamba", "hypersign_mamba",
-                          "stgcn_bilstm", "stgcn_transformer",
+                          "stgcn_bilstm", "stgcn_transformer", "bilstm_2023",
                           "stgcn_mlp_mamba", "stgcn_bimamba", "decoupled_stgcn_mamba",
                           "stgcn_hybrid_seq", "stgcn_hybrid_parallel",
                           "multistream_bilstm", "multistream_transformer", "multistream_bilstm_attn"]
@@ -121,6 +121,10 @@ def build_model_kwargs(config, detected_hamer_dim=None, detected_dinov2_dim=None
         model_kwargs["mamba_d_state"] = config.get("mamba_d_state", 16)
         model_kwargs["mamba_d_conv"] = config.get("mamba_d_conv", 4)
         model_kwargs["mamba_expand"] = config.get("mamba_expand", 2)
+
+    if model_name == "bilstm_2023":
+        # HaMeR only: the keypoint tensor is still loaded but not fed to the model
+        model_kwargs["use_pose_input"] = bool(config.get("use_pose_input", True))
 
     if config.get("use_hamer_features", False):
         if model_name not in HAMER_SUPPORTED_MODELS:

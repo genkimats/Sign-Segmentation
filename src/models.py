@@ -2257,20 +2257,40 @@ class Moryossef2023_BiLSTM(nn.Module):
     a sign head on the same encoder, trained jointly).
     d_model = pose projection size = total BiLSTM output size (their hidden_dim);
     n_layers = encoder depth.
+
+    Input combinations (for the stream-combination study): their design has ONE input
+    path -- every pose component is flattened and concatenated per frame before the single
+    Linear projection (early fusion). Extra inputs follow the same rule:
+      use_pose_input=False : ignore the keypoint tensor (e.g. HaMeR only)
+      hamer_dim            : HaMeR vector (288) concatenated to the flattened keypoints
+    The face is part of the keypoint tensor (use_face_keypoints / face_only in the data).
     """
 
-    def __init__(self, in_channels, num_vertices, num_classes=3, d_model=256, n_layers=4, **unused):
+    def __init__(self, in_channels, num_vertices, num_classes=3, d_model=256, n_layers=4,
+                 hamer_dim=None, use_pose_input=True, **unused):
         super().__init__()
         if d_model % 2:
             raise ValueError("d_model (their hidden_dim) must be even.")
-        self.pose_projection = nn.Linear(in_channels * num_vertices, d_model)
+        self.use_pose_input = bool(use_pose_input)
+        self.hamer_dim = int(hamer_dim) if hamer_dim else 0
+        in_dim = (in_channels * num_vertices if self.use_pose_input else 0) + self.hamer_dim
+        if in_dim == 0:
+            raise ValueError("bilstm_2023 has no input: use_pose_input=False and no HaMeR.")
+        self.pose_projection = nn.Linear(in_dim, d_model)
         self.encoder = nn.LSTM(d_model, d_model // 2, num_layers=n_layers, batch_first=True,
                                bidirectional=True)
         self.phrase_bio_head = nn.Linear(d_model, num_classes)
 
-    def forward(self, x, **unused):
+    def forward(self, x, hamer=None, **unused):
         B, C, T, V = x.shape
-        h = self.pose_projection(x.permute(0, 2, 1, 3).reshape(B, T, C * V))
+        parts = []
+        if self.use_pose_input:
+            parts.append(x.permute(0, 2, 1, 3).reshape(B, T, C * V))
+        if self.hamer_dim:
+            if hamer is None:
+                raise ValueError("bilstm_2023 was built with HaMeR input but got hamer=None.")
+            parts.append(hamer.permute(0, 2, 1)[:, :T])               # (B, D, T) -> (B, T, D)
+        h = self.pose_projection(torch.cat(parts, dim=-1) if len(parts) > 1 else parts[0])
         enc, _ = self.encoder(h)
         logits = self.phrase_bio_head(enc)
         return logits.permute(0, 2, 1), enc.permute(0, 2, 1)

@@ -12,8 +12,7 @@ CHOSEN_TYPE = 'mamba'
 # ==============================================================================
 # 🐍 MAMBA-BASED DEFAULT HYPERPARAMETERS
 # ==============================================================================
-# Default [O, I, B] class weights for weighted_ce (your recipe). Runs before 2026-10-25
-# used [1.0, 1.1, 12.4]; re-queued references now train with these.
+# Default [O, I, B] class weights for weighted_ce (your recipe; used for the multistream runs).
 DEFAULT_CLASS_WEIGHTS = [1.0, 1.1, 8.5]
 
 MAMBA_DEFAULTS = {
@@ -50,6 +49,7 @@ MAMBA_DEFAULTS = {
     # True = face vertices ONLY (body + hands dropped); needs use_face_keypoints=True and
     # kinematic_features=[]. Works with stgcn_bilstm / stgcn_transformer / *_baseline.
     "face_only": False,
+    "use_pose_input": True,          # bilstm_2023 only: False = ignore the keypoints (HaMeR only)
     "use_hamer_features": False,
     "hamer_dir": "processed_data/hamer_features",
     # Phrase labels to train on. v2 = corrected boundaries (data_processing/
@@ -367,7 +367,7 @@ CUE_STUDY = [  # already run (multistream_bilstm 157-177)
 # ------------------------------------------------------------------------------
 # FRONT-END STUDY: changes between the raw inputs and the encoder (src/frontend.py).
 # Everything is on top of the best model, Body + HaMeR + Face(compact), same setup as
-# before (multistream_bilstm, window 512, v2 labels, tolerance 1, weights [1.0, 1.1, 12.4]).
+# before (multistream_bilstm, window 512, v2 labels, tolerance 1, weights [1.0, 1.1, 8.5]).
 # Each idea is one switch, so they can be compared one by one and then combined.
 # ------------------------------------------------------------------------------
 _MS_BEST = {**_MS_CUE_STUDY, "use_stream_face": True, "face_subset": "compact"}
@@ -415,7 +415,7 @@ FRONTEND_REFERENCES = [
 #   python data_processing/extract_face_keypoints_full.py --blendshapes --workers 4
 #   python data_processing/normalize_face_keypoints_v2.py --layout full
 # Same setup as before: multistream_bilstm, window 512, v2 labels, tolerance 1,
-# weights [1.0, 1.1, 12.4]. References: B+H+Fc 124-126 (.6802 test), B+H 127-129 (.6764),
+# weights [1.0, 1.1, 8.5]. References: B+H+Fc 124-126 (.6802 test), B+H 127-129 (.6764),
 # Face only 136-138 (.5234, B F1 0).
 # ------------------------------------------------------------------------------
 _FULL_FACE = {"face_layout": "full478", "face_dir": "processed_data/face_keypoints_full_normalized_v2"}
@@ -484,8 +484,8 @@ CHANGE_POINT_STUDY = [
 #       batch 16, AdamW lr 1e-4 + cosine schedule, grad clip 1.0, patience 10 (min 15
 #       epochs), weights DEFAULT_CLASS_WEIGHTS [1.0, 1.1, 8.5], best epoch by Frame F1
 # 2 x 2: {E1s body+hands, E2s + 2023 face contours} x {their recipe, your recipe}.
-# Compare (b) with your multistream runs 124-126 (same recipe, different model -- note
-# 124-126 used B weight 12.4, these use 8.5) and (a) with (b) (same model, different recipe).
+# Compare (b) with your multistream runs (same recipe, different model) and (a) with (b)
+# (same model, different recipe).
 # Known differences to the paper, kept on purpose:
 #   - phrase head only (they train a sign head jointly on the same encoder)
 #   - our pose: 23 upper-body + 2 x 21 hand points (they drop the legs too), our labels v2
@@ -515,14 +515,14 @@ _E2S_FACE = {"use_face_keypoints": True, "face_layout": "full478",
              "face_subset": "contours2023", "face_dims": 2}
 
 BASELINE_2023_STUDY = [
-    # {**_BL2023_BASE, **_RECIPE_2023,
-    #  "description": "BL2023: E1s (body+hands), 2023 recipe"},
+    {**_BL2023_BASE, **_RECIPE_2023,
+     "description": "BL2023: E1s (body+hands), 2023 recipe"},
     {**_BL2023_BASE, **_RECIPE_2023, **_E2S_FACE,
      "description": "BL2023: E2s (body+hands+face contours2023), 2023 recipe"},
-    # {**_BL2023_BASE, **_RECIPE_MINE,
-    #  "description": "BL2023: E1s (body+hands), my recipe"},
-    # {**_BL2023_BASE, **_RECIPE_MINE, **_E2S_FACE,
-    #  "description": "BL2023: E2s (body+hands+face contours2023), my recipe"},
+    {**_BL2023_BASE, **_RECIPE_MINE,
+     "description": "BL2023: E1s (body+hands), my recipe"},
+    {**_BL2023_BASE, **_RECIPE_MINE, **_E2S_FACE,
+     "description": "BL2023: E2s (body+hands+face contours2023), my recipe"},
 ]
 
 # Optional 5th cell -- YOUR model with THEIR recipe (completes the model x recipe table).
@@ -533,8 +533,40 @@ OPTIONAL_MY_MODEL_2023_RECIPE = [
      "description": "BL2023: my B+H+Fc multistream, 2023 recipe"},
 ]
 
+# ------------------------------------------------------------------------------
+# 2023-ARCHITECTURE STREAM COMBINATIONS: the same 7 input combinations as the multistream
+# stream study, but through the 2023 model (early fusion: everything flattened and
+# concatenated per frame -> ONE plain Linear -> BiLSTM 4 x 128/dir). Your recipe, weights
+# DEFAULT_CLASS_WEIGHTS, v2 labels, best epoch by Frame F1 -- identical to the multistream runs,
+# so each cell compares directly with the multistream cell of the same inputs.
+#   B   = body + hands (65)  -> already trained: "BL2023: E1s, my recipe" (bilstm_2023 244-246)
+#   F   = face, COMBO_FACE subset (face-local 2D)
+#   H   = HaMeR (288), concatenated to the flattened keypoints
+# Set COMBO_FACE to the subset your multistream combination study used.
+# ------------------------------------------------------------------------------
+COMBO_FACE = {"use_face_keypoints": True, "face_subset": "compact", "face_dims": 2,
+              "face_layout": "saved83", "face_dir": "processed_data/face_keypoints_normalized_v2"}
+_C = {**_BL2023_BASE, **_RECIPE_MINE}
+_FS = COMBO_FACE["face_subset"]
+BL2023_COMBO_STUDY = [
+    {**_C, "description": "BL2023 combo: B"},
+    {**_C, "use_pose_input": False, "use_hamer_features": True,
+     "description": "BL2023 combo: H (HaMeR only)"},
+    {**_C, **COMBO_FACE, "face_only": True,
+     "description": f"BL2023 combo: F (face {_FS} only)"},
+    # {**_C, "use_hamer_features": True,
+    #  "description": "BL2023 combo: B+H"},
+    # {**_C, **COMBO_FACE,
+    #  "description": f"BL2023 combo: B+F ({_FS})"},
+    # {**_C, **COMBO_FACE, "face_only": True, "use_hamer_features": True,
+    #  "description": f"BL2023 combo: F+H ({_FS})"},
+    # {**_C, **COMBO_FACE, "use_hamer_features": True,
+    #  "description": f"BL2023 combo: B+F+H ({_FS})"},
+    # B alone = "BL2023: E1s (body+hands), my recipe" -- uncomment to re-train it here too:
+]
+
 # What runs now (earlier studies above are already trained):
-EXPERIMENTS_TO_RUN = BASELINE_2023_STUDY
+EXPERIMENTS_TO_RUN = BL2023_COMBO_STUDY
 # EXPERIMENTS_TO_RUN += OPTIONAL_MY_MODEL_2023_RECIPE
 
 if CHOSEN_TYPE == 'mamba':
