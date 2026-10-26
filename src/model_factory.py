@@ -234,7 +234,7 @@ def build_model_kwargs(config, detected_hamer_dim=None, detected_dinov2_dim=None
     if config.get("face_only", False):
         if "face_only" in accepted:
             model_kwargs["face_only"] = True
-        elif model_name not in ("bilstm_baseline", "transformer_baseline"):
+        elif model_name not in ("bilstm_baseline", "transformer_baseline", "bilstm_2023"):  # graph-free: any vertex set works
             raise ValueError(f"face_only=True but model '{model_name}' has no face-only graph. "
                              f"Use stgcn_bilstm, stgcn_transformer, bilstm_baseline or transformer_baseline.")
 
