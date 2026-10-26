@@ -32,8 +32,11 @@ DESIGN of the spatial-temporal block, not its size.
                and masked. Input lift = 3 Linear layers + learnable joint embedding + fixed
                sinusoidal frame embedding (Skate-Embedding without the multi-person part).
 
-  linear       per-vertex Linear only: no graph and no temporal mixing (the "no graph"
-               control: the 2023 model's flatten + Linear, kept stream-separated).
+  linear       per-vertex Linear only (2 layers): no graph and no temporal mixing (the 2023
+               model's flatten + Linear, kept stream-separated).
+  tcn          the SAME two ST-GCN blocks with the adjacency replaced by the identity: the
+               9-frame temporal convolution stays, the spatial graph mixing is removed
+               (built in models.py, since STGCNBlock lives there).
 """
 import math
 
@@ -352,18 +355,21 @@ class SkateFormerEncoder(nn.Module):
 
 # ================================================================================ linear
 class LinearVertexEncoder(nn.Module):
-    """Per-vertex Linear (+ BN, ReLU): no spatial graph, no temporal mixing."""
+    """Per-vertex Linear (+ BN, ReLU) x layers: no spatial graph, no temporal mixing."""
 
-    def __init__(self, in_channels, channels=64):
+    def __init__(self, in_channels, channels=64, layers=2):
         super().__init__()
-        self.net = nn.Sequential(nn.Conv2d(in_channels, channels, 1), nn.BatchNorm2d(channels),
-                                 nn.ReLU(inplace=True))
+        mods, c = [], in_channels
+        for _ in range(max(1, layers)):
+            mods += [nn.Conv2d(c, channels, 1), nn.BatchNorm2d(channels), nn.ReLU(inplace=True)]
+            c = channels
+        self.net = nn.Sequential(*mods)
 
     def forward(self, x):
         return self.net(x)
 
 
-STREAM_ENCODERS = ("stgcn", "blockgcn", "skateformer", "linear")
+STREAM_ENCODERS = ("stgcn", "tcn", "blockgcn", "skateformer", "linear")
 
 
 def build_stream_encoder(kind, in_channels, A, parts, channels=64, layers=2, dropout=0.0, **opts):
@@ -375,5 +381,5 @@ def build_stream_encoder(kind, in_channels, A, parts, channels=64, layers=2, dro
         return SkateFormerEncoder(in_channels, A, parts, channels, layers,
                                   local_frames=opts.get("skate_local_frames", 32), dropout=dropout)
     if kind == "linear":
-        return LinearVertexEncoder(in_channels, channels)
+        return LinearVertexEncoder(in_channels, channels, layers)
     raise ValueError(f"stream_encoder must be one of {STREAM_ENCODERS}, got '{kind}'.")

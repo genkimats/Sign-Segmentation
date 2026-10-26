@@ -578,8 +578,8 @@ BL2023_COMBO_STUDY = [
 # Reference = your existing B+H+Fc runs (ST-GCN), e.g. multistream_bilstm 124-126.
 # ------------------------------------------------------------------------------
 ENCODER_STUDY = [
-    # {**_MS_BEST, "stream_encoder": "blockgcn",
-    #  "description": "ENC: B+H+Fc, BlockGCN stream encoders"},
+    {**_MS_BEST, "stream_encoder": "blockgcn",
+     "description": "ENC: B+H+Fc, BlockGCN stream encoders"},
     {**_MS_BEST, "stream_encoder": "skateformer",
      "description": "ENC: B+H+Fc, SkateFormer stream encoders"},
     # Optional controls:
@@ -589,8 +589,26 @@ ENCODER_STUDY = [
     #  "description": "ENC: B+H+Fc, per-vertex Linear (no graph, no temporal conv)"},
 ]
 
+# ------------------------------------------------------------------------------
+# SPATIAL vs TEMPORAL MIXING in the keypoint encoder (body + hands only, multistream).
+# The multistream advantage over the 2023 model sits entirely in the body+hands stream;
+# ST-GCN adds two things over a per-joint Linear: graph mixing across joints and a 9-frame
+# temporal convolution. Each control removes one / both:
+#   stgcn   graph + temporal   -> already trained: "New: MS: Body" (multistream 130-132)
+#   tcn     temporal only      (same ST-GCN blocks, adjacency = identity)
+#   linear  neither            (per-joint Linear x 2)
+# The 2023 model on B (bilstm_2023 250-252) is the early-concatenation reference.
+# ------------------------------------------------------------------------------
+_MS_BODY_ONLY = {**_MS_CUE_STUDY, "use_stream_hamer": False, "use_stream_face": False}
+MIXING_STUDY = [
+    {**_MS_BODY_ONLY, "stream_encoder": "tcn",
+     "description": "MIX: MS Body, temporal conv only (ST-GCN with identity graph)"},
+    {**_MS_BODY_ONLY, "stream_encoder": "linear",
+     "description": "MIX: MS Body, per-joint Linear (no graph, no temporal conv)"},
+]
+
 # What runs now (earlier studies above are already trained):
-EXPERIMENTS_TO_RUN = ENCODER_STUDY
+EXPERIMENTS_TO_RUN = MIXING_STUDY
 # EXPERIMENTS_TO_RUN += OPTIONAL_MY_MODEL_2023_RECIPE
 
 if CHOSEN_TYPE == 'mamba':

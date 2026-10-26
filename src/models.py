@@ -2340,7 +2340,8 @@ class MultiStreamSegmenter(nn.Module):
                           face streams get temporal context from their ST-GCN; HaMeR had none)
       stream_dropout      training only: each stream of each sample is zeroed with this
                           probability (at least one stream is always kept)
-      stream_encoder      "stgcn" (original) | "blockgcn" | "skateformer" | "linear": the
+      stream_encoder      "stgcn" (original) | "tcn" (ST-GCN without graph) | "blockgcn" |
+                          "skateformer" | "linear" (no graph, no temporal conv): the
                           encoder of the body_hands and face streams (src/skeleton_encoders.py;
                           same width stgcn_channels, depth stream_encoder_layers)
       change_point_scales e.g. (5, 10, 25): after fusion, add future-minus-past feature
@@ -2371,8 +2372,11 @@ class MultiStreamSegmenter(nn.Module):
         def graph_encoder(c_in, A, parts):
             """Keypoint stream encoder: the original 2 ST-GCN blocks, or an alternative
             (src/skeleton_encoders.py) with the same in/out shape and width."""
-            if stream_encoder == "stgcn":
-                return nn.Sequential(STGCNBlock(c_in, stgcn_channels, A), STGCNBlock(stgcn_channels, stgcn_channels, A))
+            if stream_encoder in ("stgcn", "tcn"):
+                # "tcn": identical blocks, adjacency = identity -> temporal conv only, no graph
+                A_use = np.eye(np.asarray(A).shape[0]) if stream_encoder == "tcn" else A
+                return nn.Sequential(STGCNBlock(c_in, stgcn_channels, A_use),
+                                     STGCNBlock(stgcn_channels, stgcn_channels, A_use))
             return build_stream_encoder(stream_encoder, c_in, A, parts, stgcn_channels,
                                         int(stream_encoder_layers), dropout=0.0, **enc_opts)
         if fusion not in ("concat", "gated_sum"):
