@@ -50,7 +50,8 @@ MAMBA_DEFAULTS = {
     # kinematic_features=[]. Works with stgcn_bilstm / stgcn_transformer / *_baseline.
     "face_only": False,
     "use_pose_input": True,
-    "stream_encoder": "stgcn",       # multistream keypoint streams: stgcn | blockgcn | skateformer | linear          # bilstm_2023 only: False = ignore the keypoints (HaMeR only)
+    "stream_encoder": "stgcn",
+    "train_fraction": 1.0,           # < 1: nested subset of the training videos (data-scaling study)       # multistream keypoint streams: stgcn | blockgcn | skateformer | linear          # bilstm_2023 only: False = ignore the keypoints (HaMeR only)
     "use_hamer_features": False,
     "hamer_dir": "processed_data/hamer_features",
     # Phrase labels to train on. v2 = corrected boundaries (data_processing/
@@ -607,8 +608,19 @@ MIXING_STUDY = [
      "description": "MIX: MS Body, per-joint Linear (no graph, no temporal conv)"},
 ]
 
+# ------------------------------------------------------------------------------
+# DATA-SCALING STUDY: is the ~.68 plateau a data limit? The main model (B+H+Fc) trained on
+# nested subsets of the training videos (same subset for every seed; 25% inside 50%).
+# 100% = the existing B+H+Fc runs (multistream_bilstm 124-126). Still rising at 100% ->
+# more annotation helps; flat -> input / labels are the limit.
+# ------------------------------------------------------------------------------
+SCALING_STUDY = [
+    {**_MS_BEST, "train_fraction": f, "description": f"SCALE: B+H+Fc, {f * 100:g}% of training videos"}
+    for f in (0.125, 0.25, 0.5)
+]
+
 # What runs now (earlier studies above are already trained):
-EXPERIMENTS_TO_RUN = MIXING_STUDY
+EXPERIMENTS_TO_RUN = MIXING_STUDY + SCALING_STUDY
 # EXPERIMENTS_TO_RUN += OPTIONAL_MY_MODEL_2023_RECIPE
 
 if CHOSEN_TYPE == 'mamba':

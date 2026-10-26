@@ -410,6 +410,11 @@ def main():
                         help="Evaluate every run against these phrase labels (e.g. "
                              "processed_data/BIO_tags_phrase_v2). Default: each run's own labels "
                              "(its phrase_labels_dir, or v1 for older runs).")
+    parser.add_argument("--save-predictions", action="store_true",
+                        help="Save every run's per-frame probabilities for this split to "
+                             "evaluation_phrase/predictions/<run>/<split>.npz (+ <split>_meta.json with "
+                             "labels dir and thresholds) -- input for boundary_error_analysis.py and "
+                             "phrase_oracle_analysis.py --predictions.")
     parser.add_argument("--sweep-step", type=float, default=0.1,
                         help="Threshold grid step for --sweep over 0.3..0.9 (default 0.1 = 7x7 pairs). "
                              "Smaller = finer tuning but slower (0.05 = 13x13).")
@@ -524,6 +529,21 @@ def main():
                 "seed": config.get("seed", ""),
                 "description": config.get("description", ""),
             })
+
+        if args.save_predictions:
+            pred_dir = os.path.join(OUT_DIR, "predictions", run_name)
+            os.makedirs(pred_dir, exist_ok=True)
+            np.savez_compressed(os.path.join(pred_dir, f"{args.split}.npz"),
+                                **{vid: np.asarray(p, dtype=np.float16) for vid, p in video_probs.items()})
+            with open(os.path.join(pred_dir, f"{args.split}_meta.json"), "w") as f:
+                json.dump({"run": run_name, "model": model_name, "prefix": prefix, "split": args.split,
+                           "labels_dir": labels_dir_for(config),
+                           "description": config.get("description", ""), "seed": config.get("seed", ""),
+                           "fixed_thresholds": [args.b_threshold, args.o_threshold],
+                           "swept_thresholds": list(best_thr) if best_thr else None,
+                           "tuned_thresholds": list(tuned_thr) if tuned_thr else None,
+                           "tuned_on": args.tune_on, "sweep_metric": args.sweep_metric}, f, indent=2)
+            print(f"  predictions saved to {pred_dir}/{args.split}.npz")
 
         per_video_path = os.path.join(OUT_DIR, f"{run_name}_{args.split}_per_video.json")
         with open(per_video_path, "w") as f:

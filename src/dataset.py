@@ -23,7 +23,8 @@ def extra_dataset_kwargs(config):
             "cue_set": config.get("cue_set", "selected"),
             "hand_canonicalize": bool(config.get("hand_canonicalize", False)),
             "face_layout": config.get("face_layout", "saved83"),
-            "mirror_augment_p": float(config.get("mirror_augment_p", 0.0))}
+            "mirror_augment_p": float(config.get("mirror_augment_p", 0.0)),
+            "train_fraction": float(config.get("train_fraction", 1.0))}
 
 
 cue_dataset_kwargs = extra_dataset_kwargs  # old name
@@ -96,7 +97,7 @@ def downsample_labels(labels, k):
 
 
 class SignSegmentationDataset(Dataset):
-    def __init__(self, keypoints_dir, labels_dir, split_file="dataset_splits.json", split="train", window_size=16, overlap=0, tolerance_window=1, use_full_length=False, base_features=None, kinematic_features=None, temporal_downsample_factor=1, use_face_keypoints=False, face_dir="processed_data/face_keypoints_normalized_v2", face_subset="full", face_only=False, face_dims=2, use_hamer_features=False, hamer_dir="processed_data/hamer_features", use_dinov2_features=False, dinov2_dir="processed_data/dinov2_features", use_cue_features=False, cue_dir=CUE_DEFAULT_DIR, cue_set="selected", hand_canonicalize=False, mirror_augment_p=0.0, face_layout="saved83"):
+    def __init__(self, keypoints_dir, labels_dir, split_file="dataset_splits.json", split="train", window_size=16, overlap=0, tolerance_window=1, use_full_length=False, base_features=None, kinematic_features=None, temporal_downsample_factor=1, use_face_keypoints=False, face_dir="processed_data/face_keypoints_normalized_v2", face_subset="full", face_only=False, face_dims=2, use_hamer_features=False, hamer_dir="processed_data/hamer_features", use_dinov2_features=False, dinov2_dir="processed_data/dinov2_features", use_cue_features=False, cue_dir=CUE_DEFAULT_DIR, cue_set="selected", hand_canonicalize=False, mirror_augment_p=0.0, face_layout="saved83", train_fraction=1.0):
         self.labels_dir = labels_dir
         self.kinetic_dir = "processed_data/kinematic_features" 
         self.split_file = split_file
@@ -246,6 +247,15 @@ class SignSegmentationDataset(Dataset):
             raise ValueError(f"Split '{split}' not found in {split_file}")
             
         self.video_ids = [vid.replace('.npy', '').replace('.pt', '') for vid in splits[split]]
+        # train_fraction < 1 (data-scaling study): keep a fixed, NESTED subset of the training
+        # videos -- one permutation (seed 0, independent of the run seed), so the 25% subset is
+        # inside the 50% subset and every seed of a fraction trains on the same videos.
+        if split == "train" and float(train_fraction) < 1.0:
+            ids = sorted(self.video_ids)
+            order = np.random.RandomState(0).permutation(len(ids))
+            n_keep = max(1, int(np.ceil(float(train_fraction) * len(ids))))
+            self.video_ids = [ids[i] for i in sorted(order[:n_keep])]
+            print(f"[TRAIN] train_fraction={train_fraction}: {n_keep}/{len(ids)} videos")
         
         self.samples = []  
         self.windows = []  
@@ -612,14 +622,16 @@ class SignSegmentationDataset(Dataset):
         cached_data = self.video_cache[vid]
         
         # Instantly slice the data and restore to FP32 for PyTorch's mathematical operations
-        window_features = cached_data['features'][start_idx:end_idx].to(torch.float32)
+        # keep_half (set by train_phrase.py for chunked full-video batches): stay float16 until the GPU
+        feat_dtype = torch.float16 if getattr(self, 'keep_half', False) else torch.float32
+        window_features = cached_data['features'][start_idx:end_idx].to(feat_dtype)
         window_labels = cached_data['labels'][start_idx:end_idx]
         
         final_input_tensor = window_features.permute(2, 0, 1)
         labels_tensor = torch.tensor(window_labels, dtype=torch.float32).permute(1, 0)
 
         if self.use_hamer_features:
-            window_hamer = cached_data['hamer_features'][start_idx:end_idx].to(torch.float32)  # (T_win, 288)
+            window_hamer = cached_data['hamer_features'][start_idx:end_idx].to(feat_dtype)  # (T_win, 288)
             hamer_tensor = window_hamer.permute(1, 0)  # (288, T_win) -- channel-first, matches final_input_tensor's convention
 
         if self.use_dinov2_features:
