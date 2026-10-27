@@ -56,6 +56,26 @@ def config_of(meta):
     return f"{meta.get('model', meta['run'].rsplit('-', 1)[0])} | {desc or meta['run']}"
 
 
+def assign_seed_blocks(runs):
+    """Same description is reused by different experiments (e.g. "MS: Body" in several
+    studies). A configuration = runs with the same description AND consecutive prefixes with
+    distinct seeds (how the queue expands one experiment into its seeds)."""
+    by_desc = {}
+    for r in runs:
+        by_desc.setdefault(r["config"], []).append(r)
+    for desc, rs in by_desc.items():
+        rs.sort(key=lambda r: int(r["meta"].get("prefix") or r["run"].rsplit("-", 1)[-1]))
+        block, last, seeds = 0, None, set()
+        for r in rs:
+            pref = int(r["meta"].get("prefix") or r["run"].rsplit("-", 1)[-1])
+            seed = str(r["meta"].get("seed", ""))
+            if last is not None and (pref - last > 1 or seed in seeds):
+                block, seeds = block + 1, set()
+            seeds.add(seed)
+            last = pref
+            r["config"] = f"{desc} #{block}" if block else desc
+
+
 def load_runs(pred_dir, split, runs_glob, decoder):
     runs = []
     for d in sorted(glob.glob(os.path.join(pred_dir, runs_glob))):
@@ -117,6 +137,14 @@ def main():
     ap.add_argument("--tolerance", type=int, default=5, help="+-frames for a detection (default 5)")
     ap.add_argument("--offset-tolerance", type=int, default=25,
                     help="+-frames when collecting offsets for the timing analysis (default 25)")
+    ap.add_argument("--max-pred-ratio", type=float, default=3.0,
+                    help="drop runs predicting more than this x the gold starts (heavy over-segmenters, "
+                         "e.g. old label versions); they inflate the union recall (default 3)")
+    ap.add_argument("--include-unseeded", action="store_true",
+                    help="also use runs without a recorded seed (older experiments)")
+    ap.add_argument("--dup-window", type=int, default=10,
+                    help="a false alarm within this many frames of a gold start = duplicate start "
+                         "(fragmentation at a real boundary), reported separately (default 10)")
     ap.add_argument("--min-recall", type=float, default=0.1,
                     help="drop degenerate runs (e.g. face only) with recall below this (default 0.1)")
     ap.add_argument("--transitions", default=None,
@@ -156,11 +184,17 @@ def main():
         hit = sum(match_boundaries(gold[v]["starts"], preds[r["run"]][v], args.tolerance)[0].sum() for v in vids)
         r["recall"] = hit / max(n_gold, 1)
         r["n_pred"] = sum(len(preds[r["run"]][v]) for v in vids)
-        if r["recall"] >= args.min_recall:
-            keep.append(r)
-        else:
+        seeded = str(r["meta"].get("seed", "")) != ""
+        if r["recall"] < args.min_recall:
             print(f"  dropped {r['run']} (recall {r['recall']:.3f}: degenerate)")
+        elif r["n_pred"] > args.max_pred_ratio * n_gold:
+            print(f"  dropped {r['run']} ({r['n_pred'] / n_gold:.1f}x gold starts: over-segmenting)")
+        elif not (seeded or args.include_unseeded):
+            print(f"  dropped {r['run']} (no seed recorded; --include-unseeded keeps it)")
+        else:
+            keep.append(r)
     runs = keep
+    assign_seed_blocks(runs)
     R = len(runs)
     out(f"{R} runs, {len(vids)} {args.split} videos, {n_gold} gold phrase starts, decoder={args.decoder}, "
         f"tolerance +-{args.tolerance} frames, labels {labels_dir}")
@@ -305,8 +339,13 @@ def main():
                 best = cand[np.argmin(np.abs(cand - c))]
                 if abs(int(best) - c) <= args.tolerance:
                     t = trans[(v, int(best))]
-        if where == "inside phrase":
-            where = "at a sign transition" if t else "inside a sign / no transition"
+        gsv = gold[v]["starts"]
+        near_gold = int(np.min(np.abs(gsv - c))) if len(gsv) else 10 ** 9
+        if near_gold <= args.dup_window:
+            where = "duplicate start near a gold start"
+            t = None          # its transition IS the true boundary -- don't describe it as a false one
+        elif where == "inside phrase":
+            where = "within-phrase sign transition" if t else "inside a sign / no transition"
         fa_rows.append({"video": v, "frame": c, "share_of_runs": round(share, 3), "where": where,
                         **({k: t[k] for k in ("gap_prev", "gap_prev_local_max", "mouth_spread",
                                                 "gloss_prev", "gloss_cur",
@@ -323,7 +362,12 @@ def main():
     if trans:
         neg = [r for r in trans.values() if r["y"] == "0"]
         pos = [r for r in trans.values() if r["y"] == "1"]
-        cons_t = [r for r in consistent if "gap_prev" in r]
+        cons_t = [r for r in consistent if "gap_prev" in r and r["where"] == "within-phrase sign transition"]
+        long_neg = [(r["video"], int(r["frame"])) for r in neg if float(r["gap_prev"]) >= 25]
+        flagged = {(r["video"], int(r["frame"])) for r in fa_rows if r["share_of_runs"] >= 0.5}
+        fl = 0
+        for v_, fr_ in long_neg:
+            fl += any((v_, fr_ + d) in flagged for d in range(-args.tolerance, args.tolerance + 1))
 
         def mgap(rows):
             x = [float(r["gap_prev"]) for r in rows if "gap_prev" in r]
@@ -333,9 +377,11 @@ def main():
             x = [float(r["oracle:non-lexical (timing+hands+mouth)"]) for r in rows
                  if r.get("oracle:non-lexical (timing+hands+mouth)") not in (None, "")]
             return f"{np.median(x):+.2f}" if x else "-"
-        out(f"  pause before the sign:  true boundaries {mgap(pos)} | consistent false alarms {mgap(cons_t)} | "
+        out(f"  within-phrase pauses >= 25 fr: {len(long_neg)}, of which {fl} ({fl / max(len(long_neg), 1):.0%}) are "
+            f"consistent false alarms (candidate prosodic boundaries not marked by the translation units)")
+        out(f"  pause before the sign:  true boundaries {mgap(pos)} | consistent within-phrase false alarms {mgap(cons_t)} | "
             f"all within-phrase transitions {mgap(neg)}")
-        out(f"  timing-oracle score:     true boundaries {morc(pos)} | consistent false alarms {morc(cons_t)} | "
+        out(f"  timing-oracle score:     true boundaries {morc(pos)} | consistent within-phrase false alarms {morc(cons_t)} | "
             f"all within-phrase transitions {morc(neg)}")
         out("  (false alarms that look like true boundaries on these measures are candidates for prosodic "
             "boundaries the translation segmentation does not mark)")
@@ -404,6 +450,16 @@ def main():
             w.writeheader()
             w.writerows(rows)
     write(os.path.join(args.out_dir, f"gold_boundaries_{args.split}.csv"), gold_rows)
+    # per-configuration detection rate of every gold boundary (long format), e.g. to compare
+    # face vs no-face models on phrases that open with a non-manual sign ($ORAL, $GEST-NM)
+    cfg_names = sorted({r["config"] for r in runs})
+    cols = {c: [j for j, r in enumerate(runs) if r["config"] == c] for c in cfg_names}
+    long_rows = []
+    for c, js in cols.items():
+        rates = det[:, js].mean(1)
+        for (v, s_), rt in zip(keys, rates):
+            long_rows.append({"config": c, "n_runs": len(js), "video": v, "frame": s_, "rate": round(float(rt), 4)})
+    write(os.path.join(args.out_dir, f"boundary_detection_by_config_{args.split}.csv"), long_rows)
     write(os.path.join(args.out_dir, f"false_alarms_{args.split}.csv"), sorted(fa_rows, key=lambda r: -r["share_of_runs"]))
     write(os.path.join(args.out_dir, f"timing_shift_{args.split}.csv"), shift_rows)
     write(os.path.join(args.out_dir, f"runs_{args.split}.csv"),

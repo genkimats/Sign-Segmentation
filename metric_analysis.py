@@ -61,9 +61,12 @@ def decoder_kind(label):
     return label
 
 
-def load(paths, decoder):
-    """-> {split: {config: {metric: [values over seeds]}}}, deduplicated by (run, split)."""
-    data = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+def load(paths, decoder, include_unseeded=False):
+    """-> {split: {config: {metric: [values over seeds]}}}, deduplicated by (run, split).
+    A configuration = same model + description AND consecutive prefixes with distinct seeds
+    (descriptions such as "MS: Body" were reused by different studies; without the prefix
+    blocks their runs would be pooled as if they were seeds of one configuration)."""
+    raw = defaultdict(list)
     seen = set()
     for path in paths:
         with open(path) as f:
@@ -75,18 +78,32 @@ def load(paths, decoder):
                 if key in seen:
                     continue
                 seen.add(key)
-                cfg = config_name(r.get("description", "")) or r["run"]
+                if not include_unseeded and str(r.get("seed", "")).strip() == "":
+                    continue
                 model = r["run"].rsplit("-", 1)[0]
-                cfg = f"{model} | {cfg}"
-                for m, _ in METRICS:
-                    if m == "pct_dev":
-                        v = float(r["segment_pct"])
-                        val = abs(np.log(v)) if v > 0 else np.nan
-                    elif m in r and r[m] != "":
-                        val = float(r[m])
-                    else:
-                        continue
-                    data[split][cfg][m].append(val)
+                cfg = f"{model} | {config_name(r.get('description', '')) or r['run']}"
+                raw[(split, cfg)].append(r)
+    data = defaultdict(lambda: defaultdict(lambda: defaultdict(list)))
+    for (split, cfg), rows in raw.items():
+        rows.sort(key=lambda r: int(r.get("prefix") or r["run"].rsplit("-", 1)[-1]))
+        block, last, seeds = 0, None, set()
+        for r in rows:
+            pref = int(r.get("prefix") or r["run"].rsplit("-", 1)[-1])
+            seed = str(r.get("seed", ""))
+            if last is not None and (pref - last > 1 or seed in seeds):
+                block, seeds = block + 1, set()
+            seeds.add(seed)
+            last = pref
+            name = f"{cfg} #{block}" if block else cfg
+            for m, _ in METRICS:
+                if m == "pct_dev":
+                    v = float(r["segment_pct"])
+                    val = abs(np.log(v)) if v > 0 else np.nan
+                elif m in r and r[m] != "":
+                    val = float(r[m])
+                else:
+                    continue
+                data[split][name][m].append(val)
     return data
 
 
@@ -140,11 +157,13 @@ def main():
     ap.add_argument("--competitive", type=float, default=0.03,
                     help="keep configurations within this Frame F1 of the best (default 0.03)")
     ap.add_argument("--min-seeds", type=int, default=2)
+    ap.add_argument("--include-unseeded", action="store_true",
+                    help="also use runs without a recorded seed (older experiments; off by default)")
     ap.add_argument("--out-dir", default=os.path.join("evaluation_phrase", "metric_analysis"))
     args = ap.parse_args()
 
     paths = sorted({p for pat in args.csv for p in glob.glob(pat)})
-    data = load(paths, args.decoder)
+    data = load(paths, args.decoder, args.include_unseeded)
     os.makedirs(args.out_dir, exist_ok=True)
     report = {"files": paths, "decoder": args.decoder}
     lines = []
