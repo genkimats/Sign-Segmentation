@@ -1,0 +1,17 @@
+{
+  "run": "multistream_bilstm-237",
+  "model": "multistream_bilstm",
+  "prefix": "237",
+  "split": "val",
+  "labels_dir": "processed_data/BIO_tags_phrase_v2",
+  "description": "FullFace: B+H+F compact + blendshapes (52) [seed=2024]",
+  "seed": 2024,
+  "fixed_thresholds": [
+    0.5,
+    0.5
+  ],
+  "swept_thresholds": null,
+  "tuned_thresholds": null,
+  "tuned_on": null,
+  "sweep_metric": "iou_pct"
+}

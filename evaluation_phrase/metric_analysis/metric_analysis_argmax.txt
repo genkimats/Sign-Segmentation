@@ -1,0 +1,94 @@
+
+=== test: 15 configurations (13 competitive, Frame F1 >= 0.651), decoder=argmax
+
+Rank agreement between metrics (Spearman, competitive configurations):
+                  frame_f1      f1_B       iou   pct_dev segment_f  bnd_f1_1  bnd_f1_2  bnd_f1_5 bnd_f1_10 bnd_f1_25
+        frame_f1      1.00      0.99      0.93     -0.52      0.47      0.76      0.68      0.59      0.49      0.53
+            f1_B      0.99      1.00      0.90     -0.56      0.42      0.69      0.62      0.52      0.41      0.45
+             iou      0.93      0.90      1.00     -0.45      0.46      0.83      0.76      0.67      0.59      0.58
+         pct_dev     -0.52     -0.56     -0.45      1.00     -0.06     -0.19     -0.06      0.01      0.07      0.07
+   segment_f1_05      0.47      0.42      0.46     -0.06      1.00      0.67      0.70      0.82      0.81      0.87
+        bnd_f1_1      0.76      0.69      0.83     -0.19      0.67      1.00      0.94      0.81      0.78      0.79
+        bnd_f1_2      0.68      0.62      0.76     -0.06      0.70      0.94      1.00      0.90      0.88      0.85
+        bnd_f1_5      0.59      0.52      0.67      0.01      0.82      0.81      0.90      1.00      0.98      0.97
+       bnd_f1_10      0.49      0.41      0.59      0.07      0.81      0.78      0.88      0.98      1.00      0.95
+       bnd_f1_25      0.53      0.45      0.58      0.07      0.87      0.79      0.85      0.97      0.95      1.00
+
+Reliability and range per metric (competitive configurations):
+metric                                        ICC(1)    range  seed SD  range/SD
+Frame F1 (macro)                                0.86   0.0139   0.0017       8.1
+B-class F1                                      0.83   0.0324   0.0044       7.4
+IoU                                             0.61   0.0105   0.0025       4.1
+|log %| (segment-count error, lower=better)     0.31   0.2376   0.0803       3.0
+Segment F1@0.5                                  0.52   0.0324   0.0077       4.2
+Boundary F1 +-1                                 0.88   0.0327   0.0040       8.2
+Boundary F1 +-2                                 0.78   0.0332   0.0050       6.6
+Boundary F1 +-5                                 0.56   0.0256   0.0063       4.1
+Boundary F1 +-10                                0.31   0.0215   0.0071       3.0
+Boundary F1 +-25                                0.29   0.0242   0.0075       3.2
+
+Top 5 configurations by each metric:
+  Frame F1: multistream_bilstm | FullFace: B+H+F compact (fr (0.681) | multistream_bilstm | FullFace: B+H+F compact + i (0.680) | multistream_bilstm | CP ref: B+H+Fc, no change-p (0.680) | multistream_bilstm | FullFace: B+H+F contours202 (0.680) | multistream_bilstm | CP: B+H+Fc, change-point 5/ (0.679)
+  IoU: multistream_bilstm | FullFace: B+H+F compact (fr (0.845) | multistream_bilstm | FullFace: B+H+F contours202 (0.845) | multistream_bilstm | FullFace: B+H+F compact + i (0.845) | multistream_bilstm | CP ref: B+H+Fc, no change-p (0.845) | multistream_bilstm | CP: B+H+Fc, change-point sc (0.843)
+  Boundary F1 +-1: multistream_bilstm | FullFace: B+H+F compact (fr (0.211) | multistream_bilstm | FullFace: B+H+F face oval o (0.211) | multistream_bilstm | CP ref: B+H+Fc, no change-p (0.211) | multistream_bilstm | FullFace: B+H+F compact + i (0.211) | multistream_bilstm | FullFace: B+H+F contours202 (0.210)
+  Boundary F1 +-5: multistream_bilstm | CP ref: B+H+Fc, no change-p (0.280) | multistream_bilstm | FullFace: B+H+F face oval o (0.280) | multistream_bilstm | CP: B+H+Fc, change-point 5/ (0.277) | multistream_bilstm | FullFace: B+H+F contours202 (0.276) | multistream_bilstm | FullFace: B+H+F compact + i (0.275)
+  Segment F1@0.5: multistream_bilstm | FullFace: B+H+F face oval o (0.295) | multistream_bilstm | CP ref: B+H+Fc, no change-p (0.291) | multistream_bilstm | FullFace: B+H+F contours202 (0.285) | multistream_bilstm | CP: B+H+Fc, change-point 5/ (0.285) | multistream_bilstm | CP: B+H+Fc, change-point sc (0.284)
+
+=== val: 15 configurations (13 competitive, Frame F1 >= 0.645), decoder=argmax
+
+Rank agreement between metrics (Spearman, competitive configurations):
+                  frame_f1      f1_B       iou   pct_dev segment_f  bnd_f1_1  bnd_f1_2  bnd_f1_5 bnd_f1_10 bnd_f1_25
+        frame_f1      1.00      0.92      0.63     -0.58      0.73      0.73      0.37      0.26      0.23      0.32
+            f1_B      0.92      1.00      0.44     -0.74      0.62      0.63      0.23      0.10      0.05      0.14
+             iou      0.63      0.44      1.00     -0.19      0.59      0.48      0.65      0.66      0.66      0.76
+         pct_dev     -0.58     -0.74     -0.19      1.00     -0.53     -0.34      0.01      0.14      0.07      0.09
+   segment_f1_05      0.73      0.62      0.59     -0.53      1.00      0.46      0.17      0.24      0.16      0.16
+        bnd_f1_1      0.73      0.63      0.48     -0.34      0.46      1.00      0.74      0.63      0.54      0.52
+        bnd_f1_2      0.37      0.23      0.65      0.01      0.17      0.74      1.00      0.93      0.83      0.88
+        bnd_f1_5      0.26      0.10      0.66      0.14      0.24      0.63      0.93      1.00      0.90      0.90
+       bnd_f1_10      0.23      0.05      0.66      0.07      0.16      0.54      0.83      0.90      1.00      0.95
+       bnd_f1_25      0.32      0.14      0.76      0.09      0.16      0.52      0.88      0.90      0.95      1.00
+
+Reliability and range per metric (competitive configurations):
+metric                                        ICC(1)    range  seed SD  range/SD
+Frame F1 (macro)                                0.96   0.0163   0.0011      14.8
+B-class F1                                      0.95   0.0435   0.0030      14.7
+IoU                                             0.46   0.0093   0.0025       3.7
+|log %| (segment-count error, lower=better)     0.39   0.3189   0.0970       3.3
+Segment F1@0.5                                  0.23   0.0296   0.0099       3.0
+Boundary F1 +-1                                 0.94   0.0423   0.0035      12.0
+Boundary F1 +-2                                 0.91   0.0429   0.0045       9.6
+Boundary F1 +-5                                 0.78   0.0386   0.0058       6.7
+Boundary F1 +-10                                0.56   0.0318   0.0071       4.5
+Boundary F1 +-25                                0.29   0.0231   0.0072       3.2
+
+Top 5 configurations by each metric:
+  Frame F1: multistream_bilstm | FullFace: B+H+F contours202 (0.675) | multistream_bilstm | FullFace: B+H+F compact (fr (0.674) | multistream_bilstm | FullFace: B+H+F contours202 (0.673) | multistream_bilstm | FullFace: B+H+F compact + i (0.673) | multistream_bilstm | FullFace: B+H+F face oval o (0.673)
+  IoU: multistream_bilstm | FullFace: B+H+F contours202 (0.841) | multistream_bilstm | FullFace: B+H+F face oval o (0.840) | multistream_bilstm | FullFace: B+H+F compact (fr (0.839) | multistream_bilstm | FullFace: B+H+F compact + i (0.839) | multistream_bilstm | CP: B+H+Fc, change-point 5/ (0.838)
+  Boundary F1 +-1: multistream_bilstm | FullFace: B+H+F contours202 (0.203) | multistream_bilstm | CP ref: B+H+Fc, no change-p (0.202) | multistream_bilstm | FullFace: B+H+F compact + i (0.201) | multistream_bilstm | FullFace: B+H+F compact (fr (0.199) | multistream_bilstm | FullFace: B+H+F contours202 (0.198)
+  Boundary F1 +-5: multistream_bilstm | CP ref: B+H+Fc, no change-p (0.270) | multistream_bilstm | CP: B+H+Fc, change-point 5/ (0.267) | multistream_bilstm | FullFace: B+H+F face oval o (0.266) | multistream_bilstm | FullFace: B+H+F contours202 (0.264) | multistream_bilstm | FullFace: B+H+F compact (fr (0.264)
+  Segment F1@0.5: multistream_bilstm | FullFace: B+H+F contours202 (0.275) | multistream_bilstm | CP: B+H+Fc, change-point sc (0.273) | multistream_bilstm | FullFace: B+H+F face oval o (0.272) | multistream_bilstm | FullFace: B+H+F compact + i (0.270) | multistream_bilstm | FullFace: B+H+F compact + b (0.269)
+
+Val -> test agreement of configuration rankings (Spearman over shared competitive configurations):
+  Frame F1 (macro)                             0.48   (n=13)
+  B-class F1                                   0.54   (n=13)
+  IoU                                          0.81   (n=13)
+  |log %| (segment-count error, lower=better)  0.92   (n=13)
+  Segment F1@0.5                               0.25   (n=13)
+  Boundary F1 +-1                              0.62   (n=13)
+  Boundary F1 +-2                              0.87   (n=13)
+  Boundary F1 +-5                              0.94   (n=13)
+  Boundary F1 +-10                             0.90   (n=13)
+  Boundary F1 +-25                             0.86   (n=13)
+
+Blind spots (all configurations, test): segment-count error vs IoU / Frame F1
+  configuration                                                   IoU  x gold     F1  BndF1@5
+  bilstm_2023 | BL2023: E1s (body+hands), 2023 recipe           0.816   28.34  0.615    0.056
+  multistream_bilstm | FullFace: Face only, contours2023        0.586    2.71  0.528    0.098
+  multistream_bilstm | CP: B+H+Fc, change-point scales 5/10/25  0.843    2.44  0.679    0.271
+  multistream_bilstm | FullFace: B+H + blendshapes (52) instea  0.838    2.39  0.677    0.269
+  multistream_bilstm | FullFace: B+H+F compact + irises (41)    0.845    2.33  0.680    0.275
+  multistream_bilstm | FullFace: B+H+F compact (from full-mesh  0.845    2.33  0.681    0.273
+  multistream_bilstm | CP: B+H+Fc, change-point scales 10/25/5  0.842    2.29  0.678    0.273
+  multistream_bilstm | FullFace: B+H+F contours2023 (2023 pape  0.839    2.28  0.678    0.269
+  ('x gold' = predicted segments / gold segments, as a factor either way)

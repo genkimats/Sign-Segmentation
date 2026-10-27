@@ -1,0 +1,17 @@
+TEST transitions: 9892, phrase starts 1730 (base rate 0.175 = AP of a random scorer)
+Conditional on gold sign segmentation. Thresholds for F1 tuned on val.
+
+group                                           AUC     AP     F1      P      R  R cont R short  R long
+gap only                                      0.763  0.586  0.495  0.445  0.558   0.000   0.000   0.836
+timing                                        0.841  0.671  0.581  0.554  0.612   0.000   0.224   0.807
+hands                                         0.499  0.175  0.298  0.175  1.000   1.000   1.000   1.000
+mouth                                         0.615  0.228  0.325  0.195  0.995   1.000   0.986   0.999
+lexical                                       0.789  0.488  0.493  0.432  0.573   0.875   0.579   0.568
+non-lexical (timing+hands+mouth)              0.855  0.677  0.590  0.609  0.572   0.000   0.197   0.761
+all                                           0.903  0.755  0.657  0.628  0.690   0.000   0.410   0.832
+MS (3 runs, max P(B) +-10)                    0.806  0.519  0.526  0.458  0.620   0.125   0.468   0.698
+MS + lexical oracle                           0.853  0.607  0.578  0.516  0.657   0.375   0.577   0.698
+MS + mouth oracle                             0.823  0.531  0.528  0.451  0.635   0.375   0.484   0.711
+MS + all oracle                               0.912  0.779  0.678  0.664  0.694   0.000   0.428   0.829
+
+Recall by the pause before the boundary: continuous = no gap, short <= 12 frames, long > 12.

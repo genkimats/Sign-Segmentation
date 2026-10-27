@@ -1,0 +1,139 @@
+run,config,recall,n_pred,median_offset
+multistream_bilstm-100,"multistream_bilstm | MS: Body + Face + HaMeR, full face",0.4499,3485,0.0
+multistream_bilstm-101,"multistream_bilstm | MS: Body + Face + HaMeR, full face",0.4722,3632,0.0
+multistream_bilstm-102,"multistream_bilstm | MS: Body + Face + HaMeR, full face",0.4585,3718,0.0
+multistream_bilstm-103,"multistream_bilstm | MS: Body + Face + HaMeR, compact face",0.4877,4140,0.0
+multistream_bilstm-104,"multistream_bilstm | MS: Body + Face + HaMeR, compact face",0.482,3719,0.0
+multistream_bilstm-105,"multistream_bilstm | MS: Body + Face + HaMeR, compact face",0.486,3973,0.0
+multistream_bilstm-106,"multistream_bilstm | MS: Body + Face + HaMeR, eyes and brows",0.4803,3760,0.0
+multistream_bilstm-107,"multistream_bilstm | MS: Body + Face + HaMeR, eyes and brows",0.4688,4003,0.0
+multistream_bilstm-108,"multistream_bilstm | MS: Body + Face + HaMeR, eyes and brows",0.51,4467,0.0
+multistream_bilstm-109,"multistream_bilstm | MS: Body + Face + HaMeR, minimal face",0.4825,4173,0.0
+multistream_bilstm-110,"multistream_bilstm | MS: Body + Face + HaMeR, minimal face",0.4264,3598,0.0
+multistream_bilstm-111,"multistream_bilstm | MS: Body + Face + HaMeR, minimal face",0.5135,4243,0.0
+multistream_bilstm-112,multistream_bilstm | New: MS: Body + HaMeR,0.4974,4159,0.0
+multistream_bilstm-113,multistream_bilstm | New: MS: Body + HaMeR,0.4791,4129,0.0
+multistream_bilstm-114,multistream_bilstm | New: MS: Body + HaMeR,0.4625,3715,0.0
+multistream_bilstm-115,"multistream_bilstm | New: MS: Body + Face + HaMeR, compact face",0.4825,4202,0.0
+multistream_bilstm-116,"multistream_bilstm | New: MS: Body + Face + HaMeR, compact face",0.4694,3780,0.0
+multistream_bilstm-117,"multistream_bilstm | New: MS: Body + Face + HaMeR, compact face",0.4997,4206,0.0
+multistream_bilstm-118,multistream_bilstm | New 1: MS: Body + HaMeR,0.4797,4177,0.0
+multistream_bilstm-119,multistream_bilstm | New 1: MS: Body + HaMeR,0.5066,4406,0.0
+multistream_bilstm-120,multistream_bilstm | New 1: MS: Body + HaMeR,0.4482,3858,0.0
+multistream_bilstm-121,"multistream_bilstm | New 1: MS: Body + Face + HaMeR, compact face",0.4871,3741,0.0
+multistream_bilstm-122,"multistream_bilstm | New 1: MS: Body + Face + HaMeR, compact face",0.4888,4249,0.0
+multistream_bilstm-123,"multistream_bilstm | New 1: MS: Body + Face + HaMeR, compact face",0.4785,3966,0.0
+multistream_bilstm-124,"multistream_bilstm | New 2: MS: Body + Face + HaMeR, compact face",0.4568,3869,0.0
+multistream_bilstm-125,"multistream_bilstm | New 2: MS: Body + Face + HaMeR, compact face",0.4596,4139,0.0
+multistream_bilstm-126,"multistream_bilstm | New 2: MS: Body + Face + HaMeR, compact face",0.435,4139,0.0
+multistream_bilstm-127,multistream_bilstm | New 2: MS: Body + HaMeR,0.4545,3937,0.0
+multistream_bilstm-128,multistream_bilstm | New 2: MS: Body + HaMeR,0.4127,3613,0.0
+multistream_bilstm-129,multistream_bilstm | New 2: MS: Body + HaMeR,0.4883,4689,0.0
+multistream_bilstm-130,multistream_bilstm | New: MS: Body,0.395,3340,0.0
+multistream_bilstm-131,multistream_bilstm | New: MS: Body,0.4053,3437,0.0
+multistream_bilstm-132,multistream_bilstm | New: MS: Body,0.4127,3658,0.0
+multistream_bilstm-133,multistream_bilstm | New: MS: HaMeR,0.3795,3468,0.0
+multistream_bilstm-134,multistream_bilstm | New: MS: HaMeR,0.3709,3445,0.0
+multistream_bilstm-135,multistream_bilstm | New: MS: HaMeR,0.3778,3626,0.0
+multistream_bilstm-139,multistream_bilstm | New: MS: Body + Face,0.4173,3402,0.0
+multistream_bilstm-140,multistream_bilstm | New: MS: Body + Face,0.4322,3858,0.0
+multistream_bilstm-141,multistream_bilstm | New: MS: Body + Face,0.4207,3672,0.0
+multistream_bilstm-142,multistream_bilstm | MS: Face + HaMeR #1,0.4116,3799,0.0
+multistream_bilstm-143,multistream_bilstm | MS: Face + HaMeR #1,0.3778,3403,0.0
+multistream_bilstm-144,multistream_bilstm | MS: Face + HaMeR #1,0.3973,3868,0.0
+multistream_bilstm-145,"multistream_bilstm | MS: Body + Face + HaMeR, full face #1",0.4425,3920,0.0
+multistream_bilstm-146,"multistream_bilstm | MS: Body + Face + HaMeR, full face #1",0.4831,4491,0.0
+multistream_bilstm-147,"multistream_bilstm | MS: Body + Face + HaMeR, full face #1",0.4637,4127,0.0
+multistream_bilstm-148,"multistream_bilstm | New 2: MS: Body + Face + HaMeR, compact face #1",0.4408,3598,0.0
+multistream_bilstm-149,"multistream_bilstm | New 2: MS: Body + Face + HaMeR, compact face #1",0.4648,4176,0.0
+multistream_bilstm-150,"multistream_bilstm | New 2: MS: Body + Face + HaMeR, compact face #1",0.4385,3490,0.0
+multistream_bilstm-151,"multistream_bilstm | MS: Body + Face + HaMeR, eyes and brows #1",0.4213,3452,0.0
+multistream_bilstm-152,"multistream_bilstm | MS: Body + Face + HaMeR, eyes and brows #1",0.4654,4225,0.0
+multistream_bilstm-153,"multistream_bilstm | MS: Body + Face + HaMeR, eyes and brows #1",0.4493,3761,0.0
+multistream_bilstm-154,"multistream_bilstm | MS: Body + Face + HaMeR, minimal face #1",0.4207,3416,0.0
+multistream_bilstm-155,"multistream_bilstm | MS: Body + Face + HaMeR, minimal face #1",0.4459,3724,0.0
+multistream_bilstm-156,"multistream_bilstm | MS: Body + Face + HaMeR, minimal face #1",0.4682,4095,0.0
+multistream_bilstm-157,"multistream_bilstm | Cues: cues only (selected 36), projection only",0.3572,5037,0.0
+multistream_bilstm-158,"multistream_bilstm | Cues: cues only (selected 36), projection only",0.32,3754,0.0
+multistream_bilstm-159,"multistream_bilstm | Cues: cues only (selected 36), projection only",0.2936,3596,0.0
+multistream_bilstm-160,"multistream_bilstm | Cues: cues only (selected 36), + temporal conv k=9",0.336,4152,0.0
+multistream_bilstm-161,"multistream_bilstm | Cues: cues only (selected 36), + temporal conv k=9",0.3469,4541,0.0
+multistream_bilstm-162,"multistream_bilstm | Cues: cues only (selected 36), + temporal conv k=9",0.2988,3399,0.0
+multistream_bilstm-163,"multistream_bilstm | Cues: cues only (all 48), projection only",0.3131,4116,0.0
+multistream_bilstm-164,"multistream_bilstm | Cues: cues only (all 48), projection only",0.328,4178,0.0
+multistream_bilstm-165,"multistream_bilstm | Cues: cues only (all 48), projection only",0.3211,3692,0.0
+multistream_bilstm-168,multistream_bilstm | Cues: Body + HaMeR + face cues (12) instead of the face stream,0.4476,4668,0.0
+multistream_bilstm-178,"multistream_bilstm | FE: B+H+Fc, dominant-hand canonicalization",0.4236,3517,0.0
+multistream_bilstm-179,"multistream_bilstm | FE: B+H+Fc, dominant-hand canonicalization",0.4694,4352,0.0
+multistream_bilstm-180,"multistream_bilstm | FE: B+H+Fc, dominant-hand canonicalization",0.4614,4284,0.0
+multistream_bilstm-181,"multistream_bilstm | FE: B+H+Fc, mirror augmentation p=0.5",0.4058,3511,0.0
+multistream_bilstm-182,"multistream_bilstm | FE: B+H+Fc, mirror augmentation p=0.5",0.4035,3625,0.0
+multistream_bilstm-183,"multistream_bilstm | FE: B+H+Fc, mirror augmentation p=0.5",0.4144,3530,0.0
+multistream_bilstm-184,"multistream_bilstm | FE: B+H+Fc, HaMeR front-end (rot6d + mask + motion + temporal k9)",0.435,3679,0.0
+multistream_bilstm-185,"multistream_bilstm | FE: B+H+Fc, HaMeR front-end (rot6d + mask + motion + temporal k9)",0.4734,4502,0.0
+multistream_bilstm-186,"multistream_bilstm | FE: B+H+Fc, HaMeR front-end (rot6d + mask + motion + temporal k9)",0.4488,4115,0.0
+multistream_bilstm-187,"multistream_bilstm | FE: HaMeR only, HaMeR front-end (rot6d + mask + motion + temporal k9)",0.4013,3739,0.0
+multistream_bilstm-188,"multistream_bilstm | FE: HaMeR only, HaMeR front-end (rot6d + mask + motion + temporal k9)",0.3715,3179,0.0
+multistream_bilstm-189,"multistream_bilstm | FE: HaMeR only, HaMeR front-end (rot6d + mask + motion + temporal k9)",0.3698,3145,0.0
+multistream_bilstm-190,"multistream_bilstm | FE: B+H+Fc, stream dropout 0.2",0.474,4242,0.0
+multistream_bilstm-191,"multistream_bilstm | FE: B+H+Fc, stream dropout 0.2",0.4574,3851,0.0
+multistream_bilstm-192,"multistream_bilstm | FE: B+H+Fc, stream dropout 0.2",0.4728,4446,0.0
+multistream_bilstm-193,"multistream_bilstm | FE: B+H+Fc, part pooling (mean)",0.4631,4217,0.0
+multistream_bilstm-194,"multistream_bilstm | FE: B+H+Fc, part pooling (mean)",0.4596,4372,0.0
+multistream_bilstm-195,"multistream_bilstm | FE: B+H+Fc, part pooling (mean)",0.423,3594,0.0
+multistream_bilstm-196,"multistream_bilstm | FE: B+H+Fc, part pooling (attention)",0.4018,3246,0.0
+multistream_bilstm-197,"multistream_bilstm | FE: B+H+Fc, part pooling (attention)",0.4482,4283,0.0
+multistream_bilstm-198,"multistream_bilstm | FE: B+H+Fc, part pooling (attention)",0.4459,4108,0.0
+multistream_bilstm-199,"multistream_bilstm | FE: B+H+Fc, canonicalization + HaMeR front-end + stream dropout + part attn",0.4316,3549,0.0
+multistream_bilstm-200,"multistream_bilstm | FE: B+H+Fc, canonicalization + HaMeR front-end + stream dropout + part attn",0.4511,3993,0.0
+multistream_bilstm-201,"multistream_bilstm | FE: B+H+Fc, canonicalization + HaMeR front-end + stream dropout + part attn",0.4058,3688,0.0
+multistream_bilstm-202,"multistream_bilstm | CP: B+H+Fc, change-point scales 5/10/25 (0.1-0.5 s)",0.4671,4337,0.0
+multistream_bilstm-203,"multistream_bilstm | CP: B+H+Fc, change-point scales 5/10/25 (0.1-0.5 s)",0.439,3949,0.0
+multistream_bilstm-204,"multistream_bilstm | CP: B+H+Fc, change-point scales 5/10/25 (0.1-0.5 s)",0.4785,4315,0.0
+multistream_bilstm-205,"multistream_bilstm | CP: B+H+Fc, change-point scales 10/25/50 (0.2-1 s)",0.4562,3988,0.0
+multistream_bilstm-206,"multistream_bilstm | CP: B+H+Fc, change-point scales 10/25/50 (0.2-1 s)",0.4511,4073,0.0
+multistream_bilstm-207,"multistream_bilstm | CP: B+H+Fc, change-point scales 10/25/50 (0.2-1 s)",0.4264,3736,0.0
+multistream_bilstm-208,"multistream_bilstm | CP ref: B+H+Fc, no change-point, best epoch by boundary F1@5",0.4293,3648,0.0
+multistream_bilstm-209,"multistream_bilstm | CP ref: B+H+Fc, no change-point, best epoch by boundary F1@5",0.4648,4197,0.0
+multistream_bilstm-210,"multistream_bilstm | CP ref: B+H+Fc, no change-point, best epoch by boundary F1@5",0.4425,3580,0.0
+multistream_bilstm-211,"multistream_bilstm | CP: B+H+Fc, change-point 5/10/25, best epoch by boundary F1@5",0.4556,4098,0.0
+multistream_bilstm-212,"multistream_bilstm | CP: B+H+Fc, change-point 5/10/25, best epoch by boundary F1@5",0.4007,3267,0.0
+multistream_bilstm-213,"multistream_bilstm | CP: B+H+Fc, change-point 5/10/25, best epoch by boundary F1@5",0.4688,4101,0.0
+multistream_bilstm-214,multistream_bilstm | FullFace: B+H+F compact (from full-mesh files) -- extraction control,0.4711,4433,0.0
+multistream_bilstm-215,multistream_bilstm | FullFace: B+H+F compact (from full-mesh files) -- extraction control,0.4551,4082,0.0
+multistream_bilstm-216,multistream_bilstm | FullFace: B+H+F compact (from full-mesh files) -- extraction control,0.4236,3551,0.0
+multistream_bilstm-217,"multistream_bilstm | FullFace: B+H+F contours2023 (2023 paper, 128)",0.4396,3938,0.0
+multistream_bilstm-218,"multistream_bilstm | FullFace: B+H+F contours2023 (2023 paper, 128)",0.4648,4190,0.0
+multistream_bilstm-219,"multistream_bilstm | FullFace: B+H+F contours2023 (2023 paper, 128)",0.4156,3765,0.0
+multistream_bilstm-220,multistream_bilstm | FullFace: B+H+F contours2023 without face oval (92),0.4562,4232,0.0
+multistream_bilstm-221,multistream_bilstm | FullFace: B+H+F contours2023 without face oval (92),0.4442,3594,0.0
+multistream_bilstm-222,multistream_bilstm | FullFace: B+H+F contours2023 without face oval (92),0.4448,3966,0.0
+multistream_bilstm-223,multistream_bilstm | FullFace: B+H+F face oval only (36 + 2 anchors),0.4345,3717,0.0
+multistream_bilstm-224,multistream_bilstm | FullFace: B+H+F face oval only (36 + 2 anchors),0.4127,3349,0.0
+multistream_bilstm-225,multistream_bilstm | FullFace: B+H+F face oval only (36 + 2 anchors),0.4408,3789,0.0
+multistream_bilstm-229,multistream_bilstm | FullFace: B+H+F compact + irises (41),0.4825,4414,0.0
+multistream_bilstm-230,multistream_bilstm | FullFace: B+H+F compact + irises (41),0.427,3603,0.0
+multistream_bilstm-231,multistream_bilstm | FullFace: B+H+F compact + irises (41),0.4533,4096,0.0
+multistream_bilstm-232,multistream_bilstm | FullFace: B+H + blendshapes (52) instead of the face stream,0.4734,4436,0.0
+multistream_bilstm-233,multistream_bilstm | FullFace: B+H + blendshapes (52) instead of the face stream,0.4528,4230,0.0
+multistream_bilstm-234,multistream_bilstm | FullFace: B+H + blendshapes (52) instead of the face stream,0.4242,3646,0.0
+multistream_bilstm-235,multistream_bilstm | FullFace: B+H+F compact + blendshapes (52),0.4293,3584,0.0
+multistream_bilstm-236,multistream_bilstm | FullFace: B+H+F compact + blendshapes (52),0.4167,3701,0.0
+multistream_bilstm-237,multistream_bilstm | FullFace: B+H+F compact + blendshapes (52),0.4482,4024,0.0
+multistream_bilstm-271,"multistream_bilstm | ENC: B+H+Fc, BlockGCN stream encoders",0.4619,4209,0.0
+multistream_bilstm-272,"multistream_bilstm | ENC: B+H+Fc, BlockGCN stream encoders",0.4917,4486,0.0
+multistream_bilstm-82,multistream_bilstm | MS: Body,0.4516,3469,0.0
+multistream_bilstm-83,multistream_bilstm | MS: Body,0.4637,3703,0.0
+multistream_bilstm-84,multistream_bilstm | MS: Body,0.4562,3737,0.0
+multistream_bilstm-85,multistream_bilstm | MS: HaMeR,0.4562,3552,0.0
+multistream_bilstm-86,multistream_bilstm | MS: HaMeR,0.3824,3113,0.0
+multistream_bilstm-87,multistream_bilstm | MS: HaMeR,0.4173,3318,0.0
+multistream_bilstm-91,multistream_bilstm | MS: Body + HaMeR,0.4596,3847,0.0
+multistream_bilstm-92,multistream_bilstm | MS: Body + HaMeR,0.4625,3806,0.0
+multistream_bilstm-93,multistream_bilstm | MS: Body + HaMeR,0.4408,3643,0.0
+multistream_bilstm-94,multistream_bilstm | MS: Body + Face,0.4808,3884,0.0
+multistream_bilstm-95,multistream_bilstm | MS: Body + Face,0.4602,3579,0.0
+multistream_bilstm-96,multistream_bilstm | MS: Body + Face,0.5066,4599,0.0
+multistream_bilstm-97,multistream_bilstm | MS: Face + HaMeR,0.482,3765,0.0
+multistream_bilstm-98,multistream_bilstm | MS: Face + HaMeR,0.4511,3693,0.0
+multistream_bilstm-99,multistream_bilstm | MS: Face + HaMeR,0.4013,3326,0.0
