@@ -50,6 +50,8 @@ def config_name(desc):
 
 
 def decoder_kind(label):
+    if "+merge" in label:
+        return "argmax_merge" if label.startswith("argmax") else "tuned_merge"
     if label == "argmax":
         return "argmax"
     if label.startswith("thr"):
@@ -153,7 +155,7 @@ def icc1(groups):
 def main():
     ap = argparse.ArgumentParser(description="Compare phrase-segmentation metrics over all trained runs.")
     ap.add_argument("--csv", nargs="+", required=True, help="evaluate_phrase.py *_metrics.csv files (globs ok)")
-    ap.add_argument("--decoder", default="argmax", choices=["argmax", "fixed", "tuned", "swept"])
+    ap.add_argument("--decoder", default="argmax", choices=["argmax", "fixed", "tuned", "swept", "argmax_merge", "tuned_merge"])
     ap.add_argument("--competitive", type=float, default=0.03,
                     help="keep configurations within this Frame F1 of the best (default 0.03)")
     ap.add_argument("--min-seeds", type=int, default=2)

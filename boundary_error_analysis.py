@@ -46,7 +46,7 @@ from collections import Counter, defaultdict
 
 import numpy as np
 
-from src.metrics import extract_segments, decode_threshold_2023, match_boundaries
+from src.metrics import extract_segments, decode_threshold_2023, match_boundaries, merge_close_starts
 
 B_TAG = 2
 
@@ -96,11 +96,16 @@ def load_runs(pred_dir, split, runs_glob, decoder):
     return runs
 
 
+MERGE = 0  # --merge-starts
+
+
 def predicted_starts(probs, thr):
     if thr is None:
         segs = extract_segments(probs.argmax(axis=0))
     else:
         segs = decode_threshold_2023(probs, thr[0], thr[1])
+    if MERGE:
+        segs = merge_close_starts(segs, probs[B_TAG], MERGE)
     return np.array([s for s, _ in segs], dtype=np.int64)
 
 
@@ -137,6 +142,8 @@ def main():
     ap.add_argument("--tolerance", type=int, default=5, help="+-frames for a detection (default 5)")
     ap.add_argument("--offset-tolerance", type=int, default=25,
                     help="+-frames when collecting offsets for the timing analysis (default 25)")
+    ap.add_argument("--merge-starts", type=int, default=0,
+                    help="apply duplicate-start suppression with this distance (frames) before analysing")
     ap.add_argument("--max-pred-ratio", type=float, default=3.0,
                     help="drop runs predicting more than this x the gold starts (heavy over-segmenters, "
                          "e.g. old label versions); they inflate the union recall (default 3)")
@@ -154,6 +161,8 @@ def main():
     ap.add_argument("--easy", type=float, default=0.9, help="'easy' = detected by >= this share of runs")
     ap.add_argument("--out-dir", default=os.path.join("evaluation_phrase", "error_analysis"))
     args = ap.parse_args()
+    global MERGE
+    MERGE = args.merge_starts
     os.makedirs(args.out_dir, exist_ok=True)
     lines = []
 

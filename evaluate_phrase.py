@@ -246,7 +246,8 @@ def diagnose(video_probs, video_gold, b_threshold, o_threshold):
 
 
 def evaluate_run(run_name, split, device, b_threshold, o_threshold, do_sweep, batch_size_override,
-                 sweep_step=0.1, do_diagnose=False, swap_ib=False, sweep_score="iou_pct", tune_on=None):
+                 sweep_step=0.1, do_diagnose=False, swap_ib=False, sweep_score="iou_pct", tune_on=None,
+                 merge_grid=None):
     cfg_path = os.path.join(EXP_DIR, run_name, "hyperparameters.json")
     ckpt_path = os.path.join(MODEL_DIR, f"{run_name}.pth")
     with open(cfg_path) as f:
@@ -298,6 +299,7 @@ def evaluate_run(run_name, split, device, b_threshold, o_threshold, do_sweep, ba
               f"({len(grid)}x{len(grid)} = {len(grid) ** 2} pairs): {time.time() - t0:.1f}s")
 
     tuned_thresholds = None
+    tp = tg = None
     if tune_on and tune_on != split:
         # Honest tuning: thresholds chosen on another split (e.g. val), applied here (e.g. test).
         t0 = time.time()
@@ -310,7 +312,38 @@ def evaluate_run(run_name, split, device, b_threshold, o_threshold, do_sweep, ba
         print(f"  [time] thresholds tuned on {tune_on} by {SWEEP_SCORES[sweep_score][0]}: "
               f"b={b_t} o={o_t} ({time.time() - t0:.1f}s)")
 
-    return config, results, (best_thresholds, tuned_thresholds), dataset, video_probs, video_gold
+    # Duplicate-start suppression: the merge distance is chosen on the tuning split (or on this
+    # split if none is given -- optimistic) by boundary F1 +-5, for argmax and, if thresholds were
+    # tuned, for the tuned threshold decoder.
+    merge_info = {}
+    if merge_grid:
+        t0 = time.time()
+        if tune_on and tune_on != split:
+            if tp is None:
+                tune_ds = get_dataset(config, tune_on)
+                tp, tg = predict_split(model, config, tune_ds, device, batch_size=batch_size)
+            sel_p, sel_g = tp, tg
+        else:
+            sel_p, sel_g = video_probs, video_gold
+        bases = [("argmax", "argmax", None)]
+        if tuned_thresholds:
+            bases.append(("tuned", "threshold", tuned_thresholds))
+        for key, dec, thr in bases:
+            b_, o_ = thr if thr else (b_threshold, o_threshold)
+            cache, best = {}, None
+            for d in merge_grid:
+                m = evaluate_videos(sel_p, sel_g, decoder=dec, b_threshold=b_, o_threshold=o_, light=True,
+                                    gold_segments_cache=cache, merge_starts=d)
+                if best is None or m["BndF1_5"] > best[0]:
+                    best = (m["BndF1_5"], d)
+            d_best = best[1]
+            results[f"{key}_merge"] = evaluate_videos(video_probs, video_gold, decoder=dec, b_threshold=b_,
+                                                      o_threshold=o_, merge_starts=d_best)
+            merge_info[f"{key}_merge"] = (d_best, thr)
+        print(f"  [time] merge-distance tuning on {tune_on if tune_on and tune_on != split else split}: "
+              + ", ".join(f"{k} d={v[0]}" for k, v in merge_info.items()) + f" ({time.time() - t0:.1f}s)")
+
+    return config, results, (best_thresholds, tuned_thresholds, merge_info), dataset, video_probs, video_gold
 
 
 def print_boundary_types(bt):
@@ -358,6 +391,33 @@ def print_per_video(per_video):
 # ==============================================================================
 # Main
 # ==============================================================================
+def csv_fields(rows):
+    keys = []
+    for r in rows:
+        keys += [k for k in r if k not in keys]
+    return keys
+
+
+def merge_csv_rows(path, new_rows, key_cols, overwrite=False):
+    """Keeps the rows already in `path` and updates/adds the new ones (same key = replaced),
+    so evaluating a subset of runs no longer drops the others from the summary CSV."""
+    if overwrite or not os.path.exists(path):
+        return new_rows
+    with open(path, newline="") as f:
+        old = list(csv.DictReader(f))
+    new_keys = {tuple(str(r.get(k, "")) for k in key_cols) for r in new_rows}
+    kept = [r for r in old if tuple(str(r.get(k, "")) for k in key_cols) not in new_keys]
+
+    def order(r):
+        try:
+            return (int(r.get("prefix", 0)), str(r.get("decoder", "")))
+        except ValueError:
+            return (0, str(r.get("decoder", "")))
+    merged = sorted(kept + new_rows, key=order)
+    print(f"  CSV {os.path.basename(path)}: {len(new_rows)} new/updated rows, {len(kept)} kept from earlier runs")
+    return merged
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Evaluate all saved phrase runs of one model (Frame F1, IoU, % of segments, "
@@ -410,6 +470,14 @@ def main():
                         help="Evaluate every run against these phrase labels (e.g. "
                              "processed_data/BIO_tags_phrase_v2). Default: each run's own labels "
                              "(its phrase_labels_dir, or v1 for older runs).")
+    parser.add_argument("--merge-starts", type=int, nargs="*", default=None,
+                        help="Duplicate-start suppression: merge predicted phrase starts closer than D "
+                             "frames (keeps the frame with the highest P(B)). Give one value to fix D, or "
+                             "several (e.g. 0 3 5 10 15 20 30) to choose D on --tune-on (by boundary F1 +-5). "
+                             "Adds 'argmax+merge' (and 'tuned+merge' with --tune-on) rows.")
+    parser.add_argument("--overwrite-csv", action="store_true",
+                        help="Replace the metrics CSV instead of merging these runs into it (default: merge, "
+                             "rows of the same run + decoder are updated, other runs are kept).")
     parser.add_argument("--save-predictions", action="store_true",
                         help="Save every run's per-frame probabilities for this split to "
                              "evaluation_phrase/predictions/<run>/<split>.npz (+ <split>_meta.json with "
@@ -450,10 +518,10 @@ def main():
         print(f"\n--- {run_name} ---")
         try:
             t_run = time.time()
-            config, results, (best_thr, tuned_thr), dataset, video_probs, video_gold = evaluate_run(
+            config, results, (best_thr, tuned_thr, merge_info), dataset, video_probs, video_gold = evaluate_run(
                 run_name, args.split, device, args.b_threshold, args.o_threshold,
                 args.sweep, args.batch_size, args.sweep_step, args.diagnose, args.swap_ib,
-                args.sweep_metric, args.tune_on)
+                args.sweep_metric, args.tune_on, args.merge_starts)
         except Exception as e:
             print(f"⚠️  Skipped {run_name}: {type(e).__name__}: {e}")
             continue
@@ -470,6 +538,9 @@ def main():
             decoders.append(("swept", f"swept b={best_thr[0]} o={best_thr[1]}", best_thr))
         if tuned_thr:
             decoders.append(("tuned", f"tuned({args.tune_on}) b={tuned_thr[0]} o={tuned_thr[1]}", tuned_thr))
+        for mk, (d, thr) in merge_info.items():
+            base = "argmax" if mk == "argmax_merge" else f"tuned({args.tune_on}) b={thr[0]} o={thr[1]}"
+            decoders.append((mk, f"{base} +merge d={d}", thr))
 
         for key, label, _ in decoders:
             m = results[key]
@@ -485,11 +556,14 @@ def main():
             if args.per_video:
                 print_per_video(m["per_video"])
             if args.boundary_types:
-                thr = {"swept": best_thr, "tuned": tuned_thr}.get(key, (args.b_threshold, args.o_threshold))
+                thr = {"swept": best_thr, "tuned": tuned_thr, "tuned_merge": tuned_thr}.get(
+                    key, (args.b_threshold, args.o_threshold))
                 bt = boundary_type_analysis(
-                    video_probs, video_gold, decoder="argmax" if key == "argmax" else "threshold",
+                    video_probs, video_gold,
+                    decoder="argmax" if key in ("argmax", "argmax_merge") else "threshold",
                     b_threshold=thr[0], o_threshold=thr[1], tolerances=args.tolerances,
-                    short_gap=args.short_gap, peak_window=args.peak_window)
+                    short_gap=args.short_gap, peak_window=args.peak_window,
+                    merge_starts=merge_info.get(key, (0, None))[0])
                 print_boundary_types(bt)
                 for t in BOUNDARY_TYPES + ("all",):
                     r = bt["types"][t]
@@ -542,7 +616,8 @@ def main():
                            "fixed_thresholds": [args.b_threshold, args.o_threshold],
                            "swept_thresholds": list(best_thr) if best_thr else None,
                            "tuned_thresholds": list(tuned_thr) if tuned_thr else None,
-                           "tuned_on": args.tune_on, "sweep_metric": args.sweep_metric}, f, indent=2)
+                           "tuned_on": args.tune_on, "sweep_metric": args.sweep_metric,
+                           "merge_starts": {k: v[0] for k, v in merge_info.items()}}, f, indent=2)
             print(f"  predictions saved to {pred_dir}/{args.split}.npz")
 
         per_video_path = os.path.join(OUT_DIR, f"{run_name}_{args.split}_per_video.json")
@@ -559,15 +634,18 @@ def main():
         return
 
     csv_path = os.path.join(OUT_DIR, f"{model_name}_{args.split}_metrics.csv")
+    rows = merge_csv_rows(csv_path, rows, ("run", "decoder"), args.overwrite_csv)
     with open(csv_path, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+        writer = csv.DictWriter(f, fieldnames=csv_fields(rows))
         writer.writeheader()
         writer.writerows(rows)
     print(f"\n✅ Summary saved to {csv_path} (per-video details in {OUT_DIR}/).")
     if boundary_rows:
         bt_path = os.path.join(OUT_DIR, f"{model_name}_{args.split}_boundary_types.csv")
+        boundary_rows = merge_csv_rows(bt_path, boundary_rows, ("run", "decoder", "boundary_type"),
+                                       args.overwrite_csv)
         with open(bt_path, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=list(boundary_rows[0].keys()))
+            writer = csv.DictWriter(f, fieldnames=csv_fields(boundary_rows))
             writer.writeheader()
             writer.writerows(boundary_rows)
         print(f"✅ Boundary-type results saved to {bt_path}")
