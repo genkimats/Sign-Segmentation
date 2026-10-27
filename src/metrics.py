@@ -220,8 +220,34 @@ def pct_score(pct):
 BND_TOLERANCES = (1, 2, 5, 10, 25)
 
 
+def merge_close_starts(segments, p_b, min_gap):
+    """
+    Duplicate-start suppression ("peak picking" on decoded segments). Segments whose START
+    lies within min_gap frames of the first start of the current group are merged into one
+    segment: it starts at the group's frame with the highest P(B) and ends at the group's
+    last end. Removes the B-O-B flicker that makes a model "start" the same phrase twice.
+    min_gap <= 0 returns the segments unchanged.
+    """
+    if min_gap <= 0 or len(segments) < 2:
+        return segments
+    out, group = [], [segments[0]]
+    for seg in segments[1:]:
+        if seg[0] - group[0][0] <= min_gap:
+            group.append(seg)
+        else:
+            out.append(group)
+            group = [seg]
+    out.append(group)
+    merged = []
+    for g in out:
+        starts = [a for a, _ in g]
+        best = starts[int(np.argmax([p_b[a] for a in starts]))]
+        merged.append((best, max(b for _, b in g)))
+    return merged
+
+
 def evaluate_videos(video_probs, video_gold, decoder="argmax", b_threshold=0.5, o_threshold=0.5,
-                    light=False, gold_segments_cache=None, bnd_tolerances=BND_TOLERANCES):
+                    light=False, gold_segments_cache=None, bnd_tolerances=BND_TOLERANCES, merge_starts=0):
     """
     video_probs: dict vid -> (3, T) numpy array of stitched class probabilities (O, I, B)
     video_gold:  dict vid -> (T,) numpy int array of HARD gold labels (0/1/2)
@@ -272,6 +298,8 @@ def evaluate_videos(video_probs, video_gold, decoder="argmax", b_threshold=0.5, 
             pred_segments = decode_threshold_2023(probs, b_threshold, o_threshold)
         else:
             raise ValueError(f"Unknown decoder '{decoder}'")
+        if merge_starts:
+            pred_segments = merge_close_starts(pred_segments, probs[B_TAG], merge_starts)
 
         gold_starts = [s for s, _ in gold_segments]
         pred_starts = [s for s, _ in pred_segments]
@@ -449,7 +477,7 @@ def match_boundaries(gold_pos, pred_pos, tolerance):
 
 
 def boundary_type_analysis(video_probs, video_gold, decoder="argmax", b_threshold=0.5, o_threshold=0.5,
-                           tolerances=(2, 5, 10), short_gap=12, peak_window=5):
+                           tolerances=(2, 5, 10), short_gap=12, peak_window=5, merge_starts=0):
     """
     Phrase-start detection split by boundary type (see classify_gold_boundaries).
 
@@ -484,6 +512,8 @@ def boundary_type_analysis(video_probs, video_gold, decoder="argmax", b_threshol
             pred_segments = decode_threshold_2023(probs, b_threshold, o_threshold)
         else:
             raise ValueError(f"Unknown decoder '{decoder}'")
+        if merge_starts:
+            pred_segments = merge_close_starts(pred_segments, probs[B_TAG], merge_starts)
         pred_pos = np.array([s for s, _ in pred_segments], dtype=np.int64)
         n_pred += len(pred_pos)
 
