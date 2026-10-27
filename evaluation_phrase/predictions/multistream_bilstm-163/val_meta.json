@@ -1,0 +1,17 @@
+{
+  "run": "multistream_bilstm-163",
+  "model": "multistream_bilstm",
+  "prefix": "163",
+  "split": "val",
+  "labels_dir": "processed_data/BIO_tags_phrase_v2",
+  "description": "Cues: cues only (all 48), projection only [seed=42]",
+  "seed": 42,
+  "fixed_thresholds": [
+    0.5,
+    0.5
+  ],
+  "swept_thresholds": null,
+  "tuned_thresholds": null,
+  "tuned_on": null,
+  "sweep_metric": "iou_pct"
+}

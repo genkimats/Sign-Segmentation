@@ -1,0 +1,20 @@
+{
+  "run": "multistream_bilstm-216",
+  "model": "multistream_bilstm",
+  "prefix": "216",
+  "split": "test",
+  "labels_dir": "processed_data/BIO_tags_phrase_v2",
+  "description": "FullFace: B+H+F compact (from full-mesh files) -- extraction control [seed=2024]",
+  "seed": 2024,
+  "fixed_thresholds": [
+    0.5,
+    0.5
+  ],
+  "swept_thresholds": null,
+  "tuned_thresholds": [
+    0.3,
+    0.6
+  ],
+  "tuned_on": "val",
+  "sweep_metric": "iou_pct"
+}

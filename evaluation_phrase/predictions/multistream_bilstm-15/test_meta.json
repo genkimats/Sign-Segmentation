@@ -1,0 +1,20 @@
+{
+  "run": "multistream_bilstm-15",
+  "model": "multistream_bilstm",
+  "prefix": "15",
+  "split": "test",
+  "labels_dir": "processed_data/BIO_tags_phrase",
+  "description": "PE study: Body+HaMeR, BiLSTM reference, window 128",
+  "seed": "",
+  "fixed_thresholds": [
+    0.5,
+    0.5
+  ],
+  "swept_thresholds": null,
+  "tuned_thresholds": [
+    0.3,
+    0.5
+  ],
+  "tuned_on": "val",
+  "sweep_metric": "iou_pct"
+}

@@ -1,0 +1,20 @@
+{
+  "run": "multistream_bilstm-180",
+  "model": "multistream_bilstm",
+  "prefix": "180",
+  "split": "test",
+  "labels_dir": "processed_data/BIO_tags_phrase_v2",
+  "description": "FE: B+H+Fc, dominant-hand canonicalization [seed=2024]",
+  "seed": 2024,
+  "fixed_thresholds": [
+    0.5,
+    0.5
+  ],
+  "swept_thresholds": null,
+  "tuned_thresholds": [
+    0.3,
+    0.7
+  ],
+  "tuned_on": "val",
+  "sweep_metric": "iou_pct"
+}
