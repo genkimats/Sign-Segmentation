@@ -619,8 +619,50 @@ SCALING_STUDY = [
     for f in (0.125, 0.25, 0.5)
 ]
 
+# ------------------------------------------------------------------------------
+# HaMeR TEMPORAL-CONV STUDY: the mixing study showed temporal conv is the whole multistream
+# gain for the body stream; the HaMeR stream (MLP) has none. Switch on ONLY the residual
+# temporal conv (k=9, like the ST-GCN temporal kernel) on the HaMeR stream -- no rot6d / mask
+# / motion, unlike the FE study (187-189) -- in every multistream cell that contains HaMeR, so
+# these runs can replace the HaMeR cells of the early-vs-multistream comparison.
+#   references without it: H 133-135 | B+H 112-114/118-120/127-129 | F+H 142-144 |
+#                          B+F+H 115-117/121-126/148-150
+# ------------------------------------------------------------------------------
+_MS_FACE_HAMER = {**_MS_CUE_STUDY, "use_stream_body_hands": False, "use_stream_face": True,
+                  "face_subset": "compact", "use_stream_hamer": True}
+_HTC = {"hamer_temporal_kernel": 9}
+HAMER_TCN_STUDY = [
+    {**_MS_HAMER_ONLY, **_HTC, "description": "HTC: MS HaMeR, HaMeR temporal conv k9"},
+    {**_MS_CUE_STUDY, **_HTC, "description": "HTC: MS Body + HaMeR, HaMeR temporal conv k9"},
+    {**_MS_FACE_HAMER, **_HTC, "description": "HTC: MS Face(compact) + HaMeR, HaMeR temporal conv k9"},
+    {**_MS_BEST, **_HTC, "description": "HTC: MS Body + Face(compact) + HaMeR, HaMeR temporal conv k9"},
+]
+
+# ------------------------------------------------------------------------------
+# EARLY FUSION + TEMPORAL CONV: the 2023 model with 2 residual temporal-conv blocks (k=9,
+# 17-frame receptive field = the 2-block ST-GCN) between its Linear projection and the BiLSTM.
+# Fusion stays early. If these close the gap to multistream, the gap was temporal context,
+# not stream separation. All 7 input combinations, same recipe as BL2023_COMBO_STUDY
+# (references: bilstm_2023 250-270).
+# ------------------------------------------------------------------------------
+_TC = {"temporal_kernel": 9, "temporal_layers": 2}
+BL2023_TCN_STUDY = [
+    {**_C, **_TC, "description": "BL2023+TC: B"},
+    {**_C, **_TC, "use_pose_input": False, "use_hamer_features": True,
+     "description": "BL2023+TC: H (HaMeR only)"},
+    {**_C, **_TC, **COMBO_FACE, "face_only": True,
+     "description": f"BL2023+TC: F (face {_FS} only)"},
+    {**_C, **_TC, "use_hamer_features": True, "description": "BL2023+TC: B+H"},
+    {**_C, **_TC, **COMBO_FACE, "description": f"BL2023+TC: B+F ({_FS})"},
+    {**_C, **_TC, **COMBO_FACE, "face_only": True, "use_hamer_features": True,
+     "description": f"BL2023+TC: F+H ({_FS})"},
+    {**_C, **_TC, **COMBO_FACE, "use_hamer_features": True,
+     "description": f"BL2023+TC: B+F+H ({_FS})"},
+]
+
 # What runs now (earlier studies above are already trained):
-EXPERIMENTS_TO_RUN = MIXING_STUDY + SCALING_STUDY
+EXPERIMENTS_TO_RUN = BL2023_TCN_STUDY
+# EXPERIMENTS_TO_RUN = MIXING_STUDY + SCALING_STUDY   # earlier batch
 # EXPERIMENTS_TO_RUN += OPTIONAL_MY_MODEL_2023_RECIPE
 
 if CHOSEN_TYPE == 'mamba':

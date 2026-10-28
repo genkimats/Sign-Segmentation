@@ -125,6 +125,10 @@ def build_model_kwargs(config, detected_hamer_dim=None, detected_dinov2_dim=None
     if model_name == "bilstm_2023":
         # HaMeR only: the keypoint tensor is still loaded but not fed to the model
         model_kwargs["use_pose_input"] = bool(config.get("use_pose_input", True))
+        # optional temporal conv on the fused vector (1 = off, the faithful 2023 model)
+        model_kwargs["temporal_kernel"] = int(config.get("temporal_kernel", 1))
+        model_kwargs["temporal_layers"] = int(config.get("temporal_layers", 2))
+        model_kwargs["temporal_dropout"] = float(config.get("temporal_dropout", 0.0))
 
     if config.get("use_hamer_features", False):
         if model_name not in HAMER_SUPPORTED_MODELS:
