@@ -1,0 +1,261 @@
+{
+  "decoders": {
+    "argmax": {
+      "1250972_B": {
+        "num_frames": 44800,
+        "Frame_F1": 0.6723877597972939,
+        "num_gold_segments": 160,
+        "num_pred_segments": 330,
+        "IoU": 0.8761685535773007,
+        "Pct": 2.0625,
+        "Segment_F1_05": 0.2775510204081632
+      },
+      "1430328_A": {
+        "num_frames": 64110,
+        "Frame_F1": 0.644005426390036,
+        "num_gold_segments": 218,
+        "num_pred_segments": 421,
+        "IoU": 0.7939793350112597,
+        "Pct": 1.9311926605504588,
+        "Segment_F1_05": 0.2190923317683881
+      },
+      "1245820_A": {
+        "num_frames": 39102,
+        "Frame_F1": 0.6732180512621534,
+        "num_gold_segments": 109,
+        "num_pred_segments": 166,
+        "IoU": 0.8012588377306432,
+        "Pct": 1.5229357798165137,
+        "Segment_F1_05": 0.32000000000000006
+      },
+      "1245820_B": {
+        "num_frames": 39102,
+        "Frame_F1": 0.6180479850059041,
+        "num_gold_segments": 234,
+        "num_pred_segments": 266,
+        "IoU": 0.836240239363643,
+        "Pct": 1.1367521367521367,
+        "Segment_F1_05": 0.2
+      },
+      "1414123_A": {
+        "num_frames": 34237,
+        "Frame_F1": 0.6535505358081547,
+        "num_gold_segments": 52,
+        "num_pred_segments": 79,
+        "IoU": 0.8137821151165107,
+        "Pct": 1.5192307692307692,
+        "Segment_F1_05": 0.2748091603053435
+      },
+      "1414123_B": {
+        "num_frames": 34237,
+        "Frame_F1": 0.6090372707452639,
+        "num_gold_segments": 165,
+        "num_pred_segments": 351,
+        "IoU": 0.8734035480597642,
+        "Pct": 2.1272727272727274,
+        "Segment_F1_05": 0.2713178294573644
+      },
+      "1212416_A": {
+        "num_frames": 19986,
+        "Frame_F1": 0.6600156404531106,
+        "num_gold_segments": 107,
+        "num_pred_segments": 146,
+        "IoU": 0.8430704741943935,
+        "Pct": 1.3644859813084111,
+        "Segment_F1_05": 0.20553359683794467
+      },
+      "1212416_B": {
+        "num_frames": 19986,
+        "Frame_F1": 0.6655210957239514,
+        "num_gold_segments": 50,
+        "num_pred_segments": 106,
+        "IoU": 0.8800379970145202,
+        "Pct": 2.12,
+        "Segment_F1_05": 0.28205128205128205
+      },
+      "1427368_A": {
+        "num_frames": 68880,
+        "Frame_F1": 0.6649828967075816,
+        "num_gold_segments": 204,
+        "num_pred_segments": 333,
+        "IoU": 0.8790928536170679,
+        "Pct": 1.6323529411764706,
+        "Segment_F1_05": 0.19366852886405958
+      },
+      "1427368_B": {
+        "num_frames": 68880,
+        "Frame_F1": 0.6632917257979009,
+        "num_gold_segments": 193,
+        "num_pred_segments": 378,
+        "IoU": 0.8791100877044462,
+        "Pct": 1.9585492227979275,
+        "Segment_F1_05": 0.24518388791593693
+      },
+      "1178761_A": {
+        "num_frames": 3194,
+        "Frame_F1": 0.6488194439517998,
+        "num_gold_segments": 16,
+        "num_pred_segments": 27,
+        "IoU": 0.8660990712074303,
+        "Pct": 1.6875,
+        "Segment_F1_05": 0.5116279069767441
+      },
+      "1292768_B": {
+        "num_frames": 21475,
+        "Frame_F1": 0.6504351174994054,
+        "num_gold_segments": 108,
+        "num_pred_segments": 217,
+        "IoU": 0.8134592680047226,
+        "Pct": 2.009259259259259,
+        "Segment_F1_05": 0.23999999999999994
+      },
+      "1244978_B": {
+        "num_frames": 23865,
+        "Frame_F1": 0.6436908450699735,
+        "num_gold_segments": 48,
+        "num_pred_segments": 110,
+        "IoU": 0.8035792230467045,
+        "Pct": 2.2916666666666665,
+        "Segment_F1_05": 0.24050632911392406
+      },
+      "1244581_B": {
+        "num_frames": 15440,
+        "Frame_F1": 0.6807535456197876,
+        "num_gold_segments": 31,
+        "num_pred_segments": 47,
+        "IoU": 0.7477381585949974,
+        "Pct": 1.5161290322580645,
+        "Segment_F1_05": 0.3333333333333333
+      }
+    },
+    "threshold": {
+      "1250972_B": {
+        "num_frames": 44800,
+        "Frame_F1": 0.6723877597972939,
+        "num_gold_segments": 160,
+        "num_pred_segments": 68,
+        "IoU": 0.6417417129718337,
+        "Pct": 0.425,
+        "Segment_F1_05": 0.40350877192982454
+      },
+      "1430328_A": {
+        "num_frames": 64110,
+        "Frame_F1": 0.644005426390036,
+        "num_gold_segments": 218,
+        "num_pred_segments": 78,
+        "IoU": 0.5460920069412473,
+        "Pct": 0.3577981651376147,
+        "Segment_F1_05": 0.24324324324324326
+      },
+      "1245820_A": {
+        "num_frames": 39102,
+        "Frame_F1": 0.6732180512621534,
+        "num_gold_segments": 109,
+        "num_pred_segments": 27,
+        "IoU": 0.42531120331950206,
+        "Pct": 0.24770642201834864,
+        "Segment_F1_05": 0.23529411764705885
+      },
+      "1245820_B": {
+        "num_frames": 39102,
+        "Frame_F1": 0.6180479850059041,
+        "num_gold_segments": 234,
+        "num_pred_segments": 42,
+        "IoU": 0.41436485796235906,
+        "Pct": 0.1794871794871795,
+        "Segment_F1_05": 0.17391304347826086
+      },
+      "1414123_A": {
+        "num_frames": 34237,
+        "Frame_F1": 0.6535505358081547,
+        "num_gold_segments": 52,
+        "num_pred_segments": 13,
+        "IoU": 0.5149080143793614,
+        "Pct": 0.25,
+        "Segment_F1_05": 0.2153846153846154
+      },
+      "1414123_B": {
+        "num_frames": 34237,
+        "Frame_F1": 0.6090372707452639,
+        "num_gold_segments": 165,
+        "num_pred_segments": 67,
+        "IoU": 0.5567111175532686,
+        "Pct": 0.40606060606060607,
+        "Segment_F1_05": 0.29310344827586204
+      },
+      "1212416_A": {
+        "num_frames": 19986,
+        "Frame_F1": 0.6600156404531106,
+        "num_gold_segments": 107,
+        "num_pred_segments": 33,
+        "IoU": 0.7448042101507448,
+        "Pct": 0.308411214953271,
+        "Segment_F1_05": 0.24285714285714285
+      },
+      "1212416_B": {
+        "num_frames": 19986,
+        "Frame_F1": 0.6655210957239514,
+        "num_gold_segments": 50,
+        "num_pred_segments": 22,
+        "IoU": 0.6964235426640383,
+        "Pct": 0.44,
+        "Segment_F1_05": 0.36111111111111116
+      },
+      "1427368_A": {
+        "num_frames": 68880,
+        "Frame_F1": 0.6649828967075816,
+        "num_gold_segments": 204,
+        "num_pred_segments": 56,
+        "IoU": 0.5388663618324562,
+        "Pct": 0.27450980392156865,
+        "Segment_F1_05": 0.22307692307692306
+      },
+      "1427368_B": {
+        "num_frames": 68880,
+        "Frame_F1": 0.6632917257979009,
+        "num_gold_segments": 193,
+        "num_pred_segments": 70,
+        "IoU": 0.5332694559778558,
+        "Pct": 0.3626943005181347,
+        "Segment_F1_05": 0.2509505703422053
+      },
+      "1178761_A": {
+        "num_frames": 3194,
+        "Frame_F1": 0.6488194439517998,
+        "num_gold_segments": 16,
+        "num_pred_segments": 3,
+        "IoU": 0.13445378151260504,
+        "Pct": 0.1875,
+        "Segment_F1_05": 0.21052631578947367
+      },
+      "1292768_B": {
+        "num_frames": 21475,
+        "Frame_F1": 0.6504351174994054,
+        "num_gold_segments": 108,
+        "num_pred_segments": 38,
+        "IoU": 0.4876631503665296,
+        "Pct": 0.35185185185185186,
+        "Segment_F1_05": 0.3424657534246575
+      },
+      "1244978_B": {
+        "num_frames": 23865,
+        "Frame_F1": 0.6436908450699735,
+        "num_gold_segments": 48,
+        "num_pred_segments": 24,
+        "IoU": 0.6196365857382806,
+        "Pct": 0.5,
+        "Segment_F1_05": 0.3333333333333333
+      },
+      "1244581_B": {
+        "num_frames": 15440,
+        "Frame_F1": 0.6807535456197876,
+        "num_gold_segments": 31,
+        "num_pred_segments": 6,
+        "IoU": 0.3103248259860789,
+        "Pct": 0.1935483870967742,
+        "Segment_F1_05": 0.2162162162162162
+      }
+    }
+  },
+  "skipped_videos": {}
+}

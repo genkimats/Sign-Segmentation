@@ -1,0 +1,18 @@
+{
+  "run": "bilstm_2023-253",
+  "model": "bilstm_2023",
+  "prefix": "253",
+  "split": "val",
+  "labels_dir": "processed_data/BIO_tags_phrase_v2",
+  "description": "BL2023 combo: H (HaMeR only) [seed=42]",
+  "seed": 42,
+  "fixed_thresholds": [
+    0.5,
+    0.5
+  ],
+  "swept_thresholds": null,
+  "tuned_thresholds": null,
+  "tuned_on": null,
+  "sweep_metric": "iou_pct",
+  "merge_starts": {}
+}

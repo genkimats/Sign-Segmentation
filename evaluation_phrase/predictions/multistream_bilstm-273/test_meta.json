@@ -1,0 +1,24 @@
+{
+  "run": "multistream_bilstm-273",
+  "model": "multistream_bilstm",
+  "prefix": "273",
+  "split": "test",
+  "labels_dir": "processed_data/BIO_tags_phrase_v2",
+  "description": "ENC: B+H+Fc, BlockGCN stream encoders [seed=2024]",
+  "seed": 2024,
+  "fixed_thresholds": [
+    0.5,
+    0.5
+  ],
+  "swept_thresholds": null,
+  "tuned_thresholds": [
+    0.3,
+    0.3
+  ],
+  "tuned_on": "val",
+  "sweep_metric": "bnd5",
+  "merge_starts": {
+    "argmax_merge": 15,
+    "tuned_merge": 5
+  }
+}

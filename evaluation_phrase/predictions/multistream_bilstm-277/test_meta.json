@@ -1,0 +1,24 @@
+{
+  "run": "multistream_bilstm-277",
+  "model": "multistream_bilstm",
+  "prefix": "277",
+  "split": "test",
+  "labels_dir": "processed_data/BIO_tags_phrase_v2",
+  "description": "MIX: MS Body, temporal conv only (ST-GCN with identity graph) [seed=42]",
+  "seed": 42,
+  "fixed_thresholds": [
+    0.5,
+    0.5
+  ],
+  "swept_thresholds": null,
+  "tuned_thresholds": [
+    0.3,
+    0.3
+  ],
+  "tuned_on": "val",
+  "sweep_metric": "bnd5",
+  "merge_starts": {
+    "argmax_merge": 30,
+    "tuned_merge": 10
+  }
+}

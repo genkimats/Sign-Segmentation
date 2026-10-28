@@ -1,0 +1,47 @@
+
+=== test: 65 configurations (56 competitive, Frame F1 >= 0.665), decoder=argmax_merge
+
+Rank agreement between metrics (Spearman, competitive configurations):
+                  frame_f1      f1_B       iou   pct_dev segment_f  bnd_f1_1  bnd_f1_2  bnd_f1_5 bnd_f1_10 bnd_f1_25
+        frame_f1      1.00      0.91      0.93      0.23      0.64      0.69      0.71      0.74      0.76      0.71
+            f1_B      0.91      1.00      0.79      0.34      0.74      0.78      0.80      0.83      0.84      0.80
+             iou      0.93      0.79      1.00      0.21      0.60      0.65      0.67      0.71      0.75      0.67
+         pct_dev      0.23      0.34      0.21      1.00      0.70      0.67      0.65      0.62      0.57      0.65
+   segment_f1_05      0.64      0.74      0.60      0.70      1.00      0.94      0.94      0.95      0.92      0.96
+        bnd_f1_1      0.69      0.78      0.65      0.67      0.94      1.00      0.98      0.96      0.93      0.93
+        bnd_f1_2      0.71      0.80      0.67      0.65      0.94      0.98      1.00      0.96      0.93      0.92
+        bnd_f1_5      0.74      0.83      0.71      0.62      0.95      0.96      0.96      1.00      0.98      0.97
+       bnd_f1_10      0.76      0.84      0.75      0.57      0.92      0.93      0.93      0.98      1.00      0.97
+       bnd_f1_25      0.71      0.80      0.67      0.65      0.96      0.93      0.92      0.97      0.97      1.00
+
+Reliability and range per metric (competitive configurations):
+metric                                        ICC(1)    range  seed SD  range/SD
+Frame F1 (macro)                                0.85   0.0295   0.0028      10.7
+B-class F1                                      0.85   0.0580   0.0055      10.5
+IoU                                             0.87   0.0848   0.0050      17.0
+|log %| (segment-count error, lower=better)     0.64   0.6348   0.0624      10.2
+Segment F1@0.5                                  0.80   0.2296   0.0184      12.5
+Boundary F1 +-1                                 0.87   0.1291   0.0105      12.3
+Boundary F1 +-2                                 0.88   0.1533   0.0127      12.1
+Boundary F1 +-5                                 0.86   0.1706   0.0136      12.5
+Boundary F1 +-10                                0.87   0.1905   0.0124      15.3
+Boundary F1 +-25                                0.87   0.1930   0.0123      15.7
+
+Top 5 configurations by each metric:
+  Frame F1: multistream_bilstm | MS: Body + Face + HaMeR, co (0.695) | multistream_bilstm | MS: Body + Face + HaMeR, fu (0.692) | multistream_bilstm | MS: Body + Face + HaMeR, mi (0.690) | multistream_bilstm | MS: Body + Face + HaMeR, ey (0.689) | multistream_bilstm | New: MS: Body + Face + HaMe (0.689)
+  IoU: multistream_bilstm | MS: Body + HaMeR + face (0.911) | multistream_bilstm | MS: Body + Face + HaMeR, co (0.869) | multistream_bilstm | MS: HaMeR (0.866) | multistream_bilstm | MS: Body + Face + HaMeR, fu (0.862) | multistream_bilstm | MS: Face + HaMeR (0.861)
+  Boundary F1 +-1: multistream_bilstm | MS: Body + Face + HaMeR, co (0.316) | multistream_bilstm | MS: Body + Face + HaMeR, ey (0.301) | multistream_bilstm | New 1: MS: Body + Face + Ha (0.297) | multistream_bilstm | New: MS: Body + Face + HaMe (0.296) | multistream_bilstm | MS: Body + Face + HaMeR, mi (0.293)
+  Boundary F1 +-5: multistream_bilstm | MS: Body + Face + HaMeR, co (0.524) | multistream_bilstm | MS: Body + Face + HaMeR, ey (0.520) | multistream_bilstm | MS: Body + Face + HaMeR, fu (0.509) | multistream_bilstm | New 1: MS: Body + Face + Ha (0.507) | multistream_bilstm | New: MS: Body + Face + HaMe (0.507)
+  Segment F1@0.5: multistream_bilstm | New 1: MS: Body + Face + Ha (0.557) | multistream_bilstm | MS: Body + Face + HaMeR, co (0.554) | multistream_bilstm | New: MS: Body + Face + HaMe (0.554) | multistream_bilstm | New 1: MS: Body + HaMeR (0.552) | multistream_bilstm | MS: Body + Face + HaMeR, ey (0.550)
+
+Blind spots (all configurations, test): segment-count error vs IoU / Frame F1
+  configuration                                                   IoU  x gold     F1  BndF1@5
+  multistream_bilstm | New: MS: Face                            0.567    3.23  0.523    0.083
+  multistream_bilstm | MS: Face                                 0.597    2.93  0.538    0.107
+  multistream_bilstm | FullFace: Face only, contours2023        0.586    2.91  0.528    0.097
+  bilstm_2023 | BL2023: E1s (body+hands), 2023 recipe           0.771    2.57  0.615    0.352
+  bilstm_2023 | BL2023 combo: F (face compact only)             0.568    2.46  0.513    0.085
+  multistream_bilstm | MS: Body + HaMeR + face                  0.911    1.95  0.687    0.353
+  multistream_bilstm | MIX: MS Body, per-joint Linear (no grap  0.833    1.42  0.669    0.406
+  multistream_bilstm | MS: HaMeR                                0.866    1.41  0.687    0.478
+  ('x gold' = predicted segments / gold segments, as a factor either way)

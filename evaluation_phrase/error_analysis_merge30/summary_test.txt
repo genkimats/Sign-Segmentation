@@ -1,0 +1,38 @@
+183 runs, 17 test videos, 1747 gold phrase starts, decoder=argmax, tolerance +-5 frames, labels processed_data/BIO_tags_phrase_v2
+
+A. ERROR CONSISTENCY
+  mean single-run recall@5: 0.418   (runs: 0.271-0.646)
+  detected by NO run:   0.113 of gold starts   (independent errors would give 8.60e-44)
+  detected by EVERY run:0.052                  (independent errors would give 5.50e-70)
+  detected by >= half:  0.429
+  union recall (>= 1 run detects it): 0.887  -> upper bound for ensembling / selection
+  boundary ICC: 0.63  (share of variance in 'detected?' due to the boundary, not the run)
+  detection-rate histogram (0-10%, ..., 90-100% of runs): 679 111 73 78 57 89 83 107 108 362
+  63 configurations; mean pairwise correlation of per-boundary detection rates: 0.77
+  per-video mean detection rate: min 0.32 / median 0.41 / max 0.55
+
+B. HARD vs EASY BOUNDARIES (hard: <= 10% of runs, easy: >= 90%)
+  hard       n=  679  pause before phrase (fr)   13.00  phrase len 100.00  prev phrase len  99.00  prev-sign dur (rel)  1.33  local-max pause  0.40  mouthing spreads  0.01  hand switch  0.01  oracle timing  -1.32  oracle lexical  -1.13
+  medium     n=  706  pause before phrase (fr)   20.00  phrase len 110.00  prev phrase len 110.50  prev-sign dur (rel)  1.70  local-max pause  0.56  mouthing spreads  0.00  hand switch  0.01  oracle timing  -0.33  oracle lexical  -0.68
+  easy       n=  362  pause before phrase (fr)   78.00  phrase len  97.50  prev phrase len 100.00  prev-sign dur (rel)  1.50  local-max pause  1.06  mouthing spreads  0.01  hand switch  0.01  oracle timing   1.79  oracle lexical  -0.38
+  Spearman(detection rate, oracle:non-lexical (timing+hands+mouth)): +0.48
+  Spearman(detection rate, oracle:lexical): +0.25
+  Spearman(detection rate, phrase_gap_before): +0.40
+  most frequent glosses around HARD boundaries: prev=$GEST-OFF (77), prev=$INDEX1 (50), cur=$INDEX1 (39), cur=$ORAL (30), cur=$GEST-OFF (28), cur=ICH1 (25), prev=$GEST (22), cur=$GEST (21), cur=$GEST-NM-KOP (19), prev=ICH1 (13), prev=$PROD* (11), prev=GUT1* (10)
+
+C. FALSE ALARMS (unmatched predicted starts)
+  128131 false alarms over 183 runs (700 per run) in 8051 positions; 450 positions are false alarms of >= 50% of runs
+  all false alarms (weighted by runs): within-phrase sign transition 49%, between phrases 24%, duplicate start near a gold start 15%, inside a sign / no transition 12%
+  consistent (>= 50% of runs): within-phrase sign transition 50%, between phrases 27%, duplicate start near a gold start 13%, inside a sign / no transition 10%
+  within-phrase pauses >= 25 fr: 377, of which 39 (10%) are consistent false alarms (candidate prosodic boundaries not marked by the translation units)
+  pause before the sign:  true boundaries 19.0 fr (share > 12 fr: 0.67) | consistent within-phrase false alarms 12.0 fr (share > 12 fr: 0.46) | all within-phrase transitions 9.0 fr (share > 12 fr: 0.28)
+  timing-oracle score:     true boundaries -0.48 | consistent within-phrase false alarms -1.40 | all within-phrase transitions -2.42
+  (false alarms that look like true boundaries on these measures are candidates for prosodic boundaries the translation segmentation does not mark)
+
+D. TIMING (offsets predicted - gold of matched starts, within +-25 frames)
+  pooled: mean +0.42, median +0.0, SD 7.06, MAD 2.00 frames; robust bias share median^2 / (median^2 + (1.48 MAD)^2): 0.00
+  median offset per configuration: BL2023 combo: B +0.0; BL2023 combo: B+F (compact) +0.0; BL2023 combo: B+F+H (compact) +0.3; BL2023 combo: B+H +0.0; BL2023 combo: F+H (compact) +0.0; BL2023 combo: H (HaMeR only) +0.0; BL2023: E1s (body+hands), 2023 +0.0; BL2023: E1s (body+hands), my r +0.3; BL2023: E2s (body+hands+face c +0.7; CP ref: B+H+Fc, no change-poin +0.0; CP: B+H+Fc, change-point 5/10/ +0.0; CP: B+H+Fc, change-point scale +0.0
+  shift estimated on val (median offset per run), applied on test:
+    boundary F1@1: 0.252 -> 0.251 (-0.001)  (mean over 183 runs, shifts [(0, 159), (1, 24)])
+    boundary F1@2: 0.349 -> 0.349 (+0.001)  (mean over 183 runs, shifts [(0, 159), (1, 24)])
+    boundary F1@5: 0.461 -> 0.461 (+0.000)  (mean over 183 runs, shifts [(0, 159), (1, 24)])

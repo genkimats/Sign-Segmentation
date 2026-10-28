@@ -1,0 +1,24 @@
+{
+  "run": "bilstm_2023-239",
+  "model": "bilstm_2023",
+  "prefix": "239",
+  "split": "test",
+  "labels_dir": "processed_data/BIO_tags_phrase_v2",
+  "description": "BL2023: E1s (body+hands), 2023 recipe [seed=123]",
+  "seed": 123,
+  "fixed_thresholds": [
+    0.5,
+    0.5
+  ],
+  "swept_thresholds": null,
+  "tuned_thresholds": [
+    0.8,
+    0.3
+  ],
+  "tuned_on": "val",
+  "sweep_metric": "bnd5",
+  "merge_starts": {
+    "argmax_merge": 30,
+    "tuned_merge": 5
+  }
+}

@@ -1,4 +1,28 @@
 run,config,recall,n_pred,median_offset
+bilstm_2023-244,"bilstm_2023 | BL2023: E1s (body+hands), my recipe",0.3509,3173,0.0
+bilstm_2023-245,"bilstm_2023 | BL2023: E1s (body+hands), my recipe",0.3515,3109,0.0
+bilstm_2023-246,"bilstm_2023 | BL2023: E1s (body+hands), my recipe",0.3967,3528,0.0
+bilstm_2023-247,"bilstm_2023 | BL2023: E2s (body+hands+face contours2023), my recipe",0.3663,3253,0.0
+bilstm_2023-248,"bilstm_2023 | BL2023: E2s (body+hands+face contours2023), my recipe",0.3709,3357,0.0
+bilstm_2023-249,"bilstm_2023 | BL2023: E2s (body+hands+face contours2023), my recipe",0.3766,3366,0.0
+bilstm_2023-250,bilstm_2023 | BL2023 combo: B,0.3864,3410,0.0
+bilstm_2023-251,bilstm_2023 | BL2023 combo: B,0.3589,3069,0.0
+bilstm_2023-252,bilstm_2023 | BL2023 combo: B,0.3566,2758,0.0
+bilstm_2023-253,bilstm_2023 | BL2023 combo: H (HaMeR only),0.3434,3115,0.0
+bilstm_2023-254,bilstm_2023 | BL2023 combo: H (HaMeR only),0.3429,3005,0.0
+bilstm_2023-255,bilstm_2023 | BL2023 combo: H (HaMeR only),0.3555,3188,0.0
+bilstm_2023-259,bilstm_2023 | BL2023 combo: B+H,0.3589,2908,0.0
+bilstm_2023-260,bilstm_2023 | BL2023 combo: B+H,0.3892,3573,0.0
+bilstm_2023-261,bilstm_2023 | BL2023 combo: B+H,0.3789,3503,0.0
+bilstm_2023-262,bilstm_2023 | BL2023 combo: B+F (compact),0.3818,3458,0.0
+bilstm_2023-263,bilstm_2023 | BL2023 combo: B+F (compact),0.3675,3205,0.0
+bilstm_2023-264,bilstm_2023 | BL2023 combo: B+F (compact),0.3749,3332,0.0
+bilstm_2023-265,bilstm_2023 | BL2023 combo: F+H (compact),0.3635,3262,0.0
+bilstm_2023-266,bilstm_2023 | BL2023 combo: F+H (compact),0.3835,3647,0.0
+bilstm_2023-267,bilstm_2023 | BL2023 combo: F+H (compact),0.3532,3050,0.0
+bilstm_2023-268,bilstm_2023 | BL2023 combo: B+F+H (compact),0.3818,3309,0.0
+bilstm_2023-269,bilstm_2023 | BL2023 combo: B+F+H (compact),0.3807,3389,0.0
+bilstm_2023-270,bilstm_2023 | BL2023 combo: B+F+H (compact),0.3807,3490,0.0
 multistream_bilstm-100,"multistream_bilstm | MS: Body + Face + HaMeR, full face",0.4499,3485,0.0
 multistream_bilstm-101,"multistream_bilstm | MS: Body + Face + HaMeR, full face",0.4722,3632,0.0
 multistream_bilstm-102,"multistream_bilstm | MS: Body + Face + HaMeR, full face",0.4585,3718,0.0
@@ -122,6 +146,13 @@ multistream_bilstm-236,multistream_bilstm | FullFace: B+H+F compact + blendshape
 multistream_bilstm-237,multistream_bilstm | FullFace: B+H+F compact + blendshapes (52),0.4482,4024,0.0
 multistream_bilstm-271,"multistream_bilstm | ENC: B+H+Fc, BlockGCN stream encoders",0.4619,4209,0.0
 multistream_bilstm-272,"multistream_bilstm | ENC: B+H+Fc, BlockGCN stream encoders",0.4917,4486,0.0
+multistream_bilstm-273,"multistream_bilstm | ENC: B+H+Fc, BlockGCN stream encoders",0.4614,4310,0.0
+multistream_bilstm-274,"multistream_bilstm | ENC: B+H+Fc, SkateFormer stream encoders",0.3927,3385,0.0
+multistream_bilstm-277,"multistream_bilstm | MIX: MS Body, temporal conv only (ST-GCN with identity graph)",0.4133,3542,0.0
+multistream_bilstm-278,"multistream_bilstm | MIX: MS Body, temporal conv only (ST-GCN with identity graph)",0.4602,4051,0.0
+multistream_bilstm-279,"multistream_bilstm | MIX: MS Body, temporal conv only (ST-GCN with identity graph)",0.431,3975,0.0
+multistream_bilstm-280,"multistream_bilstm | MIX: MS Body, per-joint Linear (no graph, no temporal conv)",0.3812,3560,0.0
+multistream_bilstm-282,"multistream_bilstm | MIX: MS Body, per-joint Linear (no graph, no temporal conv) #1",0.3549,3013,0.0
 multistream_bilstm-82,multistream_bilstm | MS: Body,0.4516,3469,0.0
 multistream_bilstm-83,multistream_bilstm | MS: Body,0.4637,3703,0.0
 multistream_bilstm-84,multistream_bilstm | MS: Body,0.4562,3737,0.0
