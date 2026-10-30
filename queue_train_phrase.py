@@ -660,8 +660,40 @@ BL2023_TCN_STUDY = [
      "description": f"BL2023+TC: B+F+H ({_FS})"},
 ]
 
+# ------------------------------------------------------------------------------
+# BOUNDARY STUDIES on the final model (multistream B+H+Fc, v2 labels; reference = 115-117).
+# Both change ONLY the training loss / targets; model, data and evaluation stay the same.
+#
+# AMBIGUITY: soft training targets from make_soft_labels.py (run it ONCE first). At every
+#   sign transition the gold target is mixed with how the annotation usually treats that kind
+#   of transition (out-of-fold oracle P(boundary)); alpha = mixing strength (< 0.5, so the gold
+#   class stays on top). Validation and test always use the gold labels.
+# COUNT: + count_loss_weight * "one start per boundary" loss (src/boundary_losses.py): in every
+#   +-count_loss_radius window, the number of frames whose argmax would be B (soft indicator,
+#   sharpness count_loss_tau = 0.1) should equal the number of gold starts -> penalises
+#   duplicate starts (stutter) during training, tolerant to small offsets. Weight 2 = mild,
+#   10 = strong (rough estimate: the term is ~0.02-0.1 per frame vs ~0.3-0.5 for the CE).
+# Evaluate as usual (evaluate_phrase.py with --merge-starts): the COUNT runs should need
+# less merging, i.e. raw argmax boundary F1 should move towards argmax + merge.
+# ------------------------------------------------------------------------------
+_SOFT_DIR = "processed_data/BIO_soft_ambig_a{:02d}"
+BOUNDARY_STUDY = [
+    {**_MS_BEST, "soft_label_dir": _SOFT_DIR.format(20),
+     "description": "AMB: B+H+Fc, ambiguity-aware soft targets alpha=0.2"},
+    {**_MS_BEST, "soft_label_dir": _SOFT_DIR.format(40),
+     "description": "AMB: B+H+Fc, ambiguity-aware soft targets alpha=0.4"},
+    {**_MS_BEST, "count_loss_weight": 2.0, "count_loss_radius": 5,
+     "description": "CNT: B+H+Fc, boundary count loss w=2 r=5"},
+    {**_MS_BEST, "count_loss_weight": 10.0, "count_loss_radius": 5,
+     "description": "CNT: B+H+Fc, boundary count loss w=10 r=5"},
+    {**_MS_BEST, "soft_label_dir": _SOFT_DIR.format(40), "count_loss_weight": 2.0, "count_loss_radius": 5,
+     "description": "AMB+CNT: B+H+Fc, soft targets alpha=0.4 + count loss w=2"},
+]
+
 # What runs now (earlier studies above are already trained):
-EXPERIMENTS_TO_RUN = HAMER_TCN_STUDY
+EXPERIMENTS_TO_RUN = BOUNDARY_STUDY
+# EXPERIMENTS_TO_RUN = HAMER_TCN_STUDY                # HaMeR temporal conv (still useful)
+# EXPERIMENTS_TO_RUN = BL2023_TCN_STUDY               # early fusion + temporal conv (dropped from the thesis)
 # EXPERIMENTS_TO_RUN = MIXING_STUDY + SCALING_STUDY   # earlier batch
 # EXPERIMENTS_TO_RUN += OPTIONAL_MY_MODEL_2023_RECIPE
 

@@ -97,8 +97,13 @@ def downsample_labels(labels, k):
 
 
 class SignSegmentationDataset(Dataset):
-    def __init__(self, keypoints_dir, labels_dir, split_file="dataset_splits.json", split="train", window_size=16, overlap=0, tolerance_window=1, use_full_length=False, base_features=None, kinematic_features=None, temporal_downsample_factor=1, use_face_keypoints=False, face_dir="processed_data/face_keypoints_normalized_v2", face_subset="full", face_only=False, face_dims=2, use_hamer_features=False, hamer_dir="processed_data/hamer_features", use_dinov2_features=False, dinov2_dir="processed_data/dinov2_features", use_cue_features=False, cue_dir=CUE_DEFAULT_DIR, cue_set="selected", hand_canonicalize=False, mirror_augment_p=0.0, face_layout="saved83", train_fraction=1.0):
+    def __init__(self, keypoints_dir, labels_dir, split_file="dataset_splits.json", split="train", window_size=16, overlap=0, tolerance_window=1, use_full_length=False, base_features=None, kinematic_features=None, temporal_downsample_factor=1, use_face_keypoints=False, face_dir="processed_data/face_keypoints_normalized_v2", face_subset="full", face_only=False, face_dims=2, use_hamer_features=False, hamer_dir="processed_data/hamer_features", use_dinov2_features=False, dinov2_dir="processed_data/dinov2_features", use_cue_features=False, cue_dir=CUE_DEFAULT_DIR, cue_set="selected", hand_canonicalize=False, mirror_augment_p=0.0, face_layout="saved83", train_fraction=1.0, soft_label_dir=None):
         self.labels_dir = labels_dir
+        # soft_label_dir (train split only, set by train_phrase.py): per-video soft TRAINING
+        # targets (T, 3) from make_soft_labels.py replace the one-hot / tolerance-smoothed
+        # targets. 'hard_labels' (evaluation) always stay the gold labels from labels_dir.
+        self.soft_label_dir = soft_label_dir
+        self.soft_label_missing = []
         self.kinetic_dir = "processed_data/kinematic_features" 
         self.split_file = split_file
         self.split = split
@@ -309,6 +314,16 @@ class SignSegmentationDataset(Dataset):
             
             # CPU Bottleneck Fix: Pre-calculate smoothing once per video, not once per window!
             soft_labels = apply_label_smoothing(labels, self.tolerance_window)
+            if self.soft_label_dir:
+                sp = os.path.join(self.soft_label_dir, f"{vid}.npy")
+                if os.path.exists(sp):
+                    soft = np.load(sp).astype(np.float32)
+                    if soft.shape == (num_frames, 3):
+                        soft_labels = soft
+                    else:
+                        self.soft_label_missing.append((vid, f"shape {soft.shape} != ({num_frames}, 3)"))
+                else:
+                    self.soft_label_missing.append((vid, "file missing"))
             
             try:
                 kin_data = torch.load(kinetic_path, weights_only=False)
@@ -559,6 +574,14 @@ class SignSegmentationDataset(Dataset):
             else:
                 self.windows.append({'video_id': vid, 'start_idx': 0, 'end_idx': num_frames})
 
+        if self.soft_label_dir:
+            n_bad = len(self.soft_label_missing)
+            print(f"[{split.upper()}] soft training targets from {self.soft_label_dir}: "
+                  f"{len(self.video_cache) - n_bad}/{len(self.video_cache)} videos"
+                  + (f" -- {n_bad} fall back to hard labels, e.g. {self.soft_label_missing[:3]}" if n_bad else ""))
+            if n_bad > 0.05 * max(1, len(self.video_cache)):
+                raise RuntimeError(f"{n_bad} of {len(self.video_cache)} videos have no usable soft labels in "
+                                   f"{self.soft_label_dir} -- run make_soft_labels.py first.")
         if self.hand_canonicalize:
             print(f"[{split.upper()}] hand canonicalization: {len(self.mirrored_videos)}/{len(self.video_cache)} "
                   f"videos mirrored (dominant hand moved to MediaPipe 'right')")

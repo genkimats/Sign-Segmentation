@@ -22,6 +22,7 @@ from src.model_factory import MODEL_REGISTRY, build_model_kwargs
 # Full-video validation: same windows as training, probabilities stitched per video,
 # metrics against HARD gold labels (never the tolerance-smoothed ones).
 from src.evaluation import evaluate_model_on_split
+from src.boundary_losses import boundary_aware_loss
 from src.loss import CombinedBoundaryLoss, FocalLoss, StandardCrossEntropyLoss, WeightedCrossEntropyLoss, UnifiedCTCLoss, WeightedCE_TMSE_Loss, WeightedNLLLoss
 # (Removed decoder import since we no longer use it in training/validation)
 
@@ -110,35 +111,39 @@ def micro_batches(labels, micro_size):
 
 
 def accumulated_ce(call, features, labels, hamer, dinov2, cues, class_weights, micro_size,
-                   backward=True):
+                   device, backward=True):
     """
-    Weighted cross-entropy over a padded batch, computed in micro-batches to bound GPU
-    memory, with gradients IDENTICAL to one pass over the whole batch: every chunk's
-    summed weighted loss is divided by the weight total of the WHOLE batch (= PyTorch's
-    weighted-mean reduction), and gradients accumulate. Returns the batch loss (float),
-    or None if a chunk produced NaN/Inf (the caller then skips the step).
+    Weighted cross-entropy over a padded batch, computed in micro-batches to bound memory,
+    with gradients IDENTICAL to one pass over the whole batch: every chunk's summed weighted
+    loss is divided by the weight total of the WHOLE batch (= PyTorch's weighted-mean
+    reduction), and gradients accumulate. The batch stays on the CPU; only one chunk (cut to
+    its real length, cast to float32, NaN-cleaned) is on the GPU at a time.
+    Returns the batch loss (float), or None if a chunk produced NaN/Inf (step is skipped).
     """
-    hard = mask_padding(torch.argmax(labels, dim=1), labels)
+    hard = mask_padding(torch.argmax(labels, dim=1), labels)          # CPU
     valid = hard != -100
-    w = class_weights if class_weights is not None else torch.ones(3, device=labels.device)
-    w_total = w[hard[valid]].sum().clamp_min(1e-8)
+    w = (class_weights.detach().float().cpu() if class_weights is not None else torch.ones(3))
+    w_total = float(w[hard[valid]].sum().clamp_min(1e-8))
+    w_dev = w.to(device)
     total = 0.0
     for idx, T in micro_batches(labels, micro_size):
-        def take(x, time_dim):
+        def take(x):
             if x is None:
                 return None
-            x = x[idx]
-            return x.narrow(time_dim, 0, min(T, x.shape[time_dim]))
-        out = call(take(features, 2), take(hamer, 2), take(dinov2, 2), take(cues, 2))
+            x = x[idx].narrow(2, 0, min(T, x.shape[2]))
+            x = x.to(device, non_blocking=True).float()
+            return torch.nan_to_num_(x, nan=0.0, posinf=0.0, neginf=0.0)
+        out = call(take(features), take(hamer), take(dinov2), take(cues))
         logits = out[0] if isinstance(out, tuple) else out          # (b, 3, T)
-        tgt = hard[idx][:, :logits.shape[-1]]
-        loss = torch.nn.functional.cross_entropy(logits, tgt, weight=w, ignore_index=-100,
+        tgt = hard[idx][:, :logits.shape[-1]].to(device)
+        loss = torch.nn.functional.cross_entropy(logits.float(), tgt, weight=w_dev, ignore_index=-100,
                                                  reduction="sum") / w_total
         if torch.isnan(loss) or torch.isinf(loss):
             return None
         if backward:
             loss.backward()
         total += loss.item()
+        del out, logits, loss
     return total
 
 
@@ -246,6 +251,24 @@ def train_model(config, selection_metric="combined"):
     USE_DINOV2_FEATURES = config.get("use_dinov2_features", False)
     USE_CUE_FEATURES = config.get("use_cue_features", False)
     DINOV2_DIR = config.get("dinov2_dir", "processed_data/dinov2_features")
+    # Boundary studies (src/boundary_losses.py), weighted_ce only, windowed training only:
+    #   soft_label_dir     soft training targets from make_soft_labels.py (ambiguity study)
+    #   count_loss_weight  > 0: + weight * "one start per boundary" count loss (count study)
+    #   count_loss_radius  half-width of the count window in frames (default 5 = +-5 tolerance)
+    SOFT_LABEL_DIR = config.get("soft_label_dir")
+    COUNT_LOSS_WEIGHT = float(config.get("count_loss_weight", 0.0))
+    COUNT_LOSS_RADIUS = int(config.get("count_loss_radius", 5))
+    COUNT_LOSS_TAU = float(config.get("count_loss_tau", 0.1))       # sharpness of the soft "is B" indicator
+    COUNT_LOSS_MODE = config.get("count_loss_mode", "argmax")      # "argmax" (default) | "mass"
+    USE_BOUNDARY_LOSS = bool(SOFT_LABEL_DIR) or COUNT_LOSS_WEIGHT > 0
+    if USE_BOUNDARY_LOSS:
+        if LOSS_FUNCTION != "weighted_ce":
+            raise ValueError("soft_label_dir / count_loss_weight need loss_function 'weighted_ce'.")
+        if USE_FULL_LENGTH:
+            raise ValueError("soft_label_dir / count_loss_weight are implemented for windowed training only.")
+        print(f"🎯 Boundary loss: soft targets={'on (' + SOFT_LABEL_DIR + ')' if SOFT_LABEL_DIR else 'off'}, "
+              f"count loss weight={COUNT_LOSS_WEIGHT}, radius={COUNT_LOSS_RADIUS}, "
+              f"tau={COUNT_LOSS_TAU}, mode={COUNT_LOSS_MODE}")
     D_MODEL = config["d_model"]
     N_LAYERS = config["n_layers"]
     FOCAL_LOSS_GAMMA = config.get("focal_loss_gamma", 2.0)
@@ -289,6 +312,7 @@ def train_model(config, selection_metric="combined"):
         hamer_dir=HAMER_DIR,
         use_dinov2_features=USE_DINOV2_FEATURES,
         dinov2_dir=DINOV2_DIR,
+        soft_label_dir=SOFT_LABEL_DIR,          # train split only
         **extra_dataset_kwargs(config),
     )
     
@@ -323,10 +347,16 @@ def train_model(config, selection_metric="combined"):
         if LOSS_FUNCTION not in ("weighted_ce", "standard_ce", "weighted_nll"):
             raise ValueError(f"full_length_batch_size > 1 needs a loss that ignores label -100 "
                              f"(weighted_ce / standard_ce / weighted_nll), not '{LOSS_FUNCTION}'.")
-        train_loader = DataLoader(train_dataset, batch_size=FULL_LENGTH_BATCH, shuffle=True, num_workers=4,
-                                  pin_memory=True, collate_fn=pad_collate)
-        val_loader = DataLoader(val_dataset, batch_size=FULL_LENGTH_BATCH, shuffle=False, num_workers=4,
-                                pin_memory=True, collate_fn=pad_collate)
+        # A padded batch of 8 whole videos is large, so only ONE batch is prepared ahead
+        # (1 worker, prefetch 1) and nothing is pinned -- 4 workers x 2 prefetched batches
+        # (+ pinned copies) used to hold ~16 batches in RAM at once.
+        FL_WORKERS = int(config.get("full_length_num_workers", 1))
+        fl_kwargs = dict(batch_size=FULL_LENGTH_BATCH, num_workers=FL_WORKERS, pin_memory=False,
+                         collate_fn=pad_collate)
+        if FL_WORKERS > 0:
+            fl_kwargs["prefetch_factor"] = 1
+        train_loader = DataLoader(train_dataset, shuffle=True, **fl_kwargs)
+        val_loader = DataLoader(val_dataset, shuffle=False, **fl_kwargs)
     else:
         loader_batch_size = 1 if USE_FULL_LENGTH else BATCH_SIZE
         train_loader = DataLoader(train_dataset, batch_size=loader_batch_size, shuffle=True, num_workers=4, pin_memory=True)
@@ -353,6 +383,8 @@ def train_model(config, selection_metric="combined"):
         if LOSS_FUNCTION not in ("weighted_ce", "standard_ce"):
             raise ValueError(f"micro_batch_size needs weighted_ce or standard_ce, not '{LOSS_FUNCTION}'.")
         MICRO_BATCH = int(MICRO_BATCH)
+        train_dataset.keep_half = True   # batches stay float16 in RAM; cast per video on the GPU
+        val_dataset.keep_half = True
         print(f"🧩 Full-video batches of {FULL_LENGTH_BATCH} run in chunks of {MICRO_BATCH} "
               f"(gradient accumulation, identical update).")
     
@@ -468,25 +500,11 @@ def train_model(config, selection_metric="combined"):
                 hamer = extras.pop(0) if USE_HAMER_FEATURES else None
                 dinov2 = extras.pop(0) if USE_DINOV2_FEATURES else None
                 cues = extras.pop(0) if USE_CUE_FEATURES else None
-                if USE_CUE_FEATURES:
-                    cues = torch.nan_to_num(cues.to(device), nan=0.0, posinf=0.0, neginf=0.0)
-
-                if USE_HAMER_FEATURES:
-                    hamer = hamer.to(device)
-                    hamer = torch.nan_to_num(hamer, nan=0.0, posinf=0.0, neginf=0.0)
-                if USE_DINOV2_FEATURES:
-                    dinov2 = dinov2.to(device)
-                    dinov2 = torch.nan_to_num(dinov2, nan=0.0, posinf=0.0, neginf=0.0)
-
-                features = features.to(device)
-                labels = labels.to(device)
-                
-                features = torch.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
-                optimizer.zero_grad()
-
-                if USE_MICRO:
+                if USE_MICRO:   # full-video batch: stays on the CPU, one video at a time on the GPU
+                    optimizer.zero_grad()
                     acc = accumulated_ce(call_model, features, labels, hamer, dinov2, cues,
-                                         weights if LOSS_FUNCTION == "weighted_ce" else None, MICRO_BATCH)
+                                         weights if LOSS_FUNCTION == "weighted_ce" else None,
+                                         MICRO_BATCH, device)
                     if acc is None:
                         optimizer.zero_grad()
                         epoch_nan_count += 1
@@ -504,6 +522,21 @@ def train_model(config, selection_metric="combined"):
                     valid_batches += 1
                     loop.set_postfix(loss=acc, nans=epoch_nan_count)
                     continue
+                if USE_CUE_FEATURES:
+                    cues = torch.nan_to_num(cues.to(device), nan=0.0, posinf=0.0, neginf=0.0)
+
+                if USE_HAMER_FEATURES:
+                    hamer = hamer.to(device)
+                    hamer = torch.nan_to_num(hamer, nan=0.0, posinf=0.0, neginf=0.0)
+                if USE_DINOV2_FEATURES:
+                    dinov2 = dinov2.to(device)
+                    dinov2 = torch.nan_to_num(dinov2, nan=0.0, posinf=0.0, neginf=0.0)
+
+                features = features.to(device)
+                labels = labels.to(device)
+                
+                features = torch.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+                optimizer.zero_grad()
 
                 if LOSS_FUNCTION == "bcl":
                     logits, embeddings = call_model(features, hamer, dinov2, cues)
@@ -516,8 +549,15 @@ def train_model(config, selection_metric="combined"):
                     # Depending on the model, it might return (logits, embeddings) or just logits
                     output = call_model(features, hamer, dinov2, cues)
                     logits = output[0] if isinstance(output, tuple) else output
-                    hard_labels = mask_padding(torch.argmax(labels, dim=1), labels)
-                    loss = criterion(logits, hard_labels)
+                    if USE_BOUNDARY_LOSS:
+                        # validation loss below stays plain weighted CE on hard labels,
+                        # so val_loss remains comparable with every earlier run
+                        loss = boundary_aware_loss(logits, labels, weights, soft=bool(SOFT_LABEL_DIR),
+                                                   count_weight=COUNT_LOSS_WEIGHT, radius=COUNT_LOSS_RADIUS,
+                                                   tau=COUNT_LOSS_TAU, mode=COUNT_LOSS_MODE)
+                    else:
+                        hard_labels = mask_padding(torch.argmax(labels, dim=1), labels)
+                        loss = criterion(logits, hard_labels)
                 
                 if torch.isnan(loss) or torch.isinf(loss):
                     epoch_nan_count += 1
@@ -565,6 +605,12 @@ def train_model(config, selection_metric="combined"):
                     hamer = extras.pop(0) if USE_HAMER_FEATURES else None
                     dinov2 = extras.pop(0) if USE_DINOV2_FEATURES else None
                     cues = extras.pop(0) if USE_CUE_FEATURES else None
+                    if USE_MICRO:
+                        acc = accumulated_ce(call_model, features, labels, hamer, dinov2, cues,
+                                             weights if LOSS_FUNCTION == "weighted_ce" else None,
+                                             MICRO_BATCH, device, backward=False)
+                        val_loss += acc if acc is not None else 0.0
+                        continue
                     if USE_CUE_FEATURES:
                         cues = torch.nan_to_num(cues.to(device), nan=0.0, posinf=0.0, neginf=0.0)
 
@@ -578,13 +624,6 @@ def train_model(config, selection_metric="combined"):
                     features = features.to(device)
                     labels = labels.to(device)
                     features = torch.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
-
-                    if USE_MICRO:
-                        acc = accumulated_ce(call_model, features, labels, hamer, dinov2, cues,
-                                             weights if LOSS_FUNCTION == "weighted_ce" else None,
-                                             MICRO_BATCH, backward=False)
-                        val_loss += acc if acc is not None else 0.0
-                        continue
 
                     if LOSS_FUNCTION == "bcl":
                         logits, embeddings = call_model(features, hamer, dinov2, cues)
