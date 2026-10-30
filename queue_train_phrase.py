@@ -684,10 +684,10 @@ BOUNDARY_STUDY = [
      "description": "AMB: B+H+Fc, ambiguity-aware soft targets alpha=0.4"},
     {**_MS_BEST, "count_loss_weight": 2.0, "count_loss_radius": 5,
      "description": "CNT: B+H+Fc, boundary count loss w=2 r=5"},
-    {**_MS_BEST, "count_loss_weight": 10.0, "count_loss_radius": 5,
-     "description": "CNT: B+H+Fc, boundary count loss w=10 r=5"},
-    {**_MS_BEST, "soft_label_dir": _SOFT_DIR.format(40), "count_loss_weight": 2.0, "count_loss_radius": 5,
-     "description": "AMB+CNT: B+H+Fc, soft targets alpha=0.4 + count loss w=2"},
+    # {**_MS_BEST, "count_loss_weight": 10.0, "count_loss_radius": 5,
+    #  "description": "CNT: B+H+Fc, boundary count loss w=10 r=5"},
+    # {**_MS_BEST, "soft_label_dir": _SOFT_DIR.format(40), "count_loss_weight": 2.0, "count_loss_radius": 5,
+    #  "description": "AMB+CNT: B+H+Fc, soft targets alpha=0.4 + count loss w=2"},
 ]
 
 # What runs now (earlier studies above are already trained):
