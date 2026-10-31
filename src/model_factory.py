@@ -83,6 +83,21 @@ def resolve_cue_dim(config, detected_cue_dim=None):
     return len(names)
 
 
+def resolve_film_cue_idx(config):
+    """Idea A3: positions of config["film_cue_names"] within the run's cue_set channels."""
+    from src.cue_sets import resolve_cue_set, cue_names_path
+    names_path = cue_names_path(config.get("cue_dir", "processed_data/cue_features"))
+    if not os.path.exists(names_path):
+        raise FileNotFoundError(f"film_cue_names needs {names_path} (run the cue / tempo extractor first).")
+    with open(names_path) as f:
+        file_names = json.load(f)
+    names, _ = resolve_cue_set(config.get("cue_set", "selected"), file_names)
+    missing = [n for n in config["film_cue_names"] if n not in names]
+    if missing:
+        raise ValueError(f"film_cue_names {missing} are not among the run's cue channels {names}.")
+    return [names.index(n) for n in config["film_cue_names"]]
+
+
 def build_model_kwargs(config, detected_hamer_dim=None, detected_dinov2_dim=None, detected_cue_dim=None):
     """
     Returns (model_class, model_kwargs) for a run config.
@@ -213,6 +228,16 @@ def build_model_kwargs(config, detected_hamer_dim=None, detected_dinov2_dim=None
         model_kwargs["stream_dropout"] = float(config.get("stream_dropout", 0.0))
         if config.get("change_point_scales"):
             model_kwargs["change_point_scales"] = [int(w) for w in config["change_point_scales"]]
+        # Idea B: stream-specific auxiliary heads; Idea A3: FiLM on video-level cues.
+        # Both are absent from older configs, so their checkpoints rebuild unchanged.
+        if config.get("aux_heads"):
+            model_kwargs["aux_heads"] = {t: {"stream": spec["stream"], "classes": int(spec["classes"])}
+                                         for t, spec in config["aux_heads"].items()}
+            model_kwargs["aux_temporal_kernel"] = int(config.get("aux_temporal_kernel", 9))
+        if config.get("film_cue_names"):
+            if not streams["use_stream_cues"]:
+                raise ValueError("film_cue_names needs use_stream_cues=True.")
+            model_kwargs["film_cue_idx"] = resolve_film_cue_idx(config)
         if streams["use_stream_hamer"]:
             model_kwargs["hamer_rep"] = config.get("hamer_rep", "matrix")
             model_kwargs["hamer_mask"] = bool(config.get("hamer_mask", False))
@@ -233,6 +258,9 @@ def build_model_kwargs(config, detected_hamer_dim=None, detected_dinov2_dim=None
             model_kwargs["pos_encoding"] = config.get("pos_encoding", "sinusoidal")
             model_kwargs["transformer_norm"] = config.get("transformer_norm", "post")
             model_kwargs["rope_base"] = float(config.get("rope_base", 10000.0))
+
+    if model_name not in MULTISTREAM_MODELS and (config.get("aux_heads") or config.get("film_cue_names")):
+        raise ValueError(f"aux_heads / film_cue_names are implemented for multistream models only, not '{model_name}'.")
 
     # Face-only input (dataset face_only mode): graph models must build a face-only graph.
     if config.get("face_only", False):

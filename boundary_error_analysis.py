@@ -132,6 +132,56 @@ def binom_pmf0(n, p):
     return (1 - p) ** n
 
 
+CONTEXTS = [
+    ("prev = palm-up", lambda c: c["prev_cat"] == "$GEST-OFF"),
+    ("cur = pointing", lambda c: c["cur_cat"] == "$INDEX"),
+    ("cur = connective", lambda c: c["cur_conn"]),
+    ("continuous (no pause)", lambda c: c["gap_type"] == "continuous"),
+]
+
+
+def by_context_table(args, keys, det, runs, trans, out):
+    """Idea B, plan section 4.6 (2): detection rate of gold starts (+-tolerance) by the linguistic
+    context of the transition, per configuration (mean over its runs). Contexts may overlap; 'other'
+    = none of them. Only gold starts with a transitions row (i.e. not the first sign of a video)."""
+    from phrase_oracle_analysis import gloss_base, gloss_category      # lazy: pulls sklearn
+    from src.aux_labels import CONNECTIVE_CANDIDATES
+    conns = set(CONNECTIVE_CANDIDATES)
+    if args.aux_meta and os.path.exists(args.aux_meta):
+        with open(args.aux_meta) as f:
+            conns = set(json.load(f).get("connectives") or conns)
+    ctx_rows = []
+    for i, k in enumerate(keys):
+        t = trans.get(k)
+        if t is None:
+            continue
+        cur = t.get("gloss_cur", "?")
+        c = {"prev_cat": gloss_category(t.get("gloss_prev", "?")), "cur_cat": gloss_category(cur),
+             "cur_conn": gloss_category(cur) == "lexical" and gloss_base(cur) in conns,
+             "gap_type": t.get("boundary_gap_type", "")}
+        c["contexts"] = [name for name, fn in CONTEXTS if fn(c)]
+        ctx_rows.append((i, c))
+    names = [n for n, _ in CONTEXTS] + ["other", "all"]
+    members = {n: [i for i, c in ctx_rows if n in c["contexts"]] for n, _ in CONTEXTS}
+    members["other"] = [i for i, c in ctx_rows if not c["contexts"]]
+    members["all"] = [i for i, _ in ctx_rows]
+    configs = sorted({r["config"] for r in runs})
+    out(f"\nB2. DETECTION RATE BY CONTEXT (+-{args.tolerance} frames; mean over the runs of each configuration)")
+    out("  n gold starts: " + ", ".join(f"{n} {len(members[n])}" for n in names))
+    rows = []
+    for cfg in configs:
+        cols = [j for j, r in enumerate(runs) if r["config"] == cfg]
+        vals = {n: float(det[np.ix_(members[n], cols)].mean()) if members[n] else float("nan") for n in names}
+        rows.append({"config": cfg, "runs": len(cols), **{n: round(v, 4) for n, v in vals.items()}})
+        out(f"  {cfg[:70]:<70s} ({len(cols)} runs)  " + "  ".join(f"{n} {vals[n]:.3f}" for n in names))
+    path = os.path.join(args.out_dir, f"by_context_{args.split}.csv")
+    with open(path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=["config", "runs"] + names)
+        w.writeheader()
+        w.writerows(rows)
+    out(f"  saved {path}")
+
+
 def main():
     ap = argparse.ArgumentParser(description="Error consistency, hard boundaries, false alarms, timing.")
     ap.add_argument("--predictions", default=os.path.join("evaluation_phrase", "predictions"))
@@ -159,6 +209,13 @@ def main():
                          "evaluation_phrase/oracle/transitions_<split>.csv if it exists)")
     ap.add_argument("--hard", type=float, default=0.1, help="'hard' = detected by <= this share of runs")
     ap.add_argument("--easy", type=float, default=0.9, help="'easy' = detected by >= this share of runs")
+    ap.add_argument("--by-context", action="store_true",
+                    help="per configuration: detection rate of gold starts after palm-up, at pointing, at a "
+                         "connective, at continuous (no-pause) boundaries vs all other starts (needs the "
+                         "transitions file; Idea B)")
+    ap.add_argument("--aux-meta", default=os.path.join("processed_data", "aux_labels", "_meta.json"),
+                    help="connective list for --by-context (default: the kept list of make_aux_labels.py, "
+                         "else src/aux_labels.CONNECTIVE_CANDIDATES)")
     ap.add_argument("--out-dir", default=os.path.join("evaluation_phrase", "error_analysis"))
     args = ap.parse_args()
     global MERGE
@@ -315,6 +372,13 @@ def main():
             ", ".join(f"{c.split('_')[1]}={g} ({n})" for (c, g), n in cats.most_common(12)))
     else:
         out(f"  (no transitions file at {tpath}: run phrase_oracle_analysis.py for the feature columns)")
+
+    # ---------------------------------------------------------------- B2. by linguistic context
+    if args.by_context:
+        if not trans:
+            out(f"\nB2. BY CONTEXT: skipped (no transitions file at {tpath}; run phrase_oracle_analysis.py)")
+        else:
+            by_context_table(args, keys, det, runs, trans, out)
 
     # ---------------------------------------------------------------- C. false alarms
     out("\nC. FALSE ALARMS (unmatched predicted starts)")

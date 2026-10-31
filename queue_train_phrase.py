@@ -690,8 +690,106 @@ BOUNDARY_STUDY = [
      "description": "AMB+CNT: B+H+Fc, soft targets alpha=0.4 + count loss w=2"},
 ]
 
-# What runs now (earlier studies above are already trained):
-EXPERIMENTS_TO_RUN = BOUNDARY_STUDY
+# ------------------------------------------------------------------------------
+# NEW REFERENCE R0 (plan section 1): the count-loss recipe, best epoch chosen by boundary F1@5.
+# Runs 301-303 picked their epoch by frame F1, which no longer matches the objective, so every
+# arm of the tempo (A) and auxiliary-supervision (B) studies differs from R0 by exactly ONE change.
+# Queue R0 once (3 seeds) -- it is A0 and B0 at the same time.
+# ------------------------------------------------------------------------------
+from src.tempo_features import TEMPO_SUBSETS, VIDEO_CHANNELS  # noqa: E402  (channel names, numpy only)
+
+_R0 = {**_MS_BEST, "count_loss_weight": 2.0, "count_loss_radius": 5, "force_selection_metric": "bnd5"}
+R0 = {**_R0, "description": "R0: B+H+Fc + count loss w=2 r=5, epoch by bnd5"}
+
+# ------------------------------------------------------------------------------
+# IDEA A -- SIGNER-TEMPO FEATURES through the existing cue stream (no model change).
+# Features: data_processing/extract_tempo_features.py (src/tempo_features.py, 17 channels).
+#   gold : processed_data/tempo_features_gold  (gold sign segmentation = UPPER BOUND)
+#   pred : processed_data/tempo_features_pred  (signs from stgcn_bilstm-44; use _pred_xfit instead
+#          if the extractor's train/val mismatch check recommends cross-fitting)
+# A1 first: if A1-full is not better than A1-pos (phrase_stats.py paired bootstrap on BndF1@5),
+# even perfect tempo adds nothing beyond localization -> do not run A2 (still a result).
+# ------------------------------------------------------------------------------
+_TEMPO = {"use_stream_cues": True, "use_cue_features": True, "cue_set": "file", "cue_proj_dim": 128,
+          "cue_temporal_kernel": 9}
+_TEMPO_GOLD = "processed_data/tempo_features_gold"
+_TEMPO_PRED = "processed_data/tempo_features_pred"     # -> "processed_data/tempo_features_pred_xfit" if needed
+
+TEMPO_STUDY_A1 = [
+    {**_R0, **_TEMPO, "cue_dir": _TEMPO_GOLD, "cue_set": TEMPO_SUBSETS["pos"],
+     "description": "A1-pos: R0 + tempo stream (GOLD signs), 4 positional channels only"},
+    {**_R0, **_TEMPO, "cue_dir": _TEMPO_GOLD,
+     "description": "A1-full: R0 + tempo stream (GOLD signs), all 17 channels"},
+]
+TEMPO_STUDY_A2 = [
+    {**_R0, **_TEMPO, "cue_dir": _TEMPO_PRED,
+     "description": "A2-full: R0 + tempo stream (PREDICTED signs), all 17 channels"},
+    {**_R0, **_TEMPO, "cue_dir": _TEMPO_PRED, "cue_set": TEMPO_SUBSETS["pos"],
+     "description": "A2-pos: R0 + tempo stream (PREDICTED signs), 4 positional channels only"},
+    {**_R0, **_TEMPO, "cue_dir": _TEMPO_PRED, "cue_set": TEMPO_SUBSETS["video"],
+     "description": "A2-video: R0 + tempo stream (PREDICTED signs), 4 video-level channels only"},
+    {**_R0, **_TEMPO, "cue_dir": _TEMPO_PRED, "cue_set": TEMPO_SUBSETS["trans"],
+     "description": "A2-trans: R0 + tempo stream (PREDICTED signs), transition + positional, no video-level"},
+]
+# A3 -- only if A2-video shows a gain: FiLM conditioning of the fused features on the video-level tempo
+TEMPO_FILM = [
+    {**_R0, **_TEMPO, "cue_dir": _TEMPO_PRED, "film_cue_names": list(VIDEO_CHANNELS),
+     "description": "A3-film: A2-full + FiLM on the 4 video-level tempo channels"},
+]
+
+# ------------------------------------------------------------------------------
+# IDEA B -- STREAM-SPECIFIC AUXILIARY SUPERVISION (src/aux_labels.py).
+# Labels: data_processing/make_aux_labels.py -> processed_data/aux_labels (train split only).
+#   mouth   (3 classes) on the FACE branch: mouthing / mouth gesture / none
+#   signcat (7 classes) on the HaMeR branch: lexical, palm-up, pointing, depicting,
+#           fingerspelling/number, other gesture, connective
+# Heads: depthwise temporal conv k9 + GELU + 1x1 conv on the branch output; loss lambda * CE with
+# inverse-sqrt class weights, added to R0's loss. Validation / selection stay BIO-only (bnd5).
+# Why this is not the failed gloss multitask (multitask_learning/): that head predicted ~2800
+# glosses from the SHARED BiLSTM output (unnormalized it was 3x the BIO loss and F1 fell
+# .81 -> .55; long-tail classes). Here: 3 / 7 closed classes chosen by the oracle, one head per
+# stream before fusion, initial weighted aux loss <= 0.3 x ln 7 ~ 0.6 (logged per epoch).
+# ------------------------------------------------------------------------------
+_AUX = {"aux_label_dir": "processed_data/aux_labels", "aux_temporal_kernel": 9, "aux_class_weighting": "inv_sqrt"}
+_H_MOUTH = {"mouth": {"stream": "face", "classes": 3}}
+_H_SIGNCAT = {"signcat": {"stream": "hamer", "classes": 7}}
+
+AUX_STUDY = [
+    {**_R0, **_AUX, "aux_heads": {**_H_MOUTH}, "aux_loss_weights": {"mouth": 0.3},
+     "description": "B1: R0 + mouth head on FACE, lambda 0.3"},
+    {**_R0, **_AUX, "aux_heads": {**_H_SIGNCAT}, "aux_loss_weights": {"signcat": 0.3},
+     "description": "B2: R0 + sign-class head on HaMeR, lambda 0.3"},
+    {**_R0, **_AUX, "aux_heads": {**_H_MOUTH, **_H_SIGNCAT}, "aux_loss_weights": {"mouth": 0.3, "signcat": 0.3},
+     "description": "B3: R0 + mouth head on FACE + sign-class head on HaMeR, lambda 0.3"},
+    {**_R0, **_AUX, "aux_heads": {"mouth": {"stream": "fused", "classes": 3},
+                                  "signcat": {"stream": "fused", "classes": 7}},
+     "aux_loss_weights": {"mouth": 0.3, "signcat": 0.3},
+     "description": "B4 (control): R0 + both heads on the FUSED representation, lambda 0.3"},
+]
+# B5 -- sensitivity: set _B5_HEADS to the best of B1-B3, then queue (1 seed first, 3 for the winner)
+_B5_HEADS = {**_H_SIGNCAT}
+AUX_SENSITIVITY = [
+    {**_R0, **_AUX, "aux_heads": dict(_B5_HEADS), "aux_loss_weights": {t: lam for t in _B5_HEADS},
+     "description": f"B5: R0 + {'+'.join(_B5_HEADS)} head(s), lambda {lam}"}
+    for lam in (0.1, 1.0)
+]
+# B6 -- is a B2 gain carried by the connective class? Connectives merged into "lexical" (6 classes)
+AUX_NO_CONNECTIVE = [
+    {**_R0, **_AUX, "aux_heads": {"signcat": {"stream": "hamer", "classes": 6}},
+     "aux_label_map": {"signcat": {"6": 0}}, "aux_loss_weights": {"signcat": 0.3},
+     "description": "B6: B2 without the connective class (merged into lexical)"},
+]
+# A+B -- only if A gave a significant gain: the best B arm on top of A2-full, e.g.
+# AUX_ON_TEMPO = [{**AUX_STUDY[1], **_TEMPO, "cue_dir": _TEMPO_PRED, "description": "A+B: A2-full + B2"}]
+
+# What runs now (earlier studies above are already trained). First batch of the C/A/B plan:
+# the new reference R0, the gold-sign tempo upper bound (A1) and the four auxiliary arms (B1-B4).
+# Give every entry 3 seeds when asked ("all"). Next: TEMPO_STUDY_A2 (if A1-full > A1-pos), then
+# AUX_SENSITIVITY / AUX_NO_CONNECTIVE (after B1-B3), TEMPO_FILM (if A2-video helps).
+EXPERIMENTS_TO_RUN = [R0] + TEMPO_STUDY_A1 + AUX_STUDY
+# EXPERIMENTS_TO_RUN = TEMPO_STUDY_A2
+# EXPERIMENTS_TO_RUN = AUX_SENSITIVITY + AUX_NO_CONNECTIVE
+# EXPERIMENTS_TO_RUN = BOUNDARY_STUDY
 # EXPERIMENTS_TO_RUN = HAMER_TCN_STUDY                # HaMeR temporal conv (still useful)
 # EXPERIMENTS_TO_RUN = BL2023_TCN_STUDY               # early fusion + temporal conv (dropped from the thesis)
 # EXPERIMENTS_TO_RUN = MIXING_STUDY + SCALING_STUDY   # earlier batch

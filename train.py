@@ -184,6 +184,10 @@ def train_model(config):
     COLLAPSE_GUARD = config.get("collapse_guard", False)     # stop the job if val predictions are one class for 2 epochs
     DIAG_LOG_EVERY = config.get("diag_log_every", 0)         # >0: print loss parts / grad norm / class mix in epochs 1-2
     
+    # split_file: which split definition to train on (default the usual one). Only the
+    # cross-fitted gloss models of Idea A (dataset_splits_xfit_a/b.json, train halves) set it.
+    SPLIT_FILE = config.get("split_file", "dataset_splits.json")
+    
     prefix = config.get("prefix", "01")
     run_name = f"{MODEL_NAME}-{prefix}"
     print(f"📁 Assigned Run Name: {run_name}")
@@ -200,7 +204,7 @@ def train_model(config):
     train_dataset = SignSegmentationDataset(
         keypoints_dir="processed_data/keypoints",
         labels_dir="processed_data/BIO_tags",
-        split_file="dataset_splits.json",
+        split_file=SPLIT_FILE,
         split="train",
         window_size=WINDOW_SIZE,
         overlap=OVERLAP,
@@ -220,7 +224,7 @@ def train_model(config):
     val_dataset = SignSegmentationDataset(
         keypoints_dir="processed_data/keypoints",
         labels_dir="processed_data/BIO_tags",
-        split_file="dataset_splits.json",
+        split_file=SPLIT_FILE,
         split="val",
         window_size=WINDOW_SIZE,
         overlap=OVERLAP,

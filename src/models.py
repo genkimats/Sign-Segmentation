@@ -2362,6 +2362,18 @@ class MultiStreamSegmenter(nn.Module):
       change_point_scales e.g. (5, 10, 25): after fusion, add future-minus-past feature
                           differences at these scales (frames) before the encoder
                           (ChangePointLayer; identity at initialization). None/() = off.
+      aux_heads           Idea B, e.g. {"mouth": {"stream": "face", "classes": 3},
+                          "signcat": {"stream": "hamer", "classes": 7}}: a small head per task on
+                          ONE stream's branch output ("fused" = on the fused representation, the
+                          control arm): depthwise temporal conv (aux_temporal_kernel) + GELU +
+                          1x1 conv. Computed before stream dropout; logits (B, C, T) are left in
+                          self._aux_logits[task] -- forward() still returns (logits, emb). The
+                          heads exist only when aux_heads is set (old checkpoints load strictly).
+      film_cue_idx        Idea A3: indices (within the cue stream's channels) of video-level cues
+                          that FiLM-condition the fused representation, fused * (1 + gamma) + beta,
+                          gamma / beta from a 2-layer MLP whose last layer starts at zero
+                          (identity). The cues are read at the window's first frame (they are
+                          constant per video; padding sits at the end). None = off.
     """
     STREAM_ORDER = ("body_hands", "face", "hamer", "cues")
 
@@ -2376,7 +2388,8 @@ class MultiStreamSegmenter(nn.Module):
                  vertex_pooling="flatten", hamer_rep="matrix", hamer_mask=False, hamer_motion=False,
                  hamer_motion_lag=1, hamer_temporal_kernel=1, stream_dropout=0.0,
                  change_point_scales=None, stream_encoder="stgcn", stream_encoder_layers=2,
-                 blockgcn_groups=8, blockgcn_ph=True, skate_local_frames=32):
+                 blockgcn_groups=8, blockgcn_ph=True, skate_local_frames=32,
+                 aux_heads=None, aux_temporal_kernel=9, film_cue_idx=None):
         super().__init__()
         if stream_encoder not in STREAM_ENCODERS:
             raise ValueError(f"stream_encoder must be one of {STREAM_ENCODERS}, got '{stream_encoder}'.")
@@ -2495,6 +2508,36 @@ class MultiStreamSegmenter(nn.Module):
         if change_point_scales:
             self.change_point = ChangePointLayer(d_model, change_point_scales, dropout)
 
+        # Idea A3: FiLM conditioning on video-level cues (identity at initialization)
+        self.film_cue_idx = [int(i) for i in film_cue_idx] if film_cue_idx else None
+        if self.film_cue_idx:
+            if "cues" not in self.streams:
+                raise ValueError("film_cue_idx needs the cue stream (use_stream_cues=True).")
+            if max(self.film_cue_idx) >= self.cue_dim or min(self.film_cue_idx) < 0:
+                raise ValueError(f"film_cue_idx {self.film_cue_idx} out of range for {self.cue_dim} cue channels.")
+            self.film = nn.Sequential(nn.Linear(len(self.film_cue_idx), 64), nn.GELU(), nn.Linear(64, 2 * d_model))
+            nn.init.zeros_(self.film[-1].weight)
+            nn.init.zeros_(self.film[-1].bias)
+
+        # Idea B: stream-specific auxiliary heads (only created when requested)
+        self.aux_streams = {}
+        self._aux_logits = {}
+        if aux_heads:
+            self.aux_heads = nn.ModuleDict()
+            k = int(aux_temporal_kernel) | 1
+            for task, spec in aux_heads.items():
+                stream, n_cls = spec["stream"], int(spec["classes"])
+                if stream == "fused":
+                    dim = d_model
+                elif stream in self.streams:
+                    dim = self.stream_dims[stream]
+                else:
+                    raise ValueError(f"aux head '{task}' sits on stream '{stream}', which is off "
+                                     f"(streams: {self.streams} or 'fused').")
+                self.aux_heads[task] = nn.Sequential(
+                    nn.Conv1d(dim, dim, k, padding=k // 2, groups=dim), nn.GELU(), nn.Conv1d(dim, n_cls, 1))
+                self.aux_streams[task] = stream
+
         if encoder == "bilstm":
             self.lstm = nn.LSTM(input_size=d_model, hidden_size=d_model, num_layers=n_layers,
                                 batch_first=True, dropout=dropout if n_layers > 1 else 0, bidirectional=True)
@@ -2578,12 +2621,20 @@ class MultiStreamSegmenter(nn.Module):
                 z["hamer"] = self.branches["hamer"](hamer.permute(0, 2, 1))       # (B, T, dim)
             if hasattr(self, "hamer_temporal"):
                 z["hamer"] = self.hamer_temporal(z["hamer"])
+        cues_in = cues
         if "cues" in self.streams:
             if cues is None:
                 raise ValueError("cues stream is on but forward() got no `cues` tensor.")
             if self.cue_temporal_kernel > 1:
                 cues = cues + self.cue_temporal(cues)                     # (B, C, T)
             z["cues"] = self.branches["cues"](cues.permute(0, 2, 1))      # (B, T, cue_proj_dim)
+
+        # auxiliary heads on the stream branches: before stream dropout / ablation, so the
+        # auxiliary loss never sees a zeroed stream
+        aux_logits = {}
+        for task, stream in self.aux_streams.items():
+            if stream != "fused":
+                aux_logits[task] = self.aux_heads[task](z[stream].transpose(1, 2))   # (B, C, T)
 
         if self.training and self.stream_dropout > 0 and len(self.streams) > 1:
             keep = (torch.rand(B, len(self.streams), device=x.device) >= self.stream_dropout)
@@ -2614,6 +2665,15 @@ class MultiStreamSegmenter(nn.Module):
             fused = self.fusion_norm(sum(contrib.values()))
             if self._capture is not None:
                 self._capture(z, contrib)
+
+        if self.film_cue_idx:
+            v = cues_in[:, self.film_cue_idx, 0].to(fused.dtype)              # (B, n_film), constant per video
+            gamma, beta = self.film(v).chunk(2, dim=-1)
+            fused = fused * (1 + gamma[:, None]) + beta[:, None]
+        for task, stream in self.aux_streams.items():
+            if stream == "fused":
+                aux_logits[task] = self.aux_heads[task](fused.transpose(1, 2))
+        self._aux_logits = aux_logits
 
         if hasattr(self, "change_point"):
             fused = self.change_point(fused)

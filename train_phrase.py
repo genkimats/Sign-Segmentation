@@ -5,6 +5,7 @@ import os
 import socket
 import random
 import torch
+import torch.nn.functional as F
 import numpy as np
 import torch.optim as optim
 from torch.utils.data import DataLoader
@@ -23,6 +24,7 @@ from src.model_factory import MODEL_REGISTRY, build_model_kwargs
 # metrics against HARD gold labels (never the tolerance-smoothed ones).
 from src.evaluation import evaluate_model_on_split
 from src.boundary_losses import boundary_aware_loss
+from src.aux_labels import IGNORE as AUX_IGNORE, inv_sqrt_weights, mapped_class_counts
 from src.loss import CombinedBoundaryLoss, FocalLoss, StandardCrossEntropyLoss, WeightedCrossEntropyLoss, UnifiedCTCLoss, WeightedCE_TMSE_Loss, WeightedNLLLoss
 # (Removed decoder import since we no longer use it in training/validation)
 
@@ -269,6 +271,44 @@ def train_model(config, selection_metric="combined"):
         print(f"🎯 Boundary loss: soft targets={'on (' + SOFT_LABEL_DIR + ')' if SOFT_LABEL_DIR else 'off'}, "
               f"count loss weight={COUNT_LOSS_WEIGHT}, radius={COUNT_LOSS_RADIUS}, "
               f"tau={COUNT_LOSS_TAU}, mode={COUNT_LOSS_MODE}")
+    # Idea B -- stream-specific auxiliary supervision (src/aux_labels.py, make_aux_labels.py):
+    #   aux_heads            {task: {"stream": "face" | "hamer" | ... | "fused", "classes": C}}
+    #   aux_label_dir        processed_data/aux_labels (train split only; validation stays BIO-only)
+    #   aux_tasks            order of the tasks in the label tensor (default: aux_heads order)
+    #   aux_loss_weights     {task: lambda} (default 0.3 each)
+    #   aux_class_weighting  "inv_sqrt" (w_c ~ 1/sqrt(train frames of c), mean 1) | "none"
+    #   aux_label_map        {task: {src: dst}} class merges, e.g. {"signcat": {"6": 0}} (arm B6)
+    #   aux_temporal_kernel  depthwise temporal conv of each head (default 9)
+    AUX_HEADS = config.get("aux_heads") or {}
+    USE_AUX = bool(AUX_HEADS)
+    AUX_TASKS = list(config.get("aux_tasks") or AUX_HEADS.keys())
+    AUX_LAMBDA, AUX_CLASS_W = {}, {}
+    if USE_AUX:
+        if set(AUX_TASKS) != set(AUX_HEADS):
+            raise ValueError(f"aux_tasks {AUX_TASKS} must match the aux_heads keys {list(AUX_HEADS)}.")
+        if not config.get("aux_label_dir"):
+            raise ValueError("aux_heads needs aux_label_dir (run data_processing/make_aux_labels.py).")
+        if USE_FULL_LENGTH:
+            raise ValueError("aux_heads is implemented for windowed training only (not use_full_length / micro-batches).")
+        if LOSS_FUNCTION in ("bcl", "unified_ctc"):
+            raise ValueError(f"aux_heads is not implemented for loss_function '{LOSS_FUNCTION}'.")
+        lam = config.get("aux_loss_weights") or {}
+        AUX_LAMBDA = {t: float(lam.get(t, 0.3)) for t in AUX_TASKS}
+        with open(os.path.join(config["aux_label_dir"], "_meta.json")) as f:
+            aux_meta = json.load(f)
+        label_map = config.get("aux_label_map") or {}
+        for t in AUX_TASKS:
+            n_cls = int(AUX_HEADS[t]["classes"])
+            counts = mapped_class_counts(aux_meta["train_class_frames"][t], label_map.get(t), n_cls)
+            if config.get("aux_class_weighting", "inv_sqrt") == "inv_sqrt":
+                AUX_CLASS_W[t] = [round(w, 4) for w in inv_sqrt_weights(counts)]
+            else:
+                AUX_CLASS_W[t] = [1.0 if c > 0 else 0.0 for c in counts]
+        config["aux_class_weights_resolved"] = AUX_CLASS_W
+        config["aux_connectives"] = aux_meta.get("connectives")
+        print(f"🧭 Auxiliary heads: " + ", ".join(
+            f"{t} on '{AUX_HEADS[t]['stream']}' ({AUX_HEADS[t]['classes']} classes, lambda={AUX_LAMBDA[t]}, "
+            f"weights={AUX_CLASS_W[t]})" for t in AUX_TASKS))
     D_MODEL = config["d_model"]
     N_LAYERS = config["n_layers"]
     FOCAL_LOSS_GAMMA = config.get("focal_loss_gamma", 2.0)
@@ -412,6 +452,7 @@ def train_model(config, selection_metric="combined"):
             
         model = model_class(**model_kwargs).to(device)
         weights = torch.tensor(CLASS_WEIGHTS, dtype=torch.float).to(device)
+        aux_w = {t: torch.tensor(AUX_CLASS_W[t], dtype=torch.float, device=device) for t in AUX_TASKS} if USE_AUX else {}
 
         # Centralizes the "pass hamer/dinov2 or don't" branching in one place instead
         # of repeating it at every model(...) call site below.
@@ -461,7 +502,9 @@ def train_model(config, selection_metric="combined"):
             writer = csv.writer(file)
             writer.writerow(['epoch', 'train_loss', 'val_loss', 'frame_f1', 'iou', 'segment_pct',
                              'segment_f1_05', 'combined_score', 'epoch_time', 'epoch_nan_count',
-                             'bnd_f1_5'])
+                             'bnd_f1_5']
+                            + (['train_main_loss'] + [f'aux_loss_{t}' for t in AUX_TASKS]
+                               + [f'aux_acc_{t}' for t in AUX_TASKS] if USE_AUX else []))
         
         best_combined_score = -1.0
         best_epoch = 0
@@ -486,6 +529,11 @@ def train_model(config, selection_metric="combined"):
             train_loss = 0.0
             epoch_nan_count = 0
             valid_batches = 0
+            main_loss_sum = 0.0
+            aux_loss_sum = {t: 0.0 for t in AUX_TASKS}
+            aux_loss_n = {t: 0 for t in AUX_TASKS}
+            aux_correct = {t: 0 for t in AUX_TASKS}
+            aux_total = {t: 0 for t in AUX_TASKS}
             
             loop = tqdm(train_loader, desc=f"Epoch {epoch}/{EPOCHS} [Train]", leave=False)
             # Add the 3 underscores to absorb the vid, start, and end metadata!
@@ -500,6 +548,7 @@ def train_model(config, selection_metric="combined"):
                 hamer = extras.pop(0) if USE_HAMER_FEATURES else None
                 dinov2 = extras.pop(0) if USE_DINOV2_FEATURES else None
                 cues = extras.pop(0) if USE_CUE_FEATURES else None
+                aux = extras.pop(0) if USE_AUX else None      # auxiliary targets: the LAST extra
                 if USE_MICRO:   # full-video batch: stays on the CPU, one video at a time on the GPU
                     optimizer.zero_grad()
                     acc = accumulated_ce(call_model, features, labels, hamer, dinov2, cues,
@@ -558,6 +607,21 @@ def train_model(config, selection_metric="combined"):
                     else:
                         hard_labels = mask_padding(torch.argmax(labels, dim=1), labels)
                         loss = criterion(logits, hard_labels)
+                    if USE_AUX:
+                        main_loss_value = loss.item()
+                        aux = aux.to(device)
+                        for j, task in enumerate(AUX_TASKS):
+                            aux_lg = model._aux_logits[task].float()
+                            tgt = aux[:, j]
+                            lt = F.cross_entropy(aux_lg, tgt, weight=aux_w[task], ignore_index=AUX_IGNORE)
+                            if torch.isfinite(lt):            # NaN when the window has no labelled frame
+                                loss = loss + AUX_LAMBDA[task] * lt
+                                aux_loss_sum[task] += lt.item()
+                                aux_loss_n[task] += 1
+                            with torch.no_grad():
+                                m = tgt != AUX_IGNORE
+                                aux_correct[task] += int((aux_lg.argmax(1)[m] == tgt[m]).sum())
+                                aux_total[task] += int(m.sum())
                 
                 if torch.isnan(loss) or torch.isinf(loss):
                     epoch_nan_count += 1
@@ -577,6 +641,8 @@ def train_model(config, selection_metric="combined"):
                 
                 train_loss += loss.item()
                 valid_batches += 1
+                if USE_AUX:
+                    main_loss_sum += main_loss_value
                 loop.set_postfix(loss=loss.item(), nans=epoch_nan_count)
 
                 try:
@@ -721,11 +787,25 @@ def train_model(config, selection_metric="combined"):
                   f"BndF1@5: {val_metrics['BndF1_5']:.4f} | "
                   f"Time: {epoch_duration}s{nan_string}" + (" 🌟 (New Best!)" if is_best else f" (No improvement x{epochs_without_improvement})"))
                   
+            aux_cols = []
+            if USE_AUX:
+                avg_main = main_loss_sum / max(valid_batches, 1)
+                aux_l = {t: aux_loss_sum[t] / max(aux_loss_n[t], 1) for t in AUX_TASKS}
+                aux_a = {t: aux_correct[t] / max(aux_total[t], 1) for t in AUX_TASKS}
+                aux_cols = ([round(avg_main, 5)] + [round(aux_l[t], 5) for t in AUX_TASKS]
+                            + [round(aux_a[t], 4) for t in AUX_TASKS])
+                print("   aux: main loss {:.4f} | ".format(avg_main) + " | ".join(
+                    f"{t}: loss {aux_l[t]:.4f} (x{AUX_LAMBDA[t]} = {AUX_LAMBDA[t] * aux_l[t]:.4f}), train acc {aux_a[t]:.3f}"
+                    for t in AUX_TASKS))
+                weighted_aux = sum(AUX_LAMBDA[t] * aux_l[t] for t in AUX_TASKS)
+                if epoch <= 3 and weighted_aux > avg_main:
+                    print(f"   ⚠️  weighted auxiliary loss ({weighted_aux:.3f}) exceeds the main loss ({avg_main:.3f}) "
+                          f"in epoch {epoch} -- consider a lower aux_loss_weights (plan §4.7).")
             with open(metrics_log_path, mode='a', newline='') as file:
                 writer = csv.writer(file)
                 writer.writerow([epoch, avg_train_loss, avg_val_loss, epoch_f1, epoch_iou, epoch_pct,
                                  epoch_seg_f1, combined_score, epoch_duration, epoch_nan_count,
-                                 round(val_metrics["BndF1_5"], 4)])
+                                 round(val_metrics["BndF1_5"], 4)] + aux_cols)
 
             if EARLY_STOPPING and epochs_without_improvement >= PATIENCE and epoch >= MIN_EPOCHS:
                 print(f"\n🛑 Early stopping triggered! No improvement in combined score for {PATIENCE} epochs (Minimum {MIN_EPOCHS} epochs met).")

@@ -7,6 +7,7 @@ from tqdm import tqdm
 
 from src.face_subsets import face_subset_positions, SAVED_FACE_INDICES, FACE_LAYOUTS
 from src.cue_sets import resolve_cue_set, cue_names_path
+from src.aux_labels import IGNORE as AUX_IGNORE, apply_label_map
 from src.frontend import dominant_wrist, mirror_graph_tv, mirror_hamer, face_mirror_perm, L_WRIST, R_WRIST
 
 CUE_DEFAULT_DIR = "processed_data/cue_features"
@@ -17,6 +18,8 @@ def extra_dataset_kwargs(config):
     Dataset arguments beyond the original ones, read from a run config (so training,
     evaluation and the viewers always build the SAME data): the interpretable-cue stream
     and the handedness options. mirror_augment_p only acts on the train split.
+    The auxiliary labels of Idea B (aux_label_dir / aux_tasks) are only LOADED for the train
+    split (or with force_aux=True, aux_head_eval.py), so validation / evaluation data is unchanged.
     """
     return {"use_cue_features": bool(config.get("use_cue_features", False)),
             "cue_dir": config.get("cue_dir", CUE_DEFAULT_DIR),
@@ -24,7 +27,10 @@ def extra_dataset_kwargs(config):
             "hand_canonicalize": bool(config.get("hand_canonicalize", False)),
             "face_layout": config.get("face_layout", "saved83"),
             "mirror_augment_p": float(config.get("mirror_augment_p", 0.0)),
-            "train_fraction": float(config.get("train_fraction", 1.0))}
+            "train_fraction": float(config.get("train_fraction", 1.0)),
+            "aux_label_dir": config.get("aux_label_dir") if config.get("aux_heads") else None,
+            "aux_tasks": tuple(config.get("aux_tasks") or (config.get("aux_heads") or {}).keys()),
+            "aux_label_map": config.get("aux_label_map")}
 
 
 cue_dataset_kwargs = extra_dataset_kwargs  # old name
@@ -97,8 +103,17 @@ def downsample_labels(labels, k):
 
 
 class SignSegmentationDataset(Dataset):
-    def __init__(self, keypoints_dir, labels_dir, split_file="dataset_splits.json", split="train", window_size=16, overlap=0, tolerance_window=1, use_full_length=False, base_features=None, kinematic_features=None, temporal_downsample_factor=1, use_face_keypoints=False, face_dir="processed_data/face_keypoints_normalized_v2", face_subset="full", face_only=False, face_dims=2, use_hamer_features=False, hamer_dir="processed_data/hamer_features", use_dinov2_features=False, dinov2_dir="processed_data/dinov2_features", use_cue_features=False, cue_dir=CUE_DEFAULT_DIR, cue_set="selected", hand_canonicalize=False, mirror_augment_p=0.0, face_layout="saved83", train_fraction=1.0, soft_label_dir=None):
+    def __init__(self, keypoints_dir, labels_dir, split_file="dataset_splits.json", split="train", window_size=16, overlap=0, tolerance_window=1, use_full_length=False, base_features=None, kinematic_features=None, temporal_downsample_factor=1, use_face_keypoints=False, face_dir="processed_data/face_keypoints_normalized_v2", face_subset="full", face_only=False, face_dims=2, use_hamer_features=False, hamer_dir="processed_data/hamer_features", use_dinov2_features=False, dinov2_dir="processed_data/dinov2_features", use_cue_features=False, cue_dir=CUE_DEFAULT_DIR, cue_set="selected", hand_canonicalize=False, mirror_augment_p=0.0, face_layout="saved83", train_fraction=1.0, soft_label_dir=None, aux_label_dir=None, aux_tasks=(), aux_label_map=None, force_aux=False):
         self.labels_dir = labels_dir
+        # Idea B auxiliary targets (data_processing/make_aux_labels.py): per-video <dir>/<vid>.npz
+        # with one (T,) int8 array per task. Loaded only for the TRAIN split (like soft_label_dir)
+        # unless force_aux=True (aux_head_eval.py); returned as the LAST extra, (n_tasks, T) int64,
+        # padded with -100. A missing file / track becomes -100 (ignored), never a skipped video.
+        self.aux_tasks = tuple(aux_tasks or ())
+        self.aux_label_dir = aux_label_dir
+        self.aux_label_map = aux_label_map or {}
+        self.use_aux = bool(aux_label_dir and self.aux_tasks and (split == "train" or force_aux))
+        self.aux_missing = []
         # soft_label_dir (train split only, set by train_phrase.py): per-video soft TRAINING
         # targets (T, 3) from make_soft_labels.py replace the one-hot / tolerance-smoothed
         # targets. 'hard_labels' (evaluation) always stay the gold labels from labels_dir.
@@ -324,6 +339,23 @@ class SignSegmentationDataset(Dataset):
                         self.soft_label_missing.append((vid, f"shape {soft.shape} != ({num_frames}, 3)"))
                 else:
                     self.soft_label_missing.append((vid, "file missing"))
+
+            aux_arr = None
+            if self.use_aux:
+                aux_arr = np.full((len(self.aux_tasks), num_frames), AUX_IGNORE, dtype=np.int8)
+                ap_ = os.path.join(self.aux_label_dir, f"{vid}.npz")
+                if os.path.exists(ap_):
+                    with np.load(ap_) as z:
+                        for j, task in enumerate(self.aux_tasks):
+                            if task not in z.files:
+                                self.aux_missing.append((vid, f"no '{task}' track"))
+                            elif len(z[task]) != num_frames:
+                                self.aux_missing.append((vid, f"{task}: {len(z[task])} != {num_frames} frames"))
+                            else:
+                                aux_arr[j] = apply_label_map(z[task].astype(np.int8),
+                                                             self.aux_label_map.get(task))
+                else:
+                    self.aux_missing.append((vid, "file missing"))
             
             try:
                 kin_data = torch.load(kinetic_path, weights_only=False)
@@ -561,6 +593,8 @@ class SignSegmentationDataset(Dataset):
                 self.video_cache[vid]['dinov2_features'] = dinov2_full
             if self.use_cue_features:
                 self.video_cache[vid]['cue_features'] = cue_full
+            if self.use_aux:
+                self.video_cache[vid]['aux_labels'] = torch.from_numpy(aux_arr)
             
             # Map out the windows only for videos successfully loaded
             self.samples.append({'video_id': vid, 'start_idx': 0, 'end_idx': num_frames})
@@ -582,6 +616,14 @@ class SignSegmentationDataset(Dataset):
             if n_bad > 0.05 * max(1, len(self.video_cache)):
                 raise RuntimeError(f"{n_bad} of {len(self.video_cache)} videos have no usable soft labels in "
                                    f"{self.soft_label_dir} -- run make_soft_labels.py first.")
+        if self.use_aux:
+            n_bad = len({v for v, _ in self.aux_missing if v in self.video_cache})
+            print(f"[{split.upper()}] auxiliary labels {list(self.aux_tasks)} from {self.aux_label_dir}: "
+                  f"{len(self.video_cache) - n_bad}/{len(self.video_cache)} videos complete"
+                  + (f" -- {n_bad} partly ignored (-100), e.g. {self.aux_missing[:3]}" if n_bad else ""))
+            if n_bad > 0.05 * max(1, len(self.video_cache)):
+                raise RuntimeError(f"{n_bad} of {len(self.video_cache)} videos have no usable auxiliary labels in "
+                                   f"{self.aux_label_dir} -- run data_processing/make_aux_labels.py first.")
         if self.hand_canonicalize:
             print(f"[{split.upper()}] hand canonicalization: {len(self.mirrored_videos)}/{len(self.video_cache)} "
                   f"videos mirrored (dominant hand moved to MediaPipe 'right')")
@@ -664,6 +706,9 @@ class SignSegmentationDataset(Dataset):
         if self.use_cue_features:
             cue_tensor = cached_data['cue_features'][start_idx:end_idx].to(torch.float32).permute(1, 0)  # (C, T_win)
 
+        if self.use_aux:
+            aux_tensor = cached_data['aux_labels'][:, start_idx:end_idx].to(torch.int64)  # (n_tasks, T_win)
+
         # Mirror augmentation (train split only). The cue stream is dominant/non-dominant
         # based and left/right symmetric, so it needs no change.
         if self.mirror_augment_p > 0 and torch.rand(1).item() < self.mirror_augment_p:
@@ -682,6 +727,8 @@ class SignSegmentationDataset(Dataset):
                 dinov2_tensor = dinov2_tensor[:, ::self.temporal_downsample_factor]
             if self.use_cue_features:
                 cue_tensor = cue_tensor[:, ::self.temporal_downsample_factor]
+            if self.use_aux:
+                aux_tensor = aux_tensor[:, ::self.temporal_downsample_factor]
             
         if not self.use_full_length:
             C, T, V = final_input_tensor.shape
@@ -707,6 +754,10 @@ class SignSegmentationDataset(Dataset):
                 if self.use_cue_features:
                     cue_pad = torch.zeros(cue_tensor.shape[0], pad_T, dtype=torch.float32)
                     cue_tensor = torch.cat([cue_tensor, cue_pad], dim=1)
+
+                if self.use_aux:
+                    aux_pad = torch.full((aux_tensor.shape[0], pad_T), AUX_IGNORE, dtype=torch.int64)
+                    aux_tensor = torch.cat([aux_tensor, aux_pad], dim=1)
                 
         start_scaled = start_idx // self.temporal_downsample_factor
         end_scaled = end_idx // self.temporal_downsample_factor
@@ -722,5 +773,7 @@ class SignSegmentationDataset(Dataset):
             extras.append(dinov2_tensor)
         if self.use_cue_features:
             extras.append(cue_tensor)   # always LAST among the optional streams
+        if self.use_aux:
+            extras.append(aux_tensor)   # auxiliary TARGETS (train split only): after every input stream
 
         return (final_input_tensor, labels_tensor, *extras, vid, start_scaled, end_scaled)
