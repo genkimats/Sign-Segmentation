@@ -1,0 +1,46 @@
+Count vs placement (test). Boundary F1@5, mean +- SD over seeds; AP@5 is count-free.
+count component = F1(oracleK_video) - F1(peak_thr); placement component = 1 - F1(oracleK_video)
+
+CP ref: B+H+Fc, no change-point, best epoch by boundary F1@5  (n=3)
+  F1@5: argmax 0.280+-0.007 | argmax_merge 0.473+-0.003 | peak_thr 0.495+-0.005 | oracleK_video 0.509+-0.005 | oracleK_chunk_1500 0.517+-0.005 | estK_duration 0.502+-0.004 | estK_mass 0.503+-0.003
+  AP@5 0.425+-0.028 | K_pred/K_gold: argmax 2.18, peak_thr 1.31, estK_duration 1.16, estK_mass 1.12
+  decomposition: count +0.014 | placement 0.491
+  recall@5 under oracle K: continuous 0.00 (argmax 0.00), short_pause 0.36 (argmax 0.26), long_pause 0.58 (argmax 0.54)
+
+BL2023: E1s (body+hands), my recipe  (n=3)
+  F1@5: argmax 0.255+-0.006 | argmax_merge 0.409+-0.014 | peak_thr 0.451+-0.001 | oracleK_video 0.461+-0.009 | oracleK_chunk_1500 0.470+-0.009 | estK_duration 0.459+-0.006 | estK_mass 0.458+-0.010
+  AP@5 0.384+-0.012 | K_pred/K_gold: argmax 1.87, peak_thr 1.37, estK_duration 1.15, estK_mass 1.07
+  decomposition: count +0.010 | placement 0.539
+  recall@5 under oracle K: continuous 0.00 (argmax 0.00), short_pause 0.31 (argmax 0.19), long_pause 0.54 (argmax 0.45)
+
+BL2023: E2s (body+hands+face contours2023), my recipe  (n=3)
+  F1@5: argmax 0.256+-0.001 | argmax_merge 0.413+-0.003 | peak_thr 0.451+-0.005 | oracleK_video 0.460+-0.004 | oracleK_chunk_1500 0.470+-0.005 | estK_duration 0.454+-0.002 | estK_mass 0.457+-0.002
+  AP@5 0.382+-0.001 | K_pred/K_gold: argmax 1.90, peak_thr 1.31, estK_duration 1.14, estK_mass 1.10
+  decomposition: count +0.010 | placement 0.540
+  recall@5 under oracle K: continuous 0.00 (argmax 0.00), short_pause 0.31 (argmax 0.19), long_pause 0.54 (argmax 0.46)
+
+CNT: B+H+Fc, boundary count loss w=2 r=5  (n=3)
+  F1@5: argmax 0.457+-0.003 | argmax_merge 0.458+-0.004 | peak_thr 0.463+-0.005 | oracleK_video 0.486+-0.008 | oracleK_chunk_1500 0.500+-0.006 | estK_duration 0.485+-0.007 | estK_mass 0.486+-0.007
+  AP@5 0.375+-0.007 | K_pred/K_gold: argmax 0.74, peak_thr 1.63, estK_duration 1.13, estK_mass 1.10
+  decomposition: count +0.023 | placement 0.514
+  recall@5 under oracle K: continuous 0.00 (argmax 0.00), short_pause 0.31 (argmax 0.21), long_pause 0.58 (argmax 0.49)
+
+CNT: B+H+Fc, boundary count loss w=10 r=5  (n=3)
+  F1@5: argmax 0.471+-0.007 | argmax_merge 0.471+-0.008 | peak_thr 0.471+-0.014 | oracleK_video 0.479+-0.012 | oracleK_chunk_1500 0.494+-0.008 | estK_duration 0.478+-0.006 | estK_mass 0.477+-0.006
+  AP@5 0.412+-0.056 | K_pred/K_gold: argmax 0.76, peak_thr 1.32, estK_duration 1.13, estK_mass 1.08
+  decomposition: count +0.008 | placement 0.521
+  recall@5 under oracle K: continuous 0.00 (argmax 0.04), short_pause 0.34 (argmax 0.23), long_pause 0.55 (argmax 0.51)
+
+AMB+CNT: B+H+Fc, soft targets alpha=0.4 + count loss w=2  (n=3)
+  F1@5: argmax 0.465+-0.006 | argmax_merge 0.466+-0.007 | peak_thr 0.474+-0.009 | oracleK_video 0.484+-0.006 | oracleK_chunk_1500 0.496+-0.008 | estK_duration 0.487+-0.007 | estK_mass 0.485+-0.007
+  AP@5 0.354+-0.018 | K_pred/K_gold: argmax 0.77, peak_thr 1.50, estK_duration 1.13, estK_mass 1.08
+  decomposition: count +0.010 | placement 0.516
+  recall@5 under oracle K: continuous 0.04 (argmax 0.04), short_pause 0.31 (argmax 0.22), long_pause 0.57 (argmax 0.51)
+
+Interpretation (count gain > 0.05 = 'substantial', < 0.03 = 'small'; continuous recall < 0.2 = 'rarely found'):
+  [CE/other] CP ref: B+H+Fc, no change-point, best epoch by boundary F1@5: oracle-K gain +0.014 -> placement dominates; continuous recall under oracle K 0.00 (H-C3: rarely found)
+  [CE/other] BL2023: E1s (body+hands), my recipe: oracle-K gain +0.010 -> placement dominates; continuous recall under oracle K 0.00 (H-C3: rarely found)
+  [CE/other] BL2023: E2s (body+hands+face contours2023), my recipe: oracle-K gain +0.010 -> placement dominates; continuous recall under oracle K 0.00 (H-C3: rarely found)
+  [count-loss] CNT: B+H+Fc, boundary count loss w=2 r=5: oracle-K gain +0.023 -> placement dominates; continuous recall under oracle K 0.00 (H-C3: rarely found)
+  [count-loss] CNT: B+H+Fc, boundary count loss w=10 r=5: oracle-K gain +0.008 -> placement dominates; continuous recall under oracle K 0.00 (H-C3: rarely found)
+  [count-loss] AMB+CNT: B+H+Fc, soft targets alpha=0.4 + count loss w=2: oracle-K gain +0.010 -> placement dominates; continuous recall under oracle K 0.04 (H-C3: rarely found)
