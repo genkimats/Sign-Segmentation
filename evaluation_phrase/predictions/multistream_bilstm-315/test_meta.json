@@ -1,0 +1,24 @@
+{
+  "run": "multistream_bilstm-315",
+  "model": "multistream_bilstm",
+  "prefix": "315",
+  "split": "test",
+  "labels_dir": "processed_data/BIO_tags_phrase_v2",
+  "description": "A1-pos: R0 + tempo stream (GOLD signs), 4 positional channels only [seed=2024]",
+  "seed": 2024,
+  "fixed_thresholds": [
+    0.5,
+    0.5
+  ],
+  "swept_thresholds": null,
+  "tuned_thresholds": [
+    0.5,
+    0.5
+  ],
+  "tuned_on": "val",
+  "sweep_metric": "iou_pct",
+  "merge_starts": {
+    "argmax_merge": 30,
+    "tuned_merge": 30
+  }
+}
