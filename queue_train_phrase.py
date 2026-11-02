@@ -726,10 +726,10 @@ TEMPO_STUDY_A2 = [
      "description": "A2-full: R0 + tempo stream (PREDICTED signs), all 17 channels"},
     {**_R0, **_TEMPO, "cue_dir": _TEMPO_PRED, "cue_set": TEMPO_SUBSETS["pos"],
      "description": "A2-pos: R0 + tempo stream (PREDICTED signs), 4 positional channels only"},
-    {**_R0, **_TEMPO, "cue_dir": _TEMPO_PRED, "cue_set": TEMPO_SUBSETS["video"],
-     "description": "A2-video: R0 + tempo stream (PREDICTED signs), 4 video-level channels only"},
-    {**_R0, **_TEMPO, "cue_dir": _TEMPO_PRED, "cue_set": TEMPO_SUBSETS["trans"],
-     "description": "A2-trans: R0 + tempo stream (PREDICTED signs), transition + positional, no video-level"},
+    # {**_R0, **_TEMPO, "cue_dir": _TEMPO_PRED, "cue_set": TEMPO_SUBSETS["video"],
+    #  "description": "A2-video: R0 + tempo stream (PREDICTED signs), 4 video-level channels only"},
+    # {**_R0, **_TEMPO, "cue_dir": _TEMPO_PRED, "cue_set": TEMPO_SUBSETS["trans"],
+    #  "description": "A2-trans: R0 + tempo stream (PREDICTED signs), transition + positional, no video-level"},
 ]
 # A3 -- only if A2-video shows a gain: FiLM conditioning of the fused features on the video-level tempo
 TEMPO_FILM = [
