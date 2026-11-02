@@ -771,9 +771,9 @@ AUX_STUDY = [
 # weighted aux loss exceeded the main loss in epochs 1-3, hence lambda 0.1 (and 1.0 for the other side).
 _B5_HEADS = {"mouth": {"stream": "fused", "classes": 3}, "signcat": {"stream": "fused", "classes": 7}}
 AUX_SENSITIVITY = [
-    {**_R0, **_AUX, "aux_heads": dict(_B5_HEADS), "aux_loss_weights": {t: lam for t in _B5_HEADS},
-     "description": f"B5: R0 + {'+'.join(_B5_HEADS)} head(s), lambda {lam}"}
-    for lam in (0.1, 1.0)
+    # {**_R0, **_AUX, "aux_heads": dict(_B5_HEADS), "aux_loss_weights": {t: lam for t in _B5_HEADS},
+    #  "description": f"B5: R0 + {'+'.join(_B5_HEADS)} head(s), lambda {lam}"}
+    # for lam in (0.1, 1.0)
 ]
 # B6 -- is a B2 gain carried by the connective class? Connectives merged into "lexical" (6 classes)
 AUX_NO_CONNECTIVE = [
