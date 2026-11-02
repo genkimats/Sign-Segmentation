@@ -280,6 +280,26 @@ FULL_EXPERIMENTS = [
 
 EXPERIMENTS_TO_RUN = PROBE_EXPERIMENTS if RUN_MODE == "probe" else FULL_EXPERIMENTS
 
+# ------------------------------------------------------------------------------
+# SIGN-MODEL RETRAIN for Idea A2 (2026-11-03). The A2 tempo features come from stgcn_bilstm-44, which was
+# trained before the split changed: if any current val/test video was in its training set, A2's test score
+# leaks. This is the EXACT stgcn_bilstm-44 recipe (from decoder_study/exports/stgcn_bilstm-44/*_meta.json),
+# trained on the CURRENT dataset_splits.json. Afterwards:
+#   python decoder_study/export_logits.py --run stgcn_bilstm-<new> --splits train val test
+#   python data_processing/extract_tempo_features.py --source pred --sign-logits decoder_study/exports/stgcn_bilstm-<new>
+# ------------------------------------------------------------------------------
+SIGN_RETRAIN_44 = [
+    {"basename": "stgcn_bilstm", "window_size": 64, "overlap": 0, "batch_size": 16, "epochs": 100,
+     "early_stopping": True, "patience": 10, "learning_rate": 0.0001, "tolerance_window": 1,
+     "loss_function": "weighted_ce", "class_weights": [0.6, 0.8, 1.0],
+     "base_features": ["x-cord", "y-cord", "z-cord"], "kinematic_features": [],
+     "use_face_keypoints": False, "use_hamer_features": True, "hamer_dir": "processed_data/hamer_features",
+     "use_dinov2_features": False, "d_model": 256, "n_layers": 4,
+     "optimizer": "AdamW", "scheduler": "CosineAnnealingLR",
+     "description": "RETRAIN stgcn_bilstm-44 recipe on the current split (overlap 0/64, tolerance=1, hamer)"},
+]
+EXPERIMENTS_TO_RUN = SIGN_RETRAIN_44   # one seed is enough (Enter at the seed prompt)
+
 # (previous experiment, kept for reference)
 # {"basename": "stgcn_transformer", "window_size": 64, "overlap": 0, "use_hamer_features": True,
 #  "tolerance_window": 1, "class_weights": [0.2, 0.4, 1.0],

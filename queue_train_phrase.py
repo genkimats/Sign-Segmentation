@@ -722,12 +722,12 @@ TEMPO_STUDY_A1 = [
      "description": "A1-full: R0 + tempo stream (GOLD signs), all 17 channels"},
 ]
 TEMPO_STUDY_A2 = [
-    # {**_R0, **_TEMPO, "cue_dir": _TEMPO_PRED,
-    #  "description": "A2-full: R0 + tempo stream (PREDICTED signs), all 17 channels"},
-    # {**_R0, **_TEMPO, "cue_dir": _TEMPO_PRED, "cue_set": TEMPO_SUBSETS["pos"],
-    #  "description": "A2-pos: R0 + tempo stream (PREDICTED signs), 4 positional channels only"},
-    # {**_R0, **_TEMPO, "cue_dir": _TEMPO_PRED, "cue_set": TEMPO_SUBSETS["video"],
-    #  "description": "A2-video: R0 + tempo stream (PREDICTED signs), 4 video-level channels only"},
+    {**_R0, **_TEMPO, "cue_dir": _TEMPO_PRED,
+     "description": "A2-full: R0 + tempo stream (PREDICTED signs), all 17 channels"},
+    {**_R0, **_TEMPO, "cue_dir": _TEMPO_PRED, "cue_set": TEMPO_SUBSETS["pos"],
+     "description": "A2-pos: R0 + tempo stream (PREDICTED signs), 4 positional channels only"},
+    {**_R0, **_TEMPO, "cue_dir": _TEMPO_PRED, "cue_set": TEMPO_SUBSETS["video"],
+     "description": "A2-video: R0 + tempo stream (PREDICTED signs), 4 video-level channels only"},
     {**_R0, **_TEMPO, "cue_dir": _TEMPO_PRED, "cue_set": TEMPO_SUBSETS["trans"],
      "description": "A2-trans: R0 + tempo stream (PREDICTED signs), transition + positional, no video-level"},
 ]
@@ -788,12 +788,30 @@ AUX_NO_CONNECTIVE = [
 # the new reference R0, the gold-sign tempo upper bound (A1) and the four auxiliary arms (B1-B4).
 # Give every entry 3 seeds when asked ("all"). Next: TEMPO_STUDY_A2 (if A1-full > A1-pos), then
 # AUX_SENSITIVITY / AUX_NO_CONNECTIVE (after B1-B3), TEMPO_FILM (if A2-video helps).
+# ------------------------------------------------------------------------------
+# OPTIONAL: MULTI-STREAM SIGN SEGMENTATION (side experiment, not part of the A2 comparison).
+# The phrase pipeline trained on the gloss labels (processed_data/BIO_tags) with the stgcn_bilstm-44
+# sign recipe (window 64, tolerance 1, weights [0.6, 0.8, 1.0], plain CE). "MS-sign B+H" has the same inputs
+# as stgcn_bilstm-44 (body+hands + HaMeR); "MS-sign B+H+Fc" adds the face. Runs land in experiments_phrase/.
+# To use one as the A2 sign source: python export_phrase_logits.py --run multistream_bilstm-<p>
+# ------------------------------------------------------------------------------
+_SIGN_RECIPE = {"window_size": 64, "overlap": 0, "tolerance_window": 1, "class_weights": [0.6, 0.8, 1.0],
+                "loss_function": "weighted_ce", "phrase_labels_dir": "processed_data/BIO_tags",
+                "force_selection_metric": "combined"}
+SIGN_MS_STUDY = [
+    {**_MS_CUE_STUDY, **_SIGN_RECIPE,
+     "description": "MS-sign: Body+hands + HaMeR on SIGN labels (stgcn_bilstm-44 inputs and recipe)"},
+    {**_MS_BEST, **_SIGN_RECIPE,
+     "description": "MS-sign: Body+hands + HaMeR + Face(compact) on SIGN labels"},
+]
+
 # Second batch (2026-11-02): A1-full > A1-pos (+.012 BndF1@5, 95% CI [+.004, +.019]) -> all four A2 arms;
 # B5 on B4's fused heads. When asked for seeds, enter "0, 1, 2, 3, 4" (A2 x 4 and B5 lambda 0.1 get 3 seeds,
 # B5 lambda 1.0 gets 1 seed) -> 16 runs.
 EXPERIMENTS_TO_RUN = TEMPO_STUDY_A2 + AUX_SENSITIVITY
 # EXPERIMENTS_TO_RUN = [R0] + TEMPO_STUDY_A1 + AUX_STUDY   # first batch (runs 310-330)
 # EXPERIMENTS_TO_RUN = AUX_NO_CONNECTIVE                    # B6: only if a signcat head shows a real gain
+# EXPERIMENTS_TO_RUN = SIGN_MS_STUDY                        # optional multi-stream sign models (1 seed each)
 # EXPERIMENTS_TO_RUN = BOUNDARY_STUDY
 # EXPERIMENTS_TO_RUN = HAMER_TCN_STUDY                # HaMeR temporal conv (still useful)
 # EXPERIMENTS_TO_RUN = BL2023_TCN_STUDY               # early fusion + temporal conv (dropped from the thesis)
