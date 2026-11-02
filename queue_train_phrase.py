@@ -766,8 +766,10 @@ AUX_STUDY = [
      "aux_loss_weights": {"mouth": 0.3, "signcat": 0.3},
      "description": "B4 (control): R0 + both heads on the FUSED representation, lambda 0.3"},
 ]
-# B5 -- sensitivity: set _B5_HEADS to the best of B1-B3, then queue (1 seed first, 3 for the winner)
-_B5_HEADS = {**_H_SIGNCAT}
+# B5 -- sensitivity of the best B arm to lambda. B4 (both heads on the FUSED representation) was the
+# best arm (+.009 BndF1@5 vs R0, p = .07) and the only one whose heads clearly learned their task; its
+# weighted aux loss exceeded the main loss in epochs 1-3, hence lambda 0.1 (and 1.0 for the other side).
+_B5_HEADS = {"mouth": {"stream": "fused", "classes": 3}, "signcat": {"stream": "fused", "classes": 7}}
 AUX_SENSITIVITY = [
     {**_R0, **_AUX, "aux_heads": dict(_B5_HEADS), "aux_loss_weights": {t: lam for t in _B5_HEADS},
      "description": f"B5: R0 + {'+'.join(_B5_HEADS)} head(s), lambda {lam}"}
@@ -786,9 +788,12 @@ AUX_NO_CONNECTIVE = [
 # the new reference R0, the gold-sign tempo upper bound (A1) and the four auxiliary arms (B1-B4).
 # Give every entry 3 seeds when asked ("all"). Next: TEMPO_STUDY_A2 (if A1-full > A1-pos), then
 # AUX_SENSITIVITY / AUX_NO_CONNECTIVE (after B1-B3), TEMPO_FILM (if A2-video helps).
-EXPERIMENTS_TO_RUN = [R0] + TEMPO_STUDY_A1 + AUX_STUDY
-# EXPERIMENTS_TO_RUN = TEMPO_STUDY_A2
-# EXPERIMENTS_TO_RUN = AUX_SENSITIVITY + AUX_NO_CONNECTIVE
+# Second batch (2026-11-02): A1-full > A1-pos (+.012 BndF1@5, 95% CI [+.004, +.019]) -> all four A2 arms;
+# B5 on B4's fused heads. When asked for seeds, enter "0, 1, 2, 3, 4" (A2 x 4 and B5 lambda 0.1 get 3 seeds,
+# B5 lambda 1.0 gets 1 seed) -> 16 runs.
+EXPERIMENTS_TO_RUN = TEMPO_STUDY_A2 + AUX_SENSITIVITY
+# EXPERIMENTS_TO_RUN = [R0] + TEMPO_STUDY_A1 + AUX_STUDY   # first batch (runs 310-330)
+# EXPERIMENTS_TO_RUN = AUX_NO_CONNECTIVE                    # B6: only if a signcat head shows a real gain
 # EXPERIMENTS_TO_RUN = BOUNDARY_STUDY
 # EXPERIMENTS_TO_RUN = HAMER_TCN_STUDY                # HaMeR temporal conv (still useful)
 # EXPERIMENTS_TO_RUN = BL2023_TCN_STUDY               # early fusion + temporal conv (dropped from the thesis)
