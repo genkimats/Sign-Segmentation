@@ -722,14 +722,14 @@ TEMPO_STUDY_A1 = [
      "description": "A1-full: R0 + tempo stream (GOLD signs), all 17 channels"},
 ]
 TEMPO_STUDY_A2 = [
-    {**_R0, **_TEMPO, "cue_dir": _TEMPO_PRED,
-     "description": "A2-full: R0 + tempo stream (PREDICTED signs), all 17 channels"},
-    {**_R0, **_TEMPO, "cue_dir": _TEMPO_PRED, "cue_set": TEMPO_SUBSETS["pos"],
-     "description": "A2-pos: R0 + tempo stream (PREDICTED signs), 4 positional channels only"},
-    # {**_R0, **_TEMPO, "cue_dir": _TEMPO_PRED, "cue_set": TEMPO_SUBSETS["video"],
-    #  "description": "A2-video: R0 + tempo stream (PREDICTED signs), 4 video-level channels only"},
-    # {**_R0, **_TEMPO, "cue_dir": _TEMPO_PRED, "cue_set": TEMPO_SUBSETS["trans"],
-    #  "description": "A2-trans: R0 + tempo stream (PREDICTED signs), transition + positional, no video-level"},
+    # {**_R0, **_TEMPO, "cue_dir": _TEMPO_PRED,
+    #  "description": "A2-full: R0 + tempo stream (PREDICTED signs), all 17 channels"},
+    # {**_R0, **_TEMPO, "cue_dir": _TEMPO_PRED, "cue_set": TEMPO_SUBSETS["pos"],
+    #  "description": "A2-pos: R0 + tempo stream (PREDICTED signs), 4 positional channels only"},
+    {**_R0, **_TEMPO, "cue_dir": _TEMPO_PRED, "cue_set": TEMPO_SUBSETS["video"],
+     "description": "A2-video: R0 + tempo stream (PREDICTED signs), 4 video-level channels only"},
+    {**_R0, **_TEMPO, "cue_dir": _TEMPO_PRED, "cue_set": TEMPO_SUBSETS["trans"],
+     "description": "A2-trans: R0 + tempo stream (PREDICTED signs), transition + positional, no video-level"},
 ]
 # A3 -- only if A2-video shows a gain: FiLM conditioning of the fused features on the video-level tempo
 TEMPO_FILM = [
@@ -771,9 +771,9 @@ AUX_STUDY = [
 # weighted aux loss exceeded the main loss in epochs 1-3, hence lambda 0.1 (and 1.0 for the other side).
 _B5_HEADS = {"mouth": {"stream": "fused", "classes": 3}, "signcat": {"stream": "fused", "classes": 7}}
 AUX_SENSITIVITY = [
-    {**_R0, **_AUX, "aux_heads": dict(_B5_HEADS), "aux_loss_weights": {t: lam for t in _B5_HEADS},
-     "description": f"B5: R0 + {'+'.join(_B5_HEADS)} head(s), lambda {lam}"}
-    for lam in (0.1, 1.0)
+    # {**_R0, **_AUX, "aux_heads": dict(_B5_HEADS), "aux_loss_weights": {t: lam for t in _B5_HEADS},
+    #  "description": f"B5: R0 + {'+'.join(_B5_HEADS)} head(s), lambda {lam}"}
+    # for lam in (0.1, 1.0)
 ]
 # B6 -- is a B2 gain carried by the connective class? Connectives merged into "lexical" (6 classes)
 AUX_NO_CONNECTIVE = [
