@@ -771,9 +771,9 @@ AUX_STUDY = [
 # weighted aux loss exceeded the main loss in epochs 1-3, hence lambda 0.1 (and 1.0 for the other side).
 _B5_HEADS = {"mouth": {"stream": "fused", "classes": 3}, "signcat": {"stream": "fused", "classes": 7}}
 AUX_SENSITIVITY = [
-    # {**_R0, **_AUX, "aux_heads": dict(_B5_HEADS), "aux_loss_weights": {t: lam for t in _B5_HEADS},
-    #  "description": f"B5: R0 + {'+'.join(_B5_HEADS)} head(s), lambda {lam}"}
-    # for lam in (0.1, 1.0)
+    {**_R0, **_AUX, "aux_heads": dict(_B5_HEADS), "aux_loss_weights": {t: lam for t in _B5_HEADS},
+     "description": f"B5: R0 + {'+'.join(_B5_HEADS)} head(s), lambda {lam}"}
+    for lam in (0.1, 1.0)
 ]
 # B6 -- is a B2 gain carried by the connective class? Connectives merged into "lexical" (6 classes)
 AUX_NO_CONNECTIVE = [
@@ -791,7 +791,7 @@ AUX_NO_CONNECTIVE = [
 # Second batch (2026-11-02): A1-full > A1-pos (+.012 BndF1@5, 95% CI [+.004, +.019]) -> all four A2 arms;
 # B5 on B4's fused heads. When asked for seeds, enter "0, 1, 2, 3, 4" (A2 x 4 and B5 lambda 0.1 get 3 seeds,
 # B5 lambda 1.0 gets 1 seed) -> 16 runs.
-EXPERIMENTS_TO_RUN = TEMPO_STUDY_A2 + AUX_SENSITIVITY
+EXPERIMENTS_TO_RUN = AUX_SENSITIVITY
 # EXPERIMENTS_TO_RUN = [R0] + TEMPO_STUDY_A1 + AUX_STUDY   # first batch (runs 310-330)
 # EXPERIMENTS_TO_RUN = AUX_NO_CONNECTIVE                    # B6: only if a signcat head shows a real gain
 # EXPERIMENTS_TO_RUN = BOUNDARY_STUDY
