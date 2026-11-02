@@ -781,6 +781,34 @@ AUX_NO_CONNECTIVE = [
      "aux_label_map": {"signcat": {"6": 0}}, "aux_loss_weights": {"signcat": 0.3},
      "description": "B6: B2 without the connective class (merged into lexical)"},
 ]
+# ------------------------------------------------------------------------------
+# A2 ON A CLEAN SIGN SOURCE (2026-11-03). stgcn_bilstm-44 was trained on the OLD split
+# (dataset_splits copy.json), which contains 12/14 current val and 17/17 current test videos, so the
+# A2 runs built on processed_data/tempo_features_pred are NOT valid (in-sample signs on val/test).
+# Clean sources: SIGN_RETRAIN_44 in queue_train.py (same recipe, current split) and SIGN_MS_STUDY below
+# (multi-stream sign models). Pick the one with the best VAL sign-onset F1@2 printed by
+# extract_tempo_features.py and point _TEMPO_PRED_CLEAN to its feature directory.
+# ------------------------------------------------------------------------------
+# A2 on a clean sign source. Feature dirs (extract_tempo_features.py --out-dir):
+#   processed_data/tempo_features_pred_retrain  <- stgcn_bilstm re-trained on the current split
+#   processed_data/tempo_features_pred_ms       <- the better SIGN-MS run
+_TEMPO_PRED_CLEAN = "processed_data/tempo_features_pred_ms"
+
+
+def tempo_a2_arms(cue_dir, tag):
+    return [
+        {**_R0, **_TEMPO, "cue_dir": cue_dir, "description": f"A2-full [{tag}]: R0 + tempo stream (predicted signs), all 17 channels"},
+        {**_R0, **_TEMPO, "cue_dir": cue_dir, "cue_set": TEMPO_SUBSETS["pos"],
+         "description": f"A2-pos [{tag}]: R0 + tempo stream (predicted signs), 4 positional channels only"},
+        {**_R0, **_TEMPO, "cue_dir": cue_dir, "cue_set": TEMPO_SUBSETS["video"],
+         "description": f"A2-video [{tag}]: R0 + tempo stream (predicted signs), 4 video-level channels only"},
+        {**_R0, **_TEMPO, "cue_dir": cue_dir, "cue_set": TEMPO_SUBSETS["trans"],
+         "description": f"A2-trans [{tag}]: R0 + tempo stream (predicted signs), transition + positional, no video-level"},
+    ]
+
+
+TEMPO_STUDY_A2_CLEAN = tempo_a2_arms(_TEMPO_PRED_CLEAN, os.path.basename(_TEMPO_PRED_CLEAN))
+
 # A+B -- only if A gave a significant gain: the best B arm on top of A2-full, e.g.
 # AUX_ON_TEMPO = [{**AUX_STUDY[1], **_TEMPO, "cue_dir": _TEMPO_PRED, "description": "A+B: A2-full + B2"}]
 
@@ -789,7 +817,7 @@ AUX_NO_CONNECTIVE = [
 # Give every entry 3 seeds when asked ("all"). Next: TEMPO_STUDY_A2 (if A1-full > A1-pos), then
 # AUX_SENSITIVITY / AUX_NO_CONNECTIVE (after B1-B3), TEMPO_FILM (if A2-video helps).
 # ------------------------------------------------------------------------------
-# OPTIONAL: MULTI-STREAM SIGN SEGMENTATION (side experiment, not part of the A2 comparison).
+# MULTI-STREAM SIGN SEGMENTATION: candidate sign sources for A2, compared with SIGN_RETRAIN_44 on VAL.
 # The phrase pipeline trained on the gloss labels (processed_data/BIO_tags) with the stgcn_bilstm-44
 # sign recipe (window 64, tolerance 1, weights [0.6, 0.8, 1.0], plain CE). "MS-sign B+H" has the same inputs
 # as stgcn_bilstm-44 (body+hands + HaMeR); "MS-sign B+H+Fc" adds the face. Runs land in experiments_phrase/.
@@ -808,7 +836,10 @@ SIGN_MS_STUDY = [
 # Second batch (2026-11-02): A1-full > A1-pos (+.012 BndF1@5, 95% CI [+.004, +.019]) -> all four A2 arms;
 # B5 on B4's fused heads. When asked for seeds, enter "0, 1, 2, 3, 4" (A2 x 4 and B5 lambda 0.1 get 3 seeds,
 # B5 lambda 1.0 gets 1 seed) -> 16 runs.
-EXPERIMENTS_TO_RUN = TEMPO_STUDY_A2 + AUX_SENSITIVITY
+# EXPERIMENTS_TO_RUN = TEMPO_STUDY_A2 + AUX_SENSITIVITY   # second batch; its A2 arms use the LEAKY features
+# Third batch (2026-11-03): the multi-stream sign models (1 seed each: press Enter at the seed prompt)
+EXPERIMENTS_TO_RUN = SIGN_MS_STUDY
+# then, after extracting the clean features: EXPERIMENTS_TO_RUN = TEMPO_STUDY_A2_CLEAN  (3 seeds: "all")
 # EXPERIMENTS_TO_RUN = [R0] + TEMPO_STUDY_A1 + AUX_STUDY   # first batch (runs 310-330)
 # EXPERIMENTS_TO_RUN = AUX_NO_CONNECTIVE                    # B6: only if a signcat head shows a real gain
 # EXPERIMENTS_TO_RUN = SIGN_MS_STUDY                        # optional multi-stream sign models (1 seed each)
