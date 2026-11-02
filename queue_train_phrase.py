@@ -722,10 +722,10 @@ TEMPO_STUDY_A1 = [
      "description": "A1-full: R0 + tempo stream (GOLD signs), all 17 channels"},
 ]
 TEMPO_STUDY_A2 = [
-    # {**_R0, **_TEMPO, "cue_dir": _TEMPO_PRED,
-    #  "description": "A2-full: R0 + tempo stream (PREDICTED signs), all 17 channels"},
-    # {**_R0, **_TEMPO, "cue_dir": _TEMPO_PRED, "cue_set": TEMPO_SUBSETS["pos"],
-    #  "description": "A2-pos: R0 + tempo stream (PREDICTED signs), 4 positional channels only"},
+    {**_R0, **_TEMPO, "cue_dir": _TEMPO_PRED,
+     "description": "A2-full: R0 + tempo stream (PREDICTED signs), all 17 channels"},
+    {**_R0, **_TEMPO, "cue_dir": _TEMPO_PRED, "cue_set": TEMPO_SUBSETS["pos"],
+     "description": "A2-pos: R0 + tempo stream (PREDICTED signs), 4 positional channels only"},
     {**_R0, **_TEMPO, "cue_dir": _TEMPO_PRED, "cue_set": TEMPO_SUBSETS["video"],
      "description": "A2-video: R0 + tempo stream (PREDICTED signs), 4 video-level channels only"},
     {**_R0, **_TEMPO, "cue_dir": _TEMPO_PRED, "cue_set": TEMPO_SUBSETS["trans"],
