@@ -809,6 +809,17 @@ def tempo_a2_arms(cue_dir, tag):
 
 TEMPO_STUDY_A2_CLEAN = tempo_a2_arms(_TEMPO_PRED_CLEAN, os.path.basename(_TEMPO_PRED_CLEAN))
 
+# A2 on ALL THREE clean sign sources. Extract each into its own folder first:
+#   stgcn_bilstm retrain        -> processed_data/tempo_features_pred_retrain
+#   MS-sign Body+HaMeR          -> processed_data/tempo_features_pred_ms_bh
+#   MS-sign Body+HaMeR+Face     -> processed_data/tempo_features_pred_ms_bhfc
+# A2-full and A2-pos per source (2 x 3 configs, 3 seeds = 18 runs). The A2-video / A2-trans ablations
+# only for the best source afterwards: TEMPO_STUDY_A2_CLEAN with _TEMPO_PRED_CLEAN set to it.
+A2_SOURCES = {"retrain": "processed_data/tempo_features_pred_retrain",
+              "ms_bh": "processed_data/tempo_features_pred_ms_bh",
+              "ms_bhfc": "processed_data/tempo_features_pred_ms_bhfc"}
+TEMPO_STUDY_A2_SOURCES = [arm for tag, d in A2_SOURCES.items() for arm in tempo_a2_arms(d, tag)[:2]]
+
 # A+B -- only if A gave a significant gain: the best B arm on top of A2-full, e.g.
 # AUX_ON_TEMPO = [{**AUX_STUDY[1], **_TEMPO, "cue_dir": _TEMPO_PRED, "description": "A+B: A2-full + B2"}]
 
@@ -838,7 +849,9 @@ SIGN_MS_STUDY = [
 # B5 lambda 1.0 gets 1 seed) -> 16 runs.
 # EXPERIMENTS_TO_RUN = TEMPO_STUDY_A2 + AUX_SENSITIVITY   # second batch; its A2 arms use the LEAKY features
 # Third batch (2026-11-03): the multi-stream sign models (1 seed each: press Enter at the seed prompt)
-EXPERIMENTS_TO_RUN = SIGN_MS_STUDY
+# EXPERIMENTS_TO_RUN = SIGN_MS_STUDY   # third batch: multi-stream sign models
+# Fourth batch (2026-11-03): A2-full + A2-pos on each clean sign source -> enter "all" for 3 seeds (18 runs)
+EXPERIMENTS_TO_RUN = TEMPO_STUDY_A2_SOURCES
 # then, after extracting the clean features: EXPERIMENTS_TO_RUN = TEMPO_STUDY_A2_CLEAN  (3 seeds: "all")
 # EXPERIMENTS_TO_RUN = [R0] + TEMPO_STUDY_A1 + AUX_STUDY   # first batch (runs 310-330)
 # EXPERIMENTS_TO_RUN = AUX_NO_CONNECTIVE                    # B6: only if a signcat head shows a real gain
