@@ -1,0 +1,6 @@
+# exported frozen features: several GB per source run, regenerate with export_features.py
+features/
+# queue state (local to the training machine)
+train_queue_fact.json
+train_queue_fact_done.json
+__pycache__/
