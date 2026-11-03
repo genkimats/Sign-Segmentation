@@ -816,9 +816,9 @@ TEMPO_STUDY_A2_CLEAN = tempo_a2_arms(_TEMPO_PRED_CLEAN, os.path.basename(_TEMPO_
 # A2-full and A2-pos per source (2 x 3 configs, 3 seeds = 18 runs). The A2-video / A2-trans ablations
 # only for the best source afterwards: TEMPO_STUDY_A2_CLEAN with _TEMPO_PRED_CLEAN set to it.
 A2_SOURCES = {
-    "retrain": "processed_data/tempo_features_pred_retrain",
-            #   "ms_bh": "processed_data/tempo_features_pred_ms_bh",
-            #   "ms_bhfc": "processed_data/tempo_features_pred_ms_bhfc"
+    # "retrain": "processed_data/tempo_features_pred_retrain",
+              "ms_bh": "processed_data/tempo_features_pred_ms_bh",
+              "ms_bhfc": "processed_data/tempo_features_pred_ms_bhfc"
               }
 TEMPO_STUDY_A2_SOURCES = [arm for tag, d in A2_SOURCES.items() for arm in tempo_a2_arms(d, tag)[:2]]
 
