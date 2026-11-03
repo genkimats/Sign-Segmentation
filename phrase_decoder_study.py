@@ -88,9 +88,31 @@ def segs_from_starts(starts_by_vid, data):
     return {v: starts_to_segments(st, data.probs[v]) for v, st in starts_by_vid.items()}
 
 
+def segs_to_bio(segs, T):
+    lab = np.zeros(T, dtype=np.int64)
+    for s, e in segs:
+        lab[s:e + 1] = I_TAG
+    for s, _ in segs:
+        lab[s] = B_TAG
+    return lab
+
+
+def decoded_frame_f1(segs_by_vid, data, labels_by_vid=None):
+    """Frame F1 of the DECODED labelling (B at each start, I to the segment end, O elsewhere), pooled over
+    videos, macro over O / I / B -- the same definition as evaluate_videos, which scores the argmax labels."""
+    from sklearn.metrics import f1_score
+    y = np.concatenate([data.gold[v] for v in data.vids])
+    yp = np.concatenate([labels_by_vid[v] if labels_by_vid is not None else segs_to_bio(segs_by_vid[v], len(data.gold[v]))
+                         for v in data.vids])
+    per = f1_score(y, yp, labels=[0, 1, 2], average=None, zero_division=0)
+    return {"frame_f1": round(float(per.mean()), 4), "f1_O": round(float(per[0]), 4),
+            "f1_I": round(float(per[1]), 4), "f1_B": round(float(per[2]), 4)}
+
+
 def evaluate(starts_by_vid, data, segs_by_vid=None):
     segs = segs_by_vid or segs_from_starts(starts_by_vid, data)
     m = score({v: (np.asarray(starts_by_vid[v], dtype=np.int64), segs[v], data.gold[v]) for v in data.vids})
+    m.update(decoded_frame_f1(segs, data))
     counts = {v: boundary_counts(data.gs[v], np.asarray(starts_by_vid[v], dtype=np.int64), K) for v in data.vids}
     return m, counts
 
@@ -391,6 +413,8 @@ def analyse(val, test):
         res[name] = (vm, tm, tc, shown)
 
     add("argmax", {}, dec_argmax, segs_argmax)
+    for d, m in ((val, res["argmax"][0]), (test, res["argmax"][1])):   # the usual Frame F1: raw argmax labels
+        m.update(decoded_frame_f1(None, d, {v: d.probs[v].argmax(0) for v in d.vids}))
     pm = fit_merge(val)
     add("argmax_merge", pm, dec_merge, segs_merge)
     base = fit_peak(val)
@@ -425,7 +449,7 @@ ORDER = ["argmax", "argmax_merge", "peak_thr", "adapt_quant", "adapt_z", "mbr", 
          "cal_mbr", "rescore", "oracleK_video"]
 IDEA = {"rescore": "1", "adapt_quant": "5", "adapt_z": "5", "mbr": "7", "end_aware": "8", "cal_peak_thr": "9",
         "cal_mbr": "9"}
-METRICS = ["bnd_f1_2", "bnd_f1_5", "bnd_f1_10", "bnd_p_5", "bnd_r_5", "iou", "pct", "k_ratio",
+METRICS = ["frame_f1", "f1_O", "f1_I", "f1_B", "bnd_f1_2", "bnd_f1_5", "bnd_f1_10", "bnd_p_5", "bnd_r_5", "iou", "pct", "k_ratio",
            "recall_short_pause", "recall_long_pause"]
 
 
@@ -478,10 +502,12 @@ def main(argv=None):
 
     lines = [f"Decoder study on {', '.join(args.runs)} (test; every setting tuned on val by boundary F1@5).",
              "Columns: boundary F1 at +-2/+-5/+-10, recall of short / long-pause boundaries, predicted/gold count,",
-             "IoU, val F1@5. 'seeds' = mean +- SD over the runs; ENS = the same decoder on the seed ensemble.", ""]
+             "IoU, val F1@5. 'seeds' = mean +- SD over the runs; ENS = the same decoder on the seed ensemble.",
+             "FrameF1 / F1_B = frame-level macro F1 and B-class F1 of the DECODED labels (argmax row = the usual Frame F1",
+             "on the raw argmax labels; other rows: B at each decoded start, I to the segment end, O elsewhere).", ""]
     for vname in variants:
         lines.append(f"=== variant: {vname} ===")
-        lines.append(f"{'decoder':15s} {'idea':4s} {'F1@2':>12s} {'F1@5':>13s} {'F1@10':>12s} {'short':>6s} {'long':>6s} "
+        lines.append(f"{'decoder':15s} {'idea':4s} {'FrameF1':>7s} {'F1_B':>6s} {'F1@2':>12s} {'F1@5':>13s} {'F1@10':>12s} {'short':>6s} {'long':>6s} "
                      f"{'K/gold':>6s} {'IoU':>6s} {'valF1@5':>7s} | {'ENS F1@5':>8s}  vs peak_thr (seeds, paired): diff [95% CI] P<=0")
         ref_counts = [results[(vname, r)]["peak_thr"][2] for r in args.runs]
         for dec in ORDER:
@@ -497,7 +523,7 @@ def main(argv=None):
             if dec != "peak_thr":
                 b = paired_bootstrap([p[2] for p in per], ref_counts, n_boot=args.n_boot)
                 boot = f"{b['diff']:+.3f} [{b['ci95'][0]:+.3f}, {b['ci95'][1]:+.3f}] {b['p_le_0']:.3f}"
-            lines.append(f"{dec:15s} {IDEA.get(dec, 'ref'):4s} {f2[0]:.3f}+-{f2[1]:.3f} {f5[0]:.3f}+-{f5[1]:.3f} "
+            lines.append(f"{dec:15s} {IDEA.get(dec, 'ref'):4s} {ms('frame_f1')[0]:7.3f} {ms('f1_B')[0]:6.3f} {f2[0]:.3f}+-{f2[1]:.3f} {f5[0]:.3f}+-{f5[1]:.3f} "
                          f"{f10[0]:.3f}+-{f10[1]:.3f} {ms('recall_short_pause')[0]:6.3f} {ms('recall_long_pause')[0]:6.3f} "
                          f"{ms('k_ratio')[0]:6.2f} {ms('iou')[0]:6.3f} {np.mean([p[0]['bnd_f1_5'] for p in per]):7.3f} | "
                          f"{(ens[1]['bnd_f1_5'] if ens else float('nan')):8.3f}  {boot}")
