@@ -27,18 +27,18 @@ F5k FiLM + face also concatenated, F5f FiLM on the fused representation.
 def fusion_study_arms(r0):
     fusion = {**r0, "basename": "multistream_fusion"}
     return [
-        {**r0, "fusion": "gated_sum",
-         "description": "F1a: R0 + global scalar stream gates (gated_sum) -- control for F1"},
-        {**fusion, "fusion_mode": "frame_gate",
-         "description": "F1: R0 + frame-wise stream gate"},
-        {**fusion, "fusion_mode": "lag_face", "lag_attention": "content", "lag_max_frames": 25,
-         "description": "F2: R0 + time-lagged face (content attention, +-25 frames)"},
-        # {**fusion, "fusion_mode": "lag_face", "lag_attention": "fixed", "lag_max_frames": 25,
-        #  "description": "F2b: R0 + time-lagged face (fixed learned lag filter, +-25 frames)"},
-        # {**fusion, "fusion_mode": "late", "late_combine": "weighted", "late_aux_weight": 0.5,
-        #  "description": "F3: late fusion, per-stream BiLSTM heads, learned stream weights, deep supervision 0.5"},
-        # {**fusion, "fusion_mode": "film_face", "film_target": "body_hands", "film_keep_face": False,
-        #  "description": "F5: face FiLM-modulates body+hands (face not concatenated)"},
+        # {**r0, "fusion": "gated_sum",
+        #  "description": "F1a: R0 + global scalar stream gates (gated_sum) -- control for F1"},
+        # {**fusion, "fusion_mode": "frame_gate",
+        #  "description": "F1: R0 + frame-wise stream gate"},
+        # {**fusion, "fusion_mode": "lag_face", "lag_attention": "content", "lag_max_frames": 25,
+        #  "description": "F2: R0 + time-lagged face (content attention, +-25 frames)"},
+        {**fusion, "fusion_mode": "lag_face", "lag_attention": "fixed", "lag_max_frames": 25,
+         "description": "F2b: R0 + time-lagged face (fixed learned lag filter, +-25 frames)"},
+        {**fusion, "fusion_mode": "late", "late_combine": "weighted", "late_aux_weight": 0.5,
+         "description": "F3: late fusion, per-stream BiLSTM heads, learned stream weights, deep supervision 0.5"},
+        {**fusion, "fusion_mode": "film_face", "film_target": "body_hands", "film_keep_face": False,
+         "description": "F5: face FiLM-modulates body+hands (face not concatenated)"},
     ]
 
 
