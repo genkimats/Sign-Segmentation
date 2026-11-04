@@ -14,3 +14,4 @@ hierarchy_phrase/runs/
 decoder_study/exports/stgcn_bilstm-44/train.npz
 
 results.txtdecoder_study/exports/
+decoder_study/exports/
