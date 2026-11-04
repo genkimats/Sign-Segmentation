@@ -868,7 +868,8 @@ FUSION_OPTIONAL = [{**a, "force_selection_metric": None} for a in fusion_optiona
 # Fifth batch (2026-11-04): fusion study. First pass: press Enter at the seed prompt (1 seed each,
 # 6 runs); then re-queue the arms worth it with "all" (3 seeds).
 # EXPERIMENTS_TO_RUN = FUSION_STUDY
-EXPERIMENTS_TO_RUN = [{**R0, "force_selection_metric": None}]   # R0 only; best-epoch metric asked at training
+EXPERIMENTS_TO_RUN = [{**_MS_BEST, "force_selection_metric": None,
+                       "description": "MS best: Body + HaMeR + Face(compact), no count loss"}]   # metric asked at training
 # then, after extracting the clean features: EXPERIMENTS_TO_RUN = TEMPO_STUDY_A2_CLEAN  (3 seeds: "all")
 # EXPERIMENTS_TO_RUN = [R0] + TEMPO_STUDY_A1 + AUX_STUDY   # first batch (runs 310-330)
 # EXPERIMENTS_TO_RUN = AUX_NO_CONNECTIVE                    # B6: only if a signcat head shows a real gain
