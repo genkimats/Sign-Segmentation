@@ -18,6 +18,8 @@ from src.models import (PureMambaBaseline, BiMambaBaseline, STGCN_Mamba, STGCN_M
                         HDGCN_Mamba, HyperSign_Mamba, STGCN_HybridSequential, STGCN_HybridParallel,
                         MultiStreamSegmenter, MultiStream_BiLSTM, MultiStream_Transformer,
                         MultiStream_BiLSTMAttn, Moryossef2023_BiLSTM)
+# fusion study (fusion_study/): frame-wise gate, time-lagged face, late fusion, face FiLM
+from fusion_study.models_fusion import MultiStream_Fusion, fusion_model_kwargs
 
 MODEL_REGISTRY = {
     "pure_mamba": PureMambaBaseline,
@@ -42,11 +44,13 @@ MODEL_REGISTRY = {
     "multistream_bilstm": MultiStream_BiLSTM,
     "multistream_transformer": MultiStream_Transformer,
     "multistream_bilstm_attn": MultiStream_BiLSTMAttn,
+    "multistream_fusion": MultiStream_Fusion,   # fusion_study/models_fusion.py (config key fusion_mode)
     # Moryossef et al. 2023 E1s / E2s (phrase head), see src/models.py
     "bilstm_2023": Moryossef2023_BiLSTM,
 }
 
-MULTISTREAM_MODELS = ["multistream_bilstm", "multistream_transformer", "multistream_bilstm_attn"]
+MULTISTREAM_MODELS = ["multistream_bilstm", "multistream_transformer", "multistream_bilstm_attn",
+                      "multistream_fusion"]
 
 MAMBA_BASED_MODELS = ["pure_mamba", "bi_mamba", "stgcn_mamba", "stgcn_mlp_mamba", "stgcn_bimamba",
                       "decoupled_stgcn_mamba", "latent_stgcn_mamba", "ctrgcn_mamba", "infogcn_mamba",
@@ -58,7 +62,8 @@ HAMER_SUPPORTED_MODELS = ["stgcn_mamba", "latent_stgcn_mamba", "ctrgcn_mamba", "
                           "stgcn_bilstm", "stgcn_transformer", "bilstm_2023",
                           "stgcn_mlp_mamba", "stgcn_bimamba", "decoupled_stgcn_mamba",
                           "stgcn_hybrid_seq", "stgcn_hybrid_parallel",
-                          "multistream_bilstm", "multistream_transformer", "multistream_bilstm_attn"]
+                          "multistream_bilstm", "multistream_transformer", "multistream_bilstm_attn",
+                          "multistream_fusion"]
 
 # Own list (not an alias of HAMER_SUPPORTED_MODELS, so appending can't mutate it):
 # the graph-free baselines also accept DINOv2, e.g. for pure_hamer + DINOv2 runs.
@@ -252,6 +257,8 @@ def build_model_kwargs(config, detected_hamer_dim=None, detected_dinov2_dim=None
             model_kwargs["transformer_norm"] = config.get("transformer_norm", "pre")
             model_kwargs["rope_base"] = float(config.get("rope_base", 10000.0))
             model_kwargs["attn_layers"] = int(config.get("attn_layers", 1))
+        if model_name == "multistream_fusion":
+            model_kwargs.update(fusion_model_kwargs(config))
         if model_name == "multistream_transformer":
             # Position encoding / norm placement of the Transformer encoder. Defaults
             # (sinusoidal + post) = the original encoder, so older runs rebuild unchanged.

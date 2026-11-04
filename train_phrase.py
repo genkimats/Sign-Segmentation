@@ -607,6 +607,15 @@ def train_model(config, selection_metric="combined"):
                     else:
                         hard_labels = mask_padding(torch.argmax(labels, dim=1), labels)
                         loss = criterion(logits, hard_labels)
+                    if hasattr(model, "extra_loss"):
+                        # fusion_study (late fusion): every stream head also gets the run's own loss
+                        def _same_loss(lg):
+                            if USE_BOUNDARY_LOSS:
+                                return boundary_aware_loss(lg, labels, weights, soft=bool(SOFT_LABEL_DIR),
+                                                           count_weight=COUNT_LOSS_WEIGHT, radius=COUNT_LOSS_RADIUS,
+                                                           tau=COUNT_LOSS_TAU, mode=COUNT_LOSS_MODE)
+                            return criterion(lg, mask_padding(torch.argmax(labels, dim=1), labels))
+                        loss = loss + model.extra_loss(_same_loss)
                     if USE_AUX:
                         main_loss_value = loss.item()
                         aux = aux.to(device)

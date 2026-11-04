@@ -846,6 +846,16 @@ SIGN_MS_STUDY = [
      "description": "MS-sign: Body+hands + HaMeR + Face(compact) on SIGN labels"},
 ]
 
+# ------------------------------------------------------------------------------
+# FUSION STUDY (fusion_study/): other ways of fusing the streams, each = R0 with ONE change.
+#   F1a gated_sum (control) | F1 frame-wise gate | F2 time-lagged face (content) | F2b (fixed lag)
+#   F3 late fusion + deep supervision | F5 face FiLM on body+hands. Reference: R0 = 310-312.
+# Analysis after training: python fusion_study/fusion_analysis.py --runs <multistream_fusion runs>
+# ------------------------------------------------------------------------------
+from fusion_study.fusion_experiments import fusion_optional_arms, fusion_study_arms  # noqa: E402
+FUSION_STUDY = fusion_study_arms(R0)
+FUSION_OPTIONAL = fusion_optional_arms(R0)
+
 # Second batch (2026-11-02): A1-full > A1-pos (+.012 BndF1@5, 95% CI [+.004, +.019]) -> all four A2 arms;
 # B5 on B4's fused heads. When asked for seeds, enter "0, 1, 2, 3, 4" (A2 x 4 and B5 lambda 0.1 get 3 seeds,
 # B5 lambda 1.0 gets 1 seed) -> 16 runs.
@@ -853,7 +863,10 @@ SIGN_MS_STUDY = [
 # Third batch (2026-11-03): the multi-stream sign models (1 seed each: press Enter at the seed prompt)
 # EXPERIMENTS_TO_RUN = SIGN_MS_STUDY   # third batch: multi-stream sign models
 # Fourth batch (2026-11-03): A2-full + A2-pos on each clean sign source -> enter "all" for 3 seeds (18 runs)
-EXPERIMENTS_TO_RUN = TEMPO_STUDY_A2_SOURCES
+# EXPERIMENTS_TO_RUN = TEMPO_STUDY_A2_SOURCES   # fourth batch (A2 dropped 2026-11-04)
+# Fifth batch (2026-11-04): fusion study. First pass: press Enter at the seed prompt (1 seed each,
+# 6 runs); then re-queue the arms worth it with "all" (3 seeds).
+EXPERIMENTS_TO_RUN = FUSION_STUDY
 # then, after extracting the clean features: EXPERIMENTS_TO_RUN = TEMPO_STUDY_A2_CLEAN  (3 seeds: "all")
 # EXPERIMENTS_TO_RUN = [R0] + TEMPO_STUDY_A1 + AUX_STUDY   # first batch (runs 310-330)
 # EXPERIMENTS_TO_RUN = AUX_NO_CONNECTIVE                    # B6: only if a signcat head shows a real gain
@@ -976,7 +989,7 @@ if __name__ == "__main__":
         current_model_prefix[m_name] += 1 
         
         # 1b. Multi-stream models: the data that gets loaded follows the stream switches
-        if m_name in ("multistream_bilstm", "multistream_transformer", "multistream_bilstm_attn"):
+        if m_name in ("multistream_bilstm", "multistream_transformer", "multistream_bilstm_attn", "multistream_fusion"):
             full_config["use_face_keypoints"] = bool(full_config.get("use_stream_face", False))
             full_config["use_hamer_features"] = bool(full_config.get("use_stream_hamer", False))
             full_config["use_cue_features"] = bool(full_config.get("use_stream_cues", False))
