@@ -1,0 +1,72 @@
+{
+ "model": "fact",
+ "block": "iuUU",
+ "ntoken": 64,
+ "hid_dim": 256,
+ "f_dim": 128,
+ "f_layers": 10,
+ "u_f_layers": 8,
+ "a_dim": 128,
+ "a_ffdim": 256,
+ "a_nhead": 4,
+ "a_layers": 4,
+ "u_a_layers": 1,
+ "s_layers": 1,
+ "dropout": 0.1,
+ "cmr": 0.3,
+ "fpos": false,
+ "mwt": 0.1,
+ "tm_use": true,
+ "tm_t": 30,
+ "tm_m": 5,
+ "tm_p": 0.05,
+ "pc": 0.2,
+ "a2fc": 1.0,
+ "sw": 5.0,
+ "tok_weights": [
+  1.0,
+  1.0
+ ],
+ "nullw": "auto",
+ "class_weights": [
+  1.0,
+  1.1,
+  8.5
+ ],
+ "count_loss_weight": 2.0,
+ "count_loss_radius": 5,
+ "count_loss_tau": 0.1,
+ "count_loss_mode": "argmax",
+ "window_frames": 1500,
+ "feature_stride": 1,
+ "batch_size": 4,
+ "optimizer": "adam",
+ "lr": 0.0001,
+ "weight_decay": 0.0,
+ "scheduler": null,
+ "grad_clip": 10.0,
+ "epochs": 60,
+ "patience": 10,
+ "epoch_coverage": 0.5,
+ "eval_step_frac": 0.5,
+ "num_workers": 4,
+ "source_run": "multistream_bilstm-310",
+ "description": "P1: FACT (iuUU, BIO) on R0-310 features, 1500-frame windows",
+ "seed": 123,
+ "nullw_resolved": 0.6129116996230843,
+ "window_segments": {
+  "max": 46,
+  "mean": 11.79,
+  "windows": 38717
+ },
+ "n_params": 8499968,
+ "run": "fact-02",
+ "best_val_bnd5": {
+  "token": 0.3286633850814085,
+  "head": 0.3076923076923077
+ },
+ "best_epoch": {
+  "token": 12,
+  "head": 20
+ }
+}

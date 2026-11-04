@@ -1,0 +1,40 @@
+{
+ "model": "frozen_bilstm",
+ "d_model": 256,
+ "n_layers": 4,
+ "dropout": 0.2,
+ "input_dropout": 0.2,
+ "class_weights": [
+  1.0,
+  1.1,
+  8.5
+ ],
+ "count_loss_weight": 2.0,
+ "count_loss_radius": 5,
+ "count_loss_tau": 0.1,
+ "count_loss_mode": "argmax",
+ "window_frames": 1500,
+ "feature_stride": 1,
+ "batch_size": 16,
+ "optimizer": "adamw",
+ "lr": 0.0001,
+ "weight_decay": 0.01,
+ "scheduler": "cosine",
+ "grad_clip": null,
+ "epochs": 100,
+ "patience": 10,
+ "epoch_coverage": 1.0,
+ "eval_step_frac": 1.0,
+ "num_workers": 4,
+ "source_run": "multistream_bilstm-310",
+ "description": "P2: frozen BiLSTM (R0 recipe) on R0-310 features, 1500-frame windows",
+ "seed": 123,
+ "n_params": 5785091,
+ "run": "frozen_bilstm-05",
+ "best_val_bnd5": {
+  "head": 0.441283493218657
+ },
+ "best_epoch": {
+  "head": 18
+ }
+}

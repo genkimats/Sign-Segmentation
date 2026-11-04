@@ -1,0 +1,51 @@
+{
+  "run": "multistream_bilstm-321",
+  "split": "val",
+  "description": "B1: R0 + mouth head on FACE, lambda 0.3 [seed=2024]",
+  "tasks": {
+    "mouth": {
+      "frames": 497294,
+      "accuracy": 0.805,
+      "majority_baseline": 0.804,
+      "macro_f1": 0.4786,
+      "recall": [
+        0.9101,
+        0.4456,
+        0.0495
+      ],
+      "precision": [
+        0.8631,
+        0.5015,
+        0.184
+      ],
+      "support": [
+        399800,
+        79910,
+        17584
+      ],
+      "confusion": [
+        [
+          363859,
+          32717,
+          3224
+        ],
+        [
+          43670,
+          35606,
+          634
+        ],
+        [
+          14032,
+          2682,
+          870
+        ]
+      ],
+      "classes": [
+        "none",
+        "mouthing",
+        "mouth gesture"
+      ],
+      "stream": "face"
+    }
+  }
+}

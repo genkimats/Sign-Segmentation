@@ -1,0 +1,13 @@
+{
+    "run": "stgcn_bilstm-45",
+    "trainable": 6964867,
+    "frozen": 8450,
+    "total": 6973317,
+    "by_module": {
+        "stgcn_blocks": 87490,
+        "hamer_encoder": 18624,
+        "projection": 1082112,
+        "lstm": 5783552,
+        "classifier": 1539
+    }
+}

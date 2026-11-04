@@ -1,0 +1,159 @@
+{
+  "run": "multistream_bilstm-329",
+  "split": "val",
+  "description": "B4 (control): R0 + both heads on the FUSED representation, lambda 0.3 [seed=123]",
+  "tasks": {
+    "mouth": {
+      "frames": 497294,
+      "accuracy": 0.8282,
+      "majority_baseline": 0.804,
+      "macro_f1": 0.5975,
+      "recall": [
+        0.8696,
+        0.7407,
+        0.2833
+      ],
+      "precision": [
+        0.9411,
+        0.5598,
+        0.2249
+      ],
+      "support": [
+        399800,
+        79910,
+        17584
+      ],
+      "confusion": [
+        [
+          347663,
+          39807,
+          12330
+        ],
+        [
+          15885,
+          59192,
+          4833
+        ],
+        [
+          5858,
+          6745,
+          4981
+        ]
+      ],
+      "classes": [
+        "none",
+        "mouthing",
+        "mouth gesture"
+      ],
+      "stream": "fused"
+    },
+    "signcat": {
+      "frames": 123548,
+      "accuracy": 0.7429,
+      "majority_baseline": 0.7276,
+      "macro_f1": 0.5131,
+      "recall": [
+        0.8082,
+        0.8993,
+        0.7351,
+        0.1762,
+        0.7028,
+        0.3258,
+        0.6295
+      ],
+      "precision": [
+        0.9114,
+        0.3758,
+        0.5668,
+        0.121,
+        0.3835,
+        0.6057,
+        0.4163
+      ],
+      "support": [
+        89897,
+        4328,
+        7940,
+        2537,
+        3906,
+        10533,
+        4407
+      ],
+      "confusion": [
+        [
+          72655,
+          1815,
+          3604,
+          2992,
+          3688,
+          1620,
+          3523
+        ],
+        [
+          176,
+          3892,
+          32,
+          4,
+          41,
+          174,
+          9
+        ],
+        [
+          1308,
+          298,
+          5837,
+          56,
+          111,
+          158,
+          172
+        ],
+        [
+          1869,
+          19,
+          107,
+          447,
+          23,
+          56,
+          16
+        ],
+        [
+          902,
+          1,
+          110,
+          2,
+          2745,
+          89,
+          57
+        ],
+        [
+          1924,
+          4262,
+          339,
+          124,
+          340,
+          3432,
+          112
+        ],
+        [
+          880,
+          69,
+          269,
+          68,
+          210,
+          137,
+          2774
+        ]
+      ],
+      "classes": [
+        "lexical",
+        "palm-up",
+        "pointing",
+        "depicting",
+        "fingerspelling/number",
+        "other gesture/special",
+        "connective"
+      ],
+      "stream": "fused"
+    }
+  }
+}

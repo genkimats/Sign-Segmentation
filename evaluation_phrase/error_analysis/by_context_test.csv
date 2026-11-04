@@ -1,0 +1,8 @@
+config,runs,prev = palm-up,cur = pointing,cur = connective,continuous (no pause),other,all
+"multistream_bilstm | A1-full: R0 + tempo stream (GOLD signs), all 17 channels",3,0.8033,0.6483,0.6702,0.0833,0.5569,0.6145
+"multistream_bilstm | A1-pos: R0 + tempo stream (GOLD signs), 4 positional channels only",3,0.8122,0.6352,0.672,0.0,0.5647,0.621
+"multistream_bilstm | B1: R0 + mouth head on FACE, lambda 0.3",3,0.5693,0.4304,0.5793,0.0417,0.3802,0.432
+"multistream_bilstm | B2: R0 + sign-class head on HaMeR, lambda 0.3",1,0.5811,0.4094,0.5668,0.0,0.3906,0.441
+"multistream_bilstm | B3: R0 + mouth head on FACE + sign-class head on HaMeR, lambda 0.3",3,0.5811,0.4436,0.5686,0.0833,0.3737,0.4293
+"multistream_bilstm | B4 (control): R0 + both heads on the FUSED representation, lambda 0.3",3,0.5772,0.4541,0.5615,0.0,0.3965,0.4443
+"multistream_bilstm | R0: B+H+Fc + count loss w=2 r=5, epoch by bnd5",3,0.5654,0.4462,0.5668,0.0,0.3817,0.4312

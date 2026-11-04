@@ -1,0 +1,13 @@
+{
+  "run": "fact_token-02",
+  "model": "fact_token",
+  "prefix": "02",
+  "split": "val",
+  "labels_dir": "processed_data/BIO_tags_phrase_v2",
+  "train_run": "fact-02",
+  "decoder": "token",
+  "source_run": "multistream_bilstm-310",
+  "description": "P1: FACT (iuUU, BIO) on R0-310 features, 1500-frame windows | decoder=token [seed=123]",
+  "seed": 123,
+  "merge_starts": {}
+}

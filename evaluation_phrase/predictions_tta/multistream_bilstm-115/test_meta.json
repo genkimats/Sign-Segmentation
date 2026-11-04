@@ -1,0 +1,14 @@
+{
+  "run": "multistream_bilstm-115",
+  "model": "multistream_bilstm",
+  "prefix": "115",
+  "split": "test",
+  "labels_dir": "processed_data/BIO_tags_phrase_v2",
+  "description": "New: MS: Body + Face + HaMeR, compact face [seed=42]",
+  "seed": 42,
+  "tta": {
+    "stride_frac": 0.5,
+    "mirror": false,
+    "weights": "hann"
+  }
+}

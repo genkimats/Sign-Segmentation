@@ -1,0 +1,13 @@
+{
+  "run": "fact_head-01",
+  "model": "fact_head",
+  "prefix": "01",
+  "split": "val",
+  "labels_dir": "processed_data/BIO_tags_phrase_v2",
+  "train_run": "fact-01",
+  "decoder": "head",
+  "source_run": "multistream_bilstm-310",
+  "description": "P1: FACT (iuUU, BIO) on R0-310 features, 1500-frame windows | decoder=head [seed=42]",
+  "seed": 42,
+  "merge_starts": {}
+}

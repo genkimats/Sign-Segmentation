@@ -1,0 +1,159 @@
+{
+  "run": "multistream_bilstm-325",
+  "split": "val",
+  "description": "B3: R0 + mouth head on FACE + sign-class head on HaMeR, lambda 0.3 [seed=42]",
+  "tasks": {
+    "mouth": {
+      "frames": 497294,
+      "accuracy": 0.7939,
+      "majority_baseline": 0.804,
+      "macro_f1": 0.4998,
+      "recall": [
+        0.8871,
+        0.4773,
+        0.1134
+      ],
+      "precision": [
+        0.8703,
+        0.4818,
+        0.1874
+      ],
+      "support": [
+        399800,
+        79910,
+        17584
+      ],
+      "confusion": [
+        [
+          354647,
+          37776,
+          7377
+        ],
+        [
+          40495,
+          38145,
+          1270
+        ],
+        [
+          12337,
+          3253,
+          1994
+        ]
+      ],
+      "classes": [
+        "none",
+        "mouthing",
+        "mouth gesture"
+      ],
+      "stream": "face"
+    },
+    "signcat": {
+      "frames": 123548,
+      "accuracy": 0.7224,
+      "majority_baseline": 0.7276,
+      "macro_f1": 0.462,
+      "recall": [
+        0.8052,
+        0.8452,
+        0.7033,
+        0.0812,
+        0.6295,
+        0.2895,
+        0.4329
+      ],
+      "precision": [
+        0.8907,
+        0.3473,
+        0.4704,
+        0.1014,
+        0.3553,
+        0.4757,
+        0.4232
+      ],
+      "support": [
+        89897,
+        4328,
+        7940,
+        2537,
+        3906,
+        10533,
+        4407
+      ],
+      "confusion": [
+        [
+          72388,
+          2301,
+          4886,
+          1604,
+          3849,
+          2582,
+          2287
+        ],
+        [
+          393,
+          3658,
+          40,
+          2,
+          19,
+          209,
+          7
+        ],
+        [
+          1400,
+          390,
+          5584,
+          69,
+          94,
+          247,
+          156
+        ],
+        [
+          1988,
+          51,
+          161,
+          206,
+          60,
+          58,
+          13
+        ],
+        [
+          1166,
+          5,
+          162,
+          13,
+          2459,
+          70,
+          31
+        ],
+        [
+          2495,
+          4031,
+          480,
+          120,
+          251,
+          3049,
+          107
+        ],
+        [
+          1444,
+          96,
+          558,
+          18,
+          188,
+          195,
+          1908
+        ]
+      ],
+      "classes": [
+        "lexical",
+        "palm-up",
+        "pointing",
+        "depicting",
+        "fingerspelling/number",
+        "other gesture/special",
+        "connective"
+      ],
+      "stream": "hamer"
+    }
+  }
+}

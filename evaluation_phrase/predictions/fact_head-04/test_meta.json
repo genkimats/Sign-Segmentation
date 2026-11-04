@@ -1,0 +1,13 @@
+{
+  "run": "fact_head-04",
+  "model": "fact_head",
+  "prefix": "04",
+  "split": "test",
+  "labels_dir": "processed_data/BIO_tags_phrase_v2",
+  "train_run": "fact-04",
+  "decoder": "head",
+  "source_run": "multistream_bilstm-208",
+  "description": "P3: FACT (iuUU, BIO) on CE-208 features, 1500-frame windows | decoder=head [seed=42]",
+  "seed": 42,
+  "merge_starts": {}
+}
