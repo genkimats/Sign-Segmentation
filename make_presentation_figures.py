@@ -14,6 +14,7 @@ Inputs (default paths, change in PATHS below):
   evaluation_phrase/oracle/{oracle_summary,oracle_lexical_weights,transitions_test}.csv   phrase_oracle_analysis.py
   evaluation_phrase/metric_analysis/metric_analysis_{argmax,argmax_merge,tuned}.json    metric_analysis.py
   evaluation_phrase/predictions/<run>/test.npz + processed_data/BIO_tags_phrase_v2   (figure 6 only)
+  evaluation_phrase/decoder_study/rows.csv                              phrase_decoder_study.py (figures 17, 18)
 
 Run groups (which run belongs to which bar) are set in GROUPS below; edit them if you re-run.
 Every figure is independent: a missing input skips that figure with a message.
@@ -41,6 +42,7 @@ PATHS = {
     "oracle": os.path.join(EVAL, "oracle"),
     "metric_json": os.path.join(EVAL, "metric_analysis", "metric_analysis_{}.json"),
     "predictions": os.path.join(EVAL, "predictions"),
+    "decoder_study": os.path.join(EVAL, "decoder_study", "rows.csv"),   # phrase_decoder_study.py (figures 17, 18)
     "labels": os.path.join("processed_data", "BIO_tags_phrase_v2"),
 }
 OUT = "figures"
@@ -69,19 +71,37 @@ GROUPS = {
         "Body+HaMeR": (runs(MS, (112, 114), (118, 120), (127, 129)), runs(BL, (259, 261))),
         "Body+Face+HaMeR": (runs(MS, (115, 117), (121, 126), (148, 150)), runs(BL, (268, 270))),
     },
-    # body-only mixing ablation: label -> (runs, family)   family: 2023 / none / temporal
+    # multistream input combinations, all from ONE batch with the v2 labels (figure 15)
+    "combos": {
+        "Body": runs(MS, (130, 132)),
+        "HaMeR": runs(MS, (133, 135)),
+        "Body+Face": runs(MS, (139, 141)),
+        "Face+HaMeR": runs(MS, (142, 144)),
+        "Body+HaMeR": runs(MS, (112, 114)),
+        "Body+HaMeR+Face": runs(MS, (115, 117)),
+    },
+    "face_only": runs(MS, (136, 138)),          # far below the others: printed as a note, not plotted
+    # comparison with Moryossef et al. 2023 (figure 16)
+    "best": runs(MS, (115, 117)),               # multistream Body+HaMeR+Face
+    "reimpl_2023": runs(BL, (244, 246)),        # E1s re-implemented, our data + training recipe
+    # body-only mixing ablation (multistream only): label -> (runs, family)   family: none / temporal
     "mixing": {
-        "2023 model\nLinear": (runs(BL, (250, 252)), "2023"),
-        "MS\nper-joint\nLinear": (runs(MS, 280, 282), "none"),
-        "MS\ntemporal conv\nno graph": (runs(MS, (277, 279)), "temporal"),
-        "MS\nST-GCN\ngraph + conv": (runs(MS, (130, 132)), "temporal"),
+        "Per-joint Linear\n(no graph,\nno temporal conv)": (runs(MS, 280, 282), "none"),
+        "Temporal conv only\n(no graph)": (runs(MS, (277, 279)), "temporal"),
+        "ST-GCN\n(graph +\ntemporal conv)": (runs(MS, (130, 132)), "temporal"),
     },
     "recipe": {
         "2023 recipe": runs(BL, (238, 240)),
         "Your recipe": runs(BL, (244, 246)),
     },
     "example_run": f"{MS}-104",     # figure 6 (best configuration, compact face)
+    # figure 18: the model given the GOLD sign onsets as an extra input (tempo stream, count-loss recipe)
+    "gold_onsets": runs(MS, (316, 318)),
 }
+# Moryossef et al. (2023), Table 1, phrase segmentation, test set (reported, not re-run here)
+PAPER_2023 = {"E1s": {"frame_f1": 0.65, "iou": 0.82, "pct": 1.63},
+              "E2s": {"frame_f1": 0.63, "iou": 0.84, "pct": 2.68}}
+ORACLE_SHOW_2023 = False           # figure 11: also show the 2023-model rows (early-fusion study)
 EXAMPLE_MERGE_D = 30               # D used in the stutter example
 EXAMPLE_WINDOW = 750               # frames shown (15 s)
 
@@ -292,10 +312,10 @@ def fig04(pdf):
         ax.set_xlim(-0.5, len(labels) - 0.5)
     axes[0].set_ylim(0.66, 0.685)
     axes[1].set_ylim(0.39, 0.49)
-    fig.suptitle("Body only: removing the temporal convolution drops the multistream model to the 2023 level; "
-                 "removing the graph costs nothing", fontsize=13, x=0.01, ha="left", y=1.04)
-    fig.text(0.01, -0.08, "dots = seeds, line = mean;  gray = no temporal mixing, blue = with temporal "
-             "convolution, orange = 2023 model", fontsize=10, color=C["ink2"])
+    fig.suptitle("Body stream: the temporal convolution carries the gain; removing the skeleton graph costs nothing",
+                 fontsize=13, x=0.01, ha="left", y=1.04)
+    fig.text(0.01, -0.08, "multi-stream model, body input only;  dots = seeds, line = mean;  gray = no temporal "
+             "mixing, blue = with temporal convolution", fontsize=10, color=C["ink2"])
     save(fig, "fig04_mixing_ablation", pdf)
 
 
@@ -415,7 +435,7 @@ def fig07(pdf):
 
 
 METRIC_NAMES = [("frame_f1", "Frame F1"), ("f1_B", "B-class F1"), ("iou", "IoU"),
-                ("segment_f1_05", "Segment F1@0.5"), ("bnd_f1_1", "Boundary F1 ±1"),
+                ("bnd_f1_1", "Boundary F1 ±1"),
                 ("bnd_f1_2", "Boundary F1 ±2"), ("bnd_f1_5", "Boundary F1 ±5"),
                 ("bnd_f1_10", "Boundary F1 ±10"), ("bnd_f1_25", "Boundary F1 ±25")]
 
@@ -527,8 +547,10 @@ def fig11(pdf):
     for k in o.index:
         if "(3 runs" in k or k.startswith(("MS", "BL2023")):
             fam = "ms" if k.startswith("MS") else "bl"
+            if fam == "bl" and not ORACLE_SHOW_2023:
+                continue
             lab = k.replace(" (3 runs, max P(B) +-5)", " alone").replace("BL2023", "2023 model") \
-                   .replace("MS", "Multistream")
+                   .replace("MS", "Multi-stream")
             if "mouth" in k:
                 continue
             order.append((k, lab, fam))
@@ -664,8 +686,141 @@ def fig14(pdf):
     save(fig, "fig14_lexical_weights", pdf)
 
 
+def fig15(pdf):
+    """Multi-stream input combinations (one training batch): Frame F1 and boundary F1."""
+    combos = GROUPS["combos"]
+    names = sorted(combos, key=lambda n: vals(combos[n], "argmax", "frame_f1").mean())
+    best = names[-1]
+    fig, axes = plt.subplots(1, 2, figsize=(13, 4.8), sharey=True)
+    for ax, (kind, col, title, xl) in zip(axes, [("argmax", "frame_f1", "Frame F1", (0.66, 0.695)),
+                                                 ("merge", "bnd_f1_5", "Boundary F1 ±5 (argmax + merge)", (0.40, 0.52))]):
+        for y, n in enumerate(names):
+            v = vals(combos[n], kind, col)
+            c = C["ms"] if n == best else C["gray"]
+            ax.scatter(v, np.full(len(v), y) + np.linspace(-0.12, 0.12, len(v)), s=36, color=c, alpha=0.45, lw=0)
+            ax.plot([v.mean()] * 2, [y - 0.3, y + 0.3], color=c, lw=3)
+            ax.text(v.max() + (xl[1] - xl[0]) * 0.02, y, f"{v.mean():.3f}", va="center", fontsize=11,
+                    fontweight="bold" if n == best else "normal")
+        ax.set_xlim(*xl)
+        ax.set_title(title)
+        ax.grid(axis="y", visible=False)
+    axes[0].set_yticks(range(len(names)), names)
+    try:
+        f = vals(GROUPS["face_only"], "argmax", "frame_f1").mean()
+        fb = vals(GROUPS["face_only"], "merge", "bnd_f1_5").mean()
+        fig.text(0.01, -0.06, f"Face only (not shown): Frame F1 {f:.3f}, boundary F1 {fb:.3f}.  "
+                 "Dots = seeds, line = mean.", fontsize=10, color=C["ink2"])
+    except ValueError:
+        pass
+    fig.suptitle(f"{best} scores highest; the face adds little on top of Body+HaMeR", fontsize=14,
+                 x=0.01, ha="left", y=1.04)
+    save(fig, "fig15_ms_combinations", pdf)
+
+
+def fig16(pdf):
+    """Comparison with Moryossef et al. (2023): reported numbers, re-implementation, ours."""
+    best, re = GROUPS["best"], GROUPS["reimpl_2023"]
+    rows = [("Moryossef et al. 2023\nE1s (reported)", PAPER_2023["E1s"]["frame_f1"], None, C["light"]),
+            ("E1s re-implemented\n(our data + recipe)", vals(re, "argmax", "frame_f1").mean(),
+             vals(re, "merge", "bnd_f1_5").mean(), C["bl"]),
+            ("Ours: multi-stream\nBody+HaMeR+Face", vals(best, "argmax", "frame_f1").mean(),
+             vals(best, "merge", "bnd_f1_5").mean(), C["ms"])]
+    fig, (a1, a2) = plt.subplots(1, 2, figsize=(13.5, 4.8), gridspec_kw={"width_ratios": [3, 2]})
+    x = np.arange(len(rows))
+    b = a1.bar(x, [r[1] for r in rows], width=0.6, color=[r[3] for r in rows])
+    bar_labels(a1, b)
+    a1.set_xticks(x, [r[0] for r in rows], fontsize=10)
+    a1.set_ylim(0, 0.8)
+    a1.set_title("Frame F1")
+    a1.grid(axis="x", visible=False)
+    sub = [r for r in rows if r[2] is not None]
+    b = a2.bar(np.arange(len(sub)), [r[2] for r in sub], width=0.5, color=[r[3] for r in sub])
+    bar_labels(a2, b)
+    a2.set_xticks(np.arange(len(sub)), [r[0] for r in sub], fontsize=11)
+    a2.set_ylim(0, 0.6)
+    a2.set_xlim(-0.6, len(sub) - 0.4)
+    a2.set_title("Boundary F1 ±5 (argmax + merge)")
+    a2.grid(axis="x", visible=False)
+    a2.text(0.98, 0.97, "not reported in the paper", transform=a2.transAxes, ha="right", va="top",
+            fontsize=10, color=C["ink2"])
+    gain_f = rows[2][1] - rows[1][1]
+    gain_b = rows[2][2] - rows[1][2]
+    fig.suptitle(f"Against the same model under identical conditions: +{gain_f:.3f} Frame F1, "
+                 f"+{gain_b:.3f} boundary F1", fontsize=14, x=0.01, ha="left", y=1.04)
+    save(fig, "fig16_comparison_2023", pdf)
+
+
+def _decoder_rows():
+    p = PATHS["decoder_study"]
+    need(p)
+    d = pd.read_csv(p)
+    best = set(GROUPS["best"])
+    return d[d["run"].isin(best)]
+
+
+DECODING_STEPS = [("base", "argmax", "Argmax"),
+                  ("base", "argmax_merge", "Remove\nduplicate starts"),
+                  ("base", "peak_thr", "Peak picking"),
+                  ("tta", "peak_thr", "+ overlapping\nwindows")]
+
+
+def fig17(pdf):
+    """Decoding: boundary F1 of the best model at each decoding step (test)."""
+    d = _decoder_rows()
+    vals_, lab = [], []
+    for var, dec, name in DECODING_STEPS:
+        r = d[(d["variant"] == var) & (d["decoder"] == dec)]
+        if len(r):
+            vals_.append(r["test_bnd_f1_5"].mean())
+            lab.append(name)
+    if len(vals_) < 2:
+        raise ValueError("decoder_study rows.csv has fewer than two of the decoding steps")
+    fig, ax = plt.subplots(figsize=(10, 4.8))
+    x = np.arange(len(lab))
+    cols = [C["light"]] + [C["ms"]] * (len(lab) - 1)
+    b = ax.bar(x, vals_, width=0.6, color=cols)
+    bar_labels(ax, b)
+    ax.set_xticks(x, lab)
+    ax.set_ylim(0, 0.7)
+    ax.set_ylabel("Boundary F1 (test, mean of 3 seeds)")
+    ax.grid(axis="x", visible=False)
+    ax.set_title("Decoding nearly doubles boundary F1, without retraining", loc="left")
+    save(fig, "fig17_decoding_metrics", pdf)
+
+
+def fig18(pdf):
+    """The ceiling: our model vs the true count vs perfect sign information (test)."""
+    d = _decoder_rows()
+    rows = []
+    for var, dec, name in (("tta", "peak_thr", "Our model"),
+                           ("tta", "oracleK_video", "+ told the true\nnumber of phrases")):
+        r = d[(d["variant"] == var) & (d["decoder"] == dec)]
+        if len(r):
+            rows.append((name, r["test_bnd_f1_5"].mean(), C["ms"]))
+    rows.append(("Model given the\nannotated sign starts", vals(GROUPS["gold_onsets"], "argmax", "bnd_f1_5").mean(),
+                 C["yellow"]))
+    p = os.path.join(PATHS["oracle"], "oracle_summary.csv")
+    need(p)
+    o = pd.read_csv(p).set_index("group")
+    rows.append(("Classifier on the\nannotated signs", float(o.loc["all", "f1"]), C["yellow"]))
+    fig, ax = plt.subplots(figsize=(10, 4.8))
+    x = np.arange(len(rows))
+    b = ax.bar(x, [r[1] for r in rows], width=0.6, color=[r[2] for r in rows])
+    bar_labels(ax, b)
+    ax.set_xticks(x, [r[0] for r in rows])
+    ax.set_ylim(0, 0.8)
+    ax.set_ylabel("Boundary F1 (test)")
+    ax.grid(axis="x", visible=False)
+    ax.legend(handles=[plt.Rectangle((0, 0), 1, 1, color=C["ms"], label="video only"),
+                       plt.Rectangle((0, 0), 1, 1, color=C["yellow"], label="also uses the human sign annotation")],
+              loc="upper left")
+    ax.set_title("Even perfect sign information stops near .67", loc="left")
+    save(fig, "fig18_ceiling", pdf)
+
+
 FIGS = {1: fig01, 2: fig02, 3: fig03, 4: fig04, 5: fig05, 6: fig06, 7: fig07, 8: fig08, 9: fig09,
-        10: fig10, 11: fig11, 12: fig12, 13: fig13, 14: fig14}
+        10: fig10, 11: fig11, 12: fig12, 13: fig13, 14: fig14,
+        15: fig15, 16: fig16, 17: fig17, 18: fig18}
 
 
 def main():
