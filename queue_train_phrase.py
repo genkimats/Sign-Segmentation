@@ -853,8 +853,9 @@ SIGN_MS_STUDY = [
 # Analysis after training: python fusion_study/fusion_analysis.py --runs <multistream_fusion runs>
 # ------------------------------------------------------------------------------
 from fusion_study.fusion_experiments import fusion_optional_arms, fusion_study_arms  # noqa: E402
-FUSION_STUDY = fusion_study_arms(R0)
-FUSION_OPTIONAL = fusion_optional_arms(R0)
+# best epoch: NOT forced -- train_phrase.py asks for the selection metric (R0 itself forced bnd5)
+FUSION_STUDY = [{**a, "force_selection_metric": None} for a in fusion_study_arms(R0)]
+FUSION_OPTIONAL = [{**a, "force_selection_metric": None} for a in fusion_optional_arms(R0)]
 
 # Second batch (2026-11-02): A1-full > A1-pos (+.012 BndF1@5, 95% CI [+.004, +.019]) -> all four A2 arms;
 # B5 on B4's fused heads. When asked for seeds, enter "0, 1, 2, 3, 4" (A2 x 4 and B5 lambda 0.1 get 3 seeds,
