@@ -2353,6 +2353,12 @@ class MultiStreamSegmenter(nn.Module):
       hamer_motion        + per-joint rotation speed between t and t - hamer_motion_lag
       hamer_temporal_kernel  > 1: residual temporal conv after the HaMeR branch (the body /
                           face streams get temporal context from their ST-GCN; HaMeR had none)
+      hamer_temporal_layers / hamer_temporal_dilations: how many such blocks (default 1) and
+                          their dilations, e.g. [1, 1] = 17 frames like the 2 ST-GCN blocks
+      stgcn_temporal_dilations  e.g. [1, 2, 4]: one ST-GCN block per entry, the temporal conv of
+                          block i with dilation d_i -> receptive field 1 + 8 * sum(d) frames
+                          (default [1, 1] = 17 frames = 0.34 s; [1, 2] = 25; [1, 2, 4] = 57 = 1.1 s).
+                          Body + hands and face streams (stream_encoder stgcn / tcn)
       stream_dropout      training only: each stream of each sample is zeroed with this
                           probability (at least one stream is always kept)
       stream_encoder      "stgcn" (original) | "tcn" (ST-GCN without graph) | "blockgcn" |
@@ -2389,7 +2395,8 @@ class MultiStreamSegmenter(nn.Module):
                  hamer_motion_lag=1, hamer_temporal_kernel=1, stream_dropout=0.0,
                  change_point_scales=None, stream_encoder="stgcn", stream_encoder_layers=2,
                  blockgcn_groups=8, blockgcn_ph=True, skate_local_frames=32,
-                 aux_heads=None, aux_temporal_kernel=9, film_cue_idx=None):
+                 aux_heads=None, aux_temporal_kernel=9, film_cue_idx=None,
+                 stgcn_temporal_dilations=None, hamer_temporal_layers=1, hamer_temporal_dilations=None):
         super().__init__()
         if stream_encoder not in STREAM_ENCODERS:
             raise ValueError(f"stream_encoder must be one of {STREAM_ENCODERS}, got '{stream_encoder}'.")
@@ -2403,8 +2410,13 @@ class MultiStreamSegmenter(nn.Module):
             if stream_encoder in ("stgcn", "tcn"):
                 # "tcn": identical blocks, adjacency = identity -> temporal conv only, no graph
                 A_use = np.eye(np.asarray(A).shape[0]) if stream_encoder == "tcn" else A
-                return nn.Sequential(STGCNBlock(c_in, stgcn_channels, A_use),
-                                     STGCNBlock(stgcn_channels, stgcn_channels, A_use))
+                # one ST-GCN block per dilation; default (1, 1) = the original 2 blocks (17 frames)
+                dil = [int(d) for d in (stgcn_temporal_dilations or (1, 1))]
+                return nn.Sequential(*[STGCNBlock(c_in if i == 0 else stgcn_channels, stgcn_channels, A_use,
+                                                  temporal_dilation=d) for i, d in enumerate(dil)])
+            if stgcn_temporal_dilations:
+                raise ValueError(f"stgcn_temporal_dilations is implemented for stream_encoder 'stgcn' / 'tcn', "
+                                 f"not '{stream_encoder}'.")
             return build_stream_encoder(stream_encoder, c_in, A, parts, stgcn_channels,
                                         int(stream_encoder_layers), dropout=0.0, **enc_opts)
         if fusion not in ("concat", "gated_sum"):
@@ -2480,7 +2492,16 @@ class MultiStreamSegmenter(nn.Module):
                 hamer_in = self.hamer_frontend.out_dim
             self.branches["hamer"] = branch(hamer_in, out_dims["hamer"])
             if int(hamer_temporal_kernel) > 1:
-                self.hamer_temporal = TemporalResidual(out_dims["hamer"], hamer_temporal_kernel, dropout)
+                # hamer_temporal_dilations (one block each) or hamer_temporal_layers blocks of dilation 1.
+                # One undilated block keeps the original module (old checkpoints load unchanged).
+                h_dil = [int(d) for d in (hamer_temporal_dilations or [1] * max(1, int(hamer_temporal_layers)))]
+                if h_dil == [1]:
+                    self.hamer_temporal = TemporalResidual(out_dims["hamer"], hamer_temporal_kernel, dropout)
+                else:
+                    self.hamer_temporal = nn.Sequential(*[
+                        TemporalResidual(out_dims["hamer"], hamer_temporal_kernel, dropout, dilation=d) for d in h_dil])
+            elif hamer_temporal_dilations or int(hamer_temporal_layers) > 1:
+                raise ValueError("hamer_temporal_layers / hamer_temporal_dilations need hamer_temporal_kernel > 1.")
 
         if "cues" in self.streams:
             if not cue_dim:

@@ -15,14 +15,18 @@ class SpatialGraphConv(nn.Module):
 
 class STGCNBlock(nn.Module):
     """Standard ST-GCN: Processes the full graph with shared filters."""
-    def __init__(self, in_channels, out_channels, A, temporal_kernel=9, residual=True):
+    def __init__(self, in_channels, out_channels, A, temporal_kernel=9, residual=True, temporal_dilation=1):
         super().__init__()
         self.gcn = SpatialGraphConv(in_channels, out_channels, A)
-        padding = (temporal_kernel - 1) // 2
+        # temporal_dilation d > 1: the k taps are d frames apart, so the block sees
+        # (k - 1) * d + 1 frames with the same parameters (d = 1 = the original block).
+        d = int(temporal_dilation)
+        padding = d * (temporal_kernel - 1) // 2
         self.tcn = nn.Sequential(
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
-            nn.Conv2d(out_channels, out_channels, kernel_size=(temporal_kernel, 1), padding=(padding, 0)),
+            nn.Conv2d(out_channels, out_channels, kernel_size=(temporal_kernel, 1), padding=(padding, 0),
+                      dilation=(d, 1)),
             nn.BatchNorm2d(out_channels),
         )
         self.relu = nn.ReLU(inplace=True)

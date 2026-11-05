@@ -231,6 +231,9 @@ def build_model_kwargs(config, detected_hamer_dim=None, detected_dinov2_dim=None
         model_kwargs["blockgcn_ph"] = bool(config.get("blockgcn_ph", True))
         model_kwargs["skate_local_frames"] = int(config.get("skate_local_frames", 32))
         model_kwargs["stream_dropout"] = float(config.get("stream_dropout", 0.0))
+        # Temporal context of the keypoint streams: one ST-GCN block per dilation (None = [1, 1])
+        if config.get("stgcn_temporal_dilations"):
+            model_kwargs["stgcn_temporal_dilations"] = [int(d) for d in config["stgcn_temporal_dilations"]]
         if config.get("change_point_scales"):
             model_kwargs["change_point_scales"] = [int(w) for w in config["change_point_scales"]]
         # Idea B: stream-specific auxiliary heads; Idea A3: FiLM on video-level cues.
@@ -249,6 +252,10 @@ def build_model_kwargs(config, detected_hamer_dim=None, detected_dinov2_dim=None
             model_kwargs["hamer_motion"] = bool(config.get("hamer_motion", False))
             model_kwargs["hamer_motion_lag"] = int(config.get("hamer_motion_lag", 1))
             model_kwargs["hamer_temporal_kernel"] = int(config.get("hamer_temporal_kernel", 1))
+            if int(config.get("hamer_temporal_layers", 1)) > 1:
+                model_kwargs["hamer_temporal_layers"] = int(config["hamer_temporal_layers"])
+            if config.get("hamer_temporal_dilations"):
+                model_kwargs["hamer_temporal_dilations"] = [int(d) for d in config["hamer_temporal_dilations"]]
         if not streams["use_stream_hamer"]:
             model_kwargs.pop("hamer_dim", None)
         if model_name == "multistream_bilstm_attn":

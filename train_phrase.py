@@ -492,10 +492,18 @@ def train_model(config, selection_metric="combined"):
         else:
             optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
             
+        # warmup_epochs > 0 (attention encoders): LR rises linearly from 10% over that many epochs,
+        # then follows the usual schedule. 0 / missing = exactly the original schedule.
+        WARMUP = int(config.get("warmup_epochs", 0) or 0)
         if SCHEDULER_NAME == "CosineAnnealingLR":
-            scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS)
+            scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=max(1, EPOCHS - WARMUP))
         else:
             scheduler = None
+        if WARMUP > 0:
+            warm = optim.lr_scheduler.LinearLR(optimizer, start_factor=0.1, end_factor=1.0, total_iters=WARMUP)
+            scheduler = (optim.lr_scheduler.SequentialLR(optimizer, [warm, scheduler], milestones=[WARMUP])
+                         if scheduler is not None else warm)
+            print(f"🔥 LR warmup: {WARMUP} epochs (10% -> 100%)")
             
         metrics_log_path = os.path.join(exp_dir, "training_metrics.csv")
         with open(metrics_log_path, mode='w', newline='') as file:

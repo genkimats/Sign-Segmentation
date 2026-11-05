@@ -118,6 +118,20 @@ MAMBA_DEFAULTS = {
     "hamer_motion": False,
     "hamer_motion_lag": 1,
     "hamer_temporal_kernel": 1,
+    "hamer_temporal_layers": 1,      # number of those blocks (2 = 17 frames, like the ST-GCN streams)
+    "hamer_temporal_dilations": None,  # e.g. [1, 2]: one block per entry, with these dilations
+    # Keypoint-stream temporal context: one ST-GCN block per entry, temporal conv dilated by it.
+    # None = [1, 1] (original, 17 frames = 0.34 s); [1, 2] = 25 frames; [1, 2, 4] = 57 frames (1.1 s)
+    "stgcn_temporal_dilations": None,
+    # Kinematics source: v1 = per-frame derivatives (all earlier runs); v2 = per-second, smoothed
+    # (python preprocess_kinematics.py). Only matters when kinematic_features is not empty.
+    "kinematic_dir": "processed_data/kinematic_features",
+    # Frame-rate augmentation (train only): each window resampled to U(low, high) x the native rate,
+    # e.g. [0.5, 1.0] = 25-50 fps. None = off.
+    "fps_augment_range": None,
+    "fps_augment_p": 1.0,
+    # Linear LR warmup (epochs) before the cosine schedule; 0 = off (attention encoders: ~5)
+    "warmup_epochs": 0,
     # Training only: zero each stream of each sample with this probability
     "stream_dropout": 0.0,
     # Change-point layer after fusion: future-minus-past feature differences at these
@@ -825,6 +839,51 @@ TEMPO_STUDY_A2_SOURCES = [arm for tag, d in A2_SOURCES.items() for arm in tempo_
 # A+B -- only if A gave a significant gain: the best B arm on top of A2-full, e.g.
 # AUX_ON_TEMPO = [{**AUX_STUDY[1], **_TEMPO, "cue_dir": _TEMPO_PRED, "description": "A+B: A2-full + B2"}]
 
+# ------------------------------------------------------------------------------
+# TEMPORAL-CONTEXT STUDY (2026-11-06): how much short-range temporal information the encoder gets.
+# Every arm = the best model (Body + HaMeR + Face(compact), multistream_bilstm, window 512, v2 labels)
+# with ONE change; TC0 re-trains the reference with the current code so all arms compare to it.
+#   TC1 velocity       per-second, smoothed velocity as 3 extra channels of the body+hands ST-GCN
+#                      (needs: python preprocess_kinematics.py -> processed_data/kinematic_features_v2)
+#   TC2/TC3 HaMeR      the HaMeR stream had no temporal processing: 2 residual temporal-conv blocks
+#                      (17 frames, like the ST-GCN streams); TC3 adds the front-end (6D rotations,
+#                      detected mask, rotation speed over 4 frames = 0.08 s instead of 1, which is
+#                      mostly HaMeR's per-frame jitter)
+#   TC4/TC5 dilation   ST-GCN temporal conv dilated: [1, 2] = 25 frames (0.5 s, same parameters),
+#                      [1, 2, 4] = 57 frames (1.1 s, one more block). Pauses before missed phrase starts
+#                      are ~0.26 s, the current 17-frame field is 0.34 s.
+#   TC6/TC7 attention  RoPE + pre-norm, 5 warmup epochs: Transformer instead of the BiLSTM (the 2026
+#                      Moryossef model's encoder type), and BiLSTM + 1 attention layer
+#   TC8 frame rate     training windows resampled to 25-50 fps (Moryossef 2026: "essential")
+# Best epoch: not forced -- answer the train_phrase.py prompt the same way as for the reference you
+# compare with. Then: evaluate_phrase.py as usual + phrase_stats.py paired bootstrap of each arm vs TC0.
+# ------------------------------------------------------------------------------
+_KIN_V2 = {"kinematic_dir": "processed_data/kinematic_features_v2"}
+_ATTN = {"pos_encoding": "rope", "transformer_norm": "pre", "warmup_epochs": 5}
+TEMPORAL_CONTEXT_STUDY = [
+    {**_MS_BEST, "description": "TC0 ref: B+H+Fc (current code)"},
+    {**_MS_BEST, **_KIN_V2, "kinematic_features": ["velocity"],
+     "description": "TC1: B+H+Fc + velocity channels (v2, per second) in the body+hands ST-GCN"},
+    {**_MS_BEST, "hamer_temporal_kernel": 9, "hamer_temporal_layers": 2,
+     "description": "TC2: B+H+Fc + HaMeR temporal conv, 2 blocks k9"},
+    {**_MS_BEST, "hamer_rep": "rot6d", "hamer_mask": True, "hamer_motion": True, "hamer_motion_lag": 4,
+     "hamer_temporal_kernel": 9, "hamer_temporal_layers": 2,
+     "description": "TC3: B+H+Fc + HaMeR front-end (rot6d + mask + speed lag 4) + temporal conv 2 x k9"},
+    {**_MS_BEST, "stgcn_temporal_dilations": [1, 2],
+     "description": "TC4: B+H+Fc, ST-GCN temporal dilations [1, 2] (25 frames)"},
+    {**_MS_BEST, "stgcn_temporal_dilations": [1, 2, 4],
+     "description": "TC5: B+H+Fc, ST-GCN temporal dilations [1, 2, 4] (57 frames)"},
+    {**_MS_BEST, **_ATTN, "basename": "multistream_transformer",
+     "description": "TC6: B+H+Fc, Transformer encoder (4 layers, RoPE, pre-norm, warmup 5)"},
+    {**_MS_BEST, **_ATTN, "basename": "multistream_bilstm_attn", "attn_layers": 1,
+     "description": "TC7: B+H+Fc, BiLSTM + 1 attention layer (RoPE, pre-norm, warmup 5)"},
+    {**_MS_BEST, "fps_augment_range": [0.5, 1.0], "fps_augment_p": 1.0,
+     "description": "TC8: B+H+Fc + frame-rate augmentation 25-50 fps"},
+]
+# Optional control for TC5 (is it the longer field or the extra block?): 3 undilated blocks
+# TEMPORAL_CONTEXT_STUDY.append({**_MS_BEST, "stgcn_temporal_dilations": [1, 1, 1],
+#                                "description": "TC5c: B+H+Fc, 3 ST-GCN blocks, no dilation (25 frames)"})
+
 # What runs now (earlier studies above are already trained). First batch of the C/A/B plan:
 # the new reference R0, the gold-sign tempo upper bound (A1) and the four auxiliary arms (B1-B4).
 # Give every entry 3 seeds when asked ("all"). Next: TEMPO_STUDY_A2 (if A1-full > A1-pos), then
@@ -867,7 +926,11 @@ FUSION_OPTIONAL = [{**a, "force_selection_metric": None} for a in fusion_optiona
 # EXPERIMENTS_TO_RUN = TEMPO_STUDY_A2_SOURCES   # fourth batch (A2 dropped 2026-11-04)
 # Fifth batch (2026-11-04): fusion study. First pass: press Enter at the seed prompt (1 seed each,
 # 6 runs); then re-queue the arms worth it with "all" (3 seeds).
-EXPERIMENTS_TO_RUN = FUSION_STUDY
+# EXPERIMENTS_TO_RUN = FUSION_STUDY
+# Sixth batch (2026-11-06): temporal-context study. First pass: Enter at the seed prompt (1 seed each,
+# 9 runs: multistream_bilstm, multistream_transformer, multistream_bilstm_attn get their own prefixes);
+# then re-queue the arms that move boundary F1 with 3 seeds.
+EXPERIMENTS_TO_RUN = TEMPORAL_CONTEXT_STUDY
 # EXPERIMENTS_TO_RUN = [{**_MS_BEST, "force_selection_metric": None,
 #                        "description": "MS best: Body + HaMeR + Face(compact), no count loss"}]   # metric asked at training
 # then, after extracting the clean features: EXPERIMENTS_TO_RUN = TEMPO_STUDY_A2_CLEAN  (3 seeds: "all")

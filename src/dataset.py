@@ -11,6 +11,8 @@ from src.aux_labels import IGNORE as AUX_IGNORE, apply_label_map
 from src.frontend import dominant_wrist, mirror_graph_tv, mirror_hamer, face_mirror_perm, L_WRIST, R_WRIST
 
 CUE_DEFAULT_DIR = "processed_data/cue_features"
+KINEMATIC_DEFAULT_DIR = "processed_data/kinematic_features"     # version 1 (per-frame derivatives)
+DERIVATIVE_FEATURES = ("velocity", "acceleration", "jerk", "velocity-mag", "angular-vel", "temporal_angles")
 
 
 def extra_dataset_kwargs(config):
@@ -20,8 +22,15 @@ def extra_dataset_kwargs(config):
     and the handedness options. mirror_augment_p only acts on the train split.
     The auxiliary labels of Idea B (aux_label_dir / aux_tasks) are only LOADED for the train
     split (or with force_aux=True, aux_head_eval.py), so validation / evaluation data is unchanged.
+    kinematic_dir: where positions / derivatives are read from (v2 = preprocess_kinematics.py,
+    per-second derivatives). fps_augment_range / fps_augment_p: frame-rate augmentation, train
+    split only (see fps_resample_indices).
     """
-    return {"use_cue_features": bool(config.get("use_cue_features", False)),
+    fps_range = config.get("fps_augment_range")
+    return {"kinematic_dir": config.get("kinematic_dir", KINEMATIC_DEFAULT_DIR),
+            "fps_augment_range": tuple(fps_range) if fps_range else None,
+            "fps_augment_p": float(config.get("fps_augment_p", 1.0 if fps_range else 0.0)),
+            "use_cue_features": bool(config.get("use_cue_features", False)),
             "cue_dir": config.get("cue_dir", CUE_DEFAULT_DIR),
             "cue_set": config.get("cue_set", "selected"),
             "hand_canonicalize": bool(config.get("hand_canonicalize", False)),
@@ -102,8 +111,52 @@ def downsample_labels(labels, k):
     return sub
 
 
+def fps_resample_indices(num_frames, start, length, rate):
+    """
+    Frame-rate augmentation: source frames for one training window resampled to `rate` x the
+    native frame rate (rate in (0, 1]; 0.5 = 50 -> 25 fps). Output frame j is source frame
+    s + floor(j / rate), so `length` output frames cover length / rate source frames: the window
+    sees more seconds of signing, every movement looks faster, and the model's fixed temporal
+    kernels cover more time. The span is shifted back if it would run past the video's end;
+    a video shorter than the span gives fewer frames (the caller pads, as for short videos).
+    Returns (idx int64 array, end) -- end = exclusive end of the last output frame's source group.
+    """
+    rate = float(rate)
+    if not 0.0 < rate <= 1.0:
+        raise ValueError(f"fps augmentation rate must be in (0, 1], got {rate}.")
+    step = 1.0 / rate
+    span = int(np.ceil(length * step))
+    if span >= num_frames:
+        start, n = 0, int(np.ceil(num_frames / step))
+    else:
+        start, n = min(int(start), num_frames - span), int(length)
+    idx = start + np.floor(np.arange(n) * step).astype(np.int64)
+    idx = idx[idx < num_frames]
+    end = min(num_frames, int(idx[-1]) + int(np.ceil(step)))
+    return idx, end
+
+
+def resample_soft_labels(soft, idx, end):
+    """
+    Soft labels (T, 3) at the source frames idx (strictly increasing) -> (len(idx), 3), keeping
+    every phrase START: output frame j stands for source frames [idx[j], idx[j + 1]) (the last one
+    up to `end`); if any of them is B, frame j becomes B with that B's probability (O / I rescaled),
+    exactly like downsample_labels does for an integer factor.
+    """
+    rows = np.asarray(soft)[idx].astype(np.float32).copy()
+    b = np.asarray(soft)[idx[0]:end, 2]
+    bmax = np.maximum.reduceat(b, idx - idx[0])
+    upd = bmax > rows[:, 2]
+    if upd.any():
+        rest = rows[upd, :2]
+        tot = np.clip(rest.sum(axis=1, keepdims=True), 1e-8, None)
+        rows[upd, :2] = rest / tot * (1.0 - bmax[upd, None])
+        rows[upd, 2] = bmax[upd]
+    return rows
+
+
 class SignSegmentationDataset(Dataset):
-    def __init__(self, keypoints_dir, labels_dir, split_file="dataset_splits.json", split="train", window_size=16, overlap=0, tolerance_window=1, use_full_length=False, base_features=None, kinematic_features=None, temporal_downsample_factor=1, use_face_keypoints=False, face_dir="processed_data/face_keypoints_normalized_v2", face_subset="full", face_only=False, face_dims=2, use_hamer_features=False, hamer_dir="processed_data/hamer_features", use_dinov2_features=False, dinov2_dir="processed_data/dinov2_features", use_cue_features=False, cue_dir=CUE_DEFAULT_DIR, cue_set="selected", hand_canonicalize=False, mirror_augment_p=0.0, face_layout="saved83", train_fraction=1.0, soft_label_dir=None, aux_label_dir=None, aux_tasks=(), aux_label_map=None, force_aux=False):
+    def __init__(self, keypoints_dir, labels_dir, split_file="dataset_splits.json", split="train", window_size=16, overlap=0, tolerance_window=1, use_full_length=False, base_features=None, kinematic_features=None, temporal_downsample_factor=1, use_face_keypoints=False, face_dir="processed_data/face_keypoints_normalized_v2", face_subset="full", face_only=False, face_dims=2, use_hamer_features=False, hamer_dir="processed_data/hamer_features", use_dinov2_features=False, dinov2_dir="processed_data/dinov2_features", use_cue_features=False, cue_dir=CUE_DEFAULT_DIR, cue_set="selected", hand_canonicalize=False, mirror_augment_p=0.0, face_layout="saved83", train_fraction=1.0, soft_label_dir=None, aux_label_dir=None, aux_tasks=(), aux_label_map=None, force_aux=False, kinematic_dir=KINEMATIC_DEFAULT_DIR, fps_augment_range=None, fps_augment_p=0.0):
         self.labels_dir = labels_dir
         # Idea B auxiliary targets (data_processing/make_aux_labels.py): per-video <dir>/<vid>.npz
         # with one (T,) int8 array per task. Loaded only for the TRAIN split (like soft_label_dir)
@@ -119,7 +172,20 @@ class SignSegmentationDataset(Dataset):
         # targets. 'hard_labels' (evaluation) always stay the gold labels from labels_dir.
         self.soft_label_dir = soft_label_dir
         self.soft_label_missing = []
-        self.kinetic_dir = "processed_data/kinematic_features" 
+        self.kinetic_dir = kinematic_dir or KINEMATIC_DEFAULT_DIR
+        # FRAME-RATE AUGMENTATION (train split, windowed training only): with probability
+        # fps_augment_p each window is resampled to rate ~ U(fps_augment_range) x the native frame
+        # rate (e.g. (0.5, 1.0) = 25-50 fps from 50 fps video), see fps_resample_indices().
+        # Validation / evaluation always see the native frame rate.
+        self.fps_augment_range = None
+        self.fps_augment_p = 0.0
+        if fps_augment_range and split == "train" and float(fps_augment_p) > 0:
+            lo, hi = (float(v) for v in fps_augment_range)
+            if not 0.0 < lo <= hi <= 1.0:
+                raise ValueError(f"fps_augment_range must satisfy 0 < low <= high <= 1, got {fps_augment_range}.")
+            if use_full_length:
+                raise ValueError("fps_augment_range is implemented for windowed training only (not use_full_length).")
+            self.fps_augment_range, self.fps_augment_p = (lo, hi), float(fps_augment_p)
         self.split_file = split_file
         self.split = split
         self.window_size = window_size
@@ -366,6 +432,16 @@ class SignSegmentationDataset(Dataset):
                 skip_counts["kinetic_load_error"] += 1
                 skipped_videos.setdefault("kinetic_load_error", []).append((vid, None))
                 continue
+            if (self.fps_augment_range and not getattr(self, "_kin_units_checked", False)
+                    and any(f in DERIVATIVE_FEATURES for f in self.kinematic_features)):
+                units = (kin_data.get("meta") or {}).get("units", "per_frame")
+                if units != "per_second":
+                    raise ValueError(
+                        f"Frame-rate augmentation with {self.kinematic_features}: the derivatives in "
+                        f"{self.kinetic_dir} are '{units}', so they would be wrong after resampling. Use "
+                        f"per-second derivatives (python preprocess_kinematics.py -> kinematic_dir "
+                        f"'processed_data/kinematic_features_v2').")
+                self._kin_units_checked = True
 
             if self.pure_hamer:
                 final_tensor = None  # filled from the HaMeR stream below
@@ -629,6 +705,11 @@ class SignSegmentationDataset(Dataset):
                   f"videos mirrored (dominant hand moved to MediaPipe 'right')")
         if self.mirror_augment_p > 0:
             print(f"[{split.upper()}] mirror augmentation: p = {self.mirror_augment_p}")
+        if self.fps_augment_range is not None:
+            print(f"[{split.upper()}] frame-rate augmentation: p = {self.fps_augment_p}, rate "
+                  f"{self.fps_augment_range[0]:g}-{self.fps_augment_range[1]:g} x native")
+        if self.kinetic_dir != KINEMATIC_DEFAULT_DIR:
+            print(f"[{split.upper()}] kinematics from {self.kinetic_dir}")
         total_attempted = len(self.video_ids)
         total_cached = len(self.video_cache)
         if total_cached < total_attempted:
@@ -685,29 +766,45 @@ class SignSegmentationDataset(Dataset):
         
         # --- ⚡ 0-LATENCY MEMORY SLICE ⚡ ---
         cached_data = self.video_cache[vid]
-        
+
+        # Which frames: the plain window, or (frame-rate augmentation, train only) frames of a
+        # longer span resampled to a lower rate. `sel` indexes every per-frame stream the same way.
+        sel = slice(start_idx, end_idx)
+        fps_idx = None
+        if (self.fps_augment_range is not None and not self.use_full_length
+                and torch.rand(1).item() < self.fps_augment_p):
+            lo, hi = self.fps_augment_range
+            rate = lo + (hi - lo) * torch.rand(1).item()
+            if rate < 1.0:
+                fps_idx, fps_end = fps_resample_indices(len(cached_data['hard_labels']), start_idx,
+                                                        end_idx - start_idx, rate)
+                sel = torch.from_numpy(fps_idx)
+
         # Instantly slice the data and restore to FP32 for PyTorch's mathematical operations
         # keep_half (set by train_phrase.py for chunked full-video batches): stay float16 until the GPU
         feat_dtype = torch.float16 if getattr(self, 'keep_half', False) else torch.float32
-        window_features = cached_data['features'][start_idx:end_idx].to(feat_dtype)
-        window_labels = cached_data['labels'][start_idx:end_idx]
-        
+        window_features = cached_data['features'][sel].to(feat_dtype)
+        if fps_idx is None:
+            window_labels = cached_data['labels'][start_idx:end_idx]
+        else:
+            window_labels = resample_soft_labels(cached_data['labels'], fps_idx, fps_end)
+
         final_input_tensor = window_features.permute(2, 0, 1)
         labels_tensor = torch.tensor(window_labels, dtype=torch.float32).permute(1, 0)
 
         if self.use_hamer_features:
-            window_hamer = cached_data['hamer_features'][start_idx:end_idx].to(feat_dtype)  # (T_win, 288)
+            window_hamer = cached_data['hamer_features'][sel].to(feat_dtype)  # (T_win, 288)
             hamer_tensor = window_hamer.permute(1, 0)  # (288, T_win) -- channel-first, matches final_input_tensor's convention
 
         if self.use_dinov2_features:
-            window_dinov2 = cached_data['dinov2_features'][start_idx:end_idx].to(torch.float32)  # (T_win, 2*D)
+            window_dinov2 = cached_data['dinov2_features'][sel].to(torch.float32)  # (T_win, 2*D)
             dinov2_tensor = window_dinov2.permute(1, 0)  # (2*D, T_win) -- channel-first
 
         if self.use_cue_features:
-            cue_tensor = cached_data['cue_features'][start_idx:end_idx].to(torch.float32).permute(1, 0)  # (C, T_win)
+            cue_tensor = cached_data['cue_features'][sel].to(torch.float32).permute(1, 0)  # (C, T_win)
 
         if self.use_aux:
-            aux_tensor = cached_data['aux_labels'][:, start_idx:end_idx].to(torch.int64)  # (n_tasks, T_win)
+            aux_tensor = cached_data['aux_labels'][:, sel].to(torch.int64)  # (n_tasks, T_win)
 
         # Mirror augmentation (train split only). The cue stream is dominant/non-dominant
         # based and left/right symmetric, so it needs no change.

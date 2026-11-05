@@ -201,13 +201,15 @@ class HaMeRFrontEnd(nn.Module):
 
 
 class TemporalResidual(nn.Module):
-    """h + Dropout(GELU(Conv1d_k(LN(h)))) over time; (B, T, D) -> (B, T, D)."""
+    """h + Dropout(GELU(Conv1d_k(LN(h)))) over time; (B, T, D) -> (B, T, D).
+    dilation d > 1: taps d frames apart, (k - 1) * d + 1 frames seen (d = 1 = original)."""
 
-    def __init__(self, dim, kernel, dropout):
+    def __init__(self, dim, kernel, dropout, dilation=1):
         super().__init__()
         k = int(kernel) | 1
+        d = int(dilation)
         self.norm = nn.LayerNorm(dim)
-        self.conv = nn.Conv1d(dim, dim, k, padding=k // 2)
+        self.conv = nn.Conv1d(dim, dim, k, padding=d * (k // 2), dilation=d)
         self.act = nn.GELU()
         self.drop = nn.Dropout(dropout)
 
