@@ -242,6 +242,15 @@ def build_model_kwargs(config, detected_hamer_dim=None, detected_dinov2_dim=None
             model_kwargs["aux_heads"] = {t: {"stream": spec["stream"], "classes": int(spec["classes"])}
                                          for t, spec in config["aux_heads"].items()}
             model_kwargs["aux_temporal_kernel"] = int(config.get("aux_temporal_kernel", 9))
+        # Sign head (SIGN_HEAD_STUDY): only passed when on, so older configs rebuild unchanged
+        if config.get("sign_head"):
+            model_kwargs["sign_head"] = True
+            for key in ("sign_cascade", "sign_cascade_detach", "sign_cascade_dim", "sign_level",
+                        "sign_level_pred_p", "sign_level_tol", "sign_level_min_dist", "sign_level_pos_weight"):
+                if config.get(key) is not None:
+                    model_kwargs[key] = config[key]
+        elif config.get("sign_cascade") or config.get("sign_level"):
+            raise ValueError("sign_cascade / sign_level need sign_head: true.")
         if config.get("film_cue_names"):
             if not streams["use_stream_cues"]:
                 raise ValueError("film_cue_names needs use_stream_cues=True.")
@@ -273,6 +282,8 @@ def build_model_kwargs(config, detected_hamer_dim=None, detected_dinov2_dim=None
             model_kwargs["transformer_norm"] = config.get("transformer_norm", "post")
             model_kwargs["rope_base"] = float(config.get("rope_base", 10000.0))
 
+    if model_name not in MULTISTREAM_MODELS and config.get("sign_head"):
+        raise ValueError(f"sign_head is implemented for multistream models only, not '{model_name}'.")
     if model_name not in MULTISTREAM_MODELS and (config.get("aux_heads") or config.get("film_cue_names")):
         raise ValueError(f"aux_heads / film_cue_names are implemented for multistream models only, not '{model_name}'.")
 

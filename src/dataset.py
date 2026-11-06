@@ -12,6 +12,7 @@ from src.frontend import dominant_wrist, mirror_graph_tv, mirror_hamer, face_mir
 
 CUE_DEFAULT_DIR = "processed_data/cue_features"
 KINEMATIC_DEFAULT_DIR = "processed_data/kinematic_features"     # version 1 (per-frame derivatives)
+SIGN_LABELS_DEFAULT_DIR = "processed_data/BIO_tags"              # sign-level BIO (0 O, 1 I, 2 B), same frames
 DERIVATIVE_FEATURES = ("velocity", "acceleration", "jerk", "velocity-mag", "angular-vel", "temporal_angles")
 
 
@@ -28,6 +29,9 @@ def extra_dataset_kwargs(config):
     """
     fps_range = config.get("fps_augment_range")
     return {"kinematic_dir": config.get("kinematic_dir", KINEMATIC_DEFAULT_DIR),
+            # sign-level targets for the sign head (train split only, like the auxiliary labels)
+            "sign_labels_dir": (config.get("sign_labels_dir", SIGN_LABELS_DEFAULT_DIR)
+                                if config.get("sign_head") else None),
             "fps_augment_range": tuple(fps_range) if fps_range else None,
             "fps_augment_p": float(config.get("fps_augment_p", 1.0 if fps_range else 0.0)),
             "use_cue_features": bool(config.get("use_cue_features", False)),
@@ -155,9 +159,39 @@ def resample_soft_labels(soft, idx, end):
     return rows
 
 
+def resample_hard_labels(lab, idx, end):
+    """Hard BIO labels (T,) at the source frames idx -> (len(idx),); like resample_soft_labels, an
+    output frame is B if any of the source frames it stands for is B (no sign start is lost)."""
+    lab = np.asarray(lab)
+    out = lab[idx].astype(np.int64).copy()
+    b = (lab[idx[0]:end] == 2).astype(np.int8)
+    out[np.maximum.reduceat(b, idx - idx[0]) > 0] = 2
+    return out
+
+
+def downsample_hard_labels(t, k):
+    """(T,) int64 tensor -> every k-th frame, B kept if any frame of its group is B."""
+    if k <= 1:
+        return t
+    out = t[::k].clone()
+    T = t.shape[0]
+    pad = (-T) % k
+    tp = torch.cat([t, torch.zeros(pad, dtype=t.dtype)]) if pad else t
+    has_b = (tp.view(-1, k) == 2).any(dim=1)[:out.shape[0]]
+    out[has_b] = 2
+    return out
+
+
 class SignSegmentationDataset(Dataset):
-    def __init__(self, keypoints_dir, labels_dir, split_file="dataset_splits.json", split="train", window_size=16, overlap=0, tolerance_window=1, use_full_length=False, base_features=None, kinematic_features=None, temporal_downsample_factor=1, use_face_keypoints=False, face_dir="processed_data/face_keypoints_normalized_v2", face_subset="full", face_only=False, face_dims=2, use_hamer_features=False, hamer_dir="processed_data/hamer_features", use_dinov2_features=False, dinov2_dir="processed_data/dinov2_features", use_cue_features=False, cue_dir=CUE_DEFAULT_DIR, cue_set="selected", hand_canonicalize=False, mirror_augment_p=0.0, face_layout="saved83", train_fraction=1.0, soft_label_dir=None, aux_label_dir=None, aux_tasks=(), aux_label_map=None, force_aux=False, kinematic_dir=KINEMATIC_DEFAULT_DIR, fps_augment_range=None, fps_augment_p=0.0):
+    def __init__(self, keypoints_dir, labels_dir, split_file="dataset_splits.json", split="train", window_size=16, overlap=0, tolerance_window=1, use_full_length=False, base_features=None, kinematic_features=None, temporal_downsample_factor=1, use_face_keypoints=False, face_dir="processed_data/face_keypoints_normalized_v2", face_subset="full", face_only=False, face_dims=2, use_hamer_features=False, hamer_dir="processed_data/hamer_features", use_dinov2_features=False, dinov2_dir="processed_data/dinov2_features", use_cue_features=False, cue_dir=CUE_DEFAULT_DIR, cue_set="selected", hand_canonicalize=False, mirror_augment_p=0.0, face_layout="saved83", train_fraction=1.0, soft_label_dir=None, aux_label_dir=None, aux_tasks=(), aux_label_map=None, force_aux=False, kinematic_dir=KINEMATIC_DEFAULT_DIR, fps_augment_range=None, fps_augment_p=0.0, sign_labels_dir=None, force_sign=False):
         self.labels_dir = labels_dir
+        # SIGN HEAD targets: per-frame sign BIO from sign_labels_dir, loaded for the train split only
+        # (or force_sign=True); returned as the LAST extra (after the auxiliary targets), -100 where
+        # missing or padded. sign_class_counts = train frames per class (for the loss weights).
+        self.sign_labels_dir = sign_labels_dir
+        self.use_sign = bool(sign_labels_dir) and (split == "train" or force_sign)
+        self.sign_class_counts = np.zeros(3, dtype=np.int64)
+        self.sign_missing = []
         # Idea B auxiliary targets (data_processing/make_aux_labels.py): per-video <dir>/<vid>.npz
         # with one (T,) int8 array per task. Loaded only for the TRAIN split (like soft_label_dir)
         # unless force_aux=True (aux_head_eval.py); returned as the LAST extra, (n_tasks, T) int64,
@@ -405,6 +439,21 @@ class SignSegmentationDataset(Dataset):
                         self.soft_label_missing.append((vid, f"shape {soft.shape} != ({num_frames}, 3)"))
                 else:
                     self.soft_label_missing.append((vid, "file missing"))
+
+            sign_arr = None
+            if self.use_sign:
+                sp_ = os.path.join(self.sign_labels_dir, f"{vid}.npy")
+                sign_arr = np.full(num_frames, AUX_IGNORE, dtype=np.int8)
+                if os.path.exists(sp_):
+                    sl = np.load(sp_).astype(np.int8)
+                    if len(sl) == num_frames:
+                        sign_arr = sl
+                    else:                       # off by a few frames: crop / pad with ignore
+                        n = min(len(sl), num_frames)
+                        sign_arr[:n] = sl[:n]
+                        self.sign_missing.append((vid, f"{len(sl)} != {num_frames} frames"))
+                else:
+                    self.sign_missing.append((vid, "file missing"))
 
             aux_arr = None
             if self.use_aux:
@@ -671,6 +720,9 @@ class SignSegmentationDataset(Dataset):
                 self.video_cache[vid]['cue_features'] = cue_full
             if self.use_aux:
                 self.video_cache[vid]['aux_labels'] = torch.from_numpy(aux_arr)
+            if self.use_sign:
+                self.video_cache[vid]['sign_labels'] = torch.from_numpy(sign_arr)
+                self.sign_class_counts += np.bincount(sign_arr[sign_arr >= 0].astype(np.int64), minlength=3)[:3]
             
             # Map out the windows only for videos successfully loaded
             self.samples.append({'video_id': vid, 'start_idx': 0, 'end_idx': num_frames})
@@ -700,6 +752,13 @@ class SignSegmentationDataset(Dataset):
             if n_bad > 0.05 * max(1, len(self.video_cache)):
                 raise RuntimeError(f"{n_bad} of {len(self.video_cache)} videos have no usable auxiliary labels in "
                                    f"{self.aux_label_dir} -- run data_processing/make_aux_labels.py first.")
+        if self.use_sign:
+            n_bad = len({v for v, r in self.sign_missing if v in self.video_cache and r == "file missing"})
+            print(f"[{split.upper()}] sign labels from {self.sign_labels_dir}: {len(self.video_cache) - n_bad}/"
+                  f"{len(self.video_cache)} videos, train frames O/I/B = {self.sign_class_counts.tolist()}"
+                  + (f" -- {len(self.sign_missing)} with problems, e.g. {self.sign_missing[:3]}" if self.sign_missing else ""))
+            if n_bad > 0.05 * max(1, len(self.video_cache)):
+                raise RuntimeError(f"{n_bad} of {len(self.video_cache)} videos have no sign labels in {self.sign_labels_dir}.")
         if self.hand_canonicalize:
             print(f"[{split.upper()}] hand canonicalization: {len(self.mirrored_videos)}/{len(self.video_cache)} "
                   f"videos mirrored (dominant hand moved to MediaPipe 'right')")
@@ -806,6 +865,13 @@ class SignSegmentationDataset(Dataset):
         if self.use_aux:
             aux_tensor = cached_data['aux_labels'][:, sel].to(torch.int64)  # (n_tasks, T_win)
 
+        if self.use_sign:
+            if fps_idx is None:
+                sign_tensor = cached_data['sign_labels'][start_idx:end_idx].to(torch.int64)
+            else:
+                sign_tensor = torch.from_numpy(resample_hard_labels(cached_data['sign_labels'].numpy(),
+                                                                    fps_idx, fps_end))
+
         # Mirror augmentation (train split only). The cue stream is dominant/non-dominant
         # based and left/right symmetric, so it needs no change.
         if self.mirror_augment_p > 0 and torch.rand(1).item() < self.mirror_augment_p:
@@ -826,6 +892,8 @@ class SignSegmentationDataset(Dataset):
                 cue_tensor = cue_tensor[:, ::self.temporal_downsample_factor]
             if self.use_aux:
                 aux_tensor = aux_tensor[:, ::self.temporal_downsample_factor]
+            if self.use_sign:
+                sign_tensor = downsample_hard_labels(sign_tensor, self.temporal_downsample_factor)
             
         if not self.use_full_length:
             C, T, V = final_input_tensor.shape
@@ -855,6 +923,9 @@ class SignSegmentationDataset(Dataset):
                 if self.use_aux:
                     aux_pad = torch.full((aux_tensor.shape[0], pad_T), AUX_IGNORE, dtype=torch.int64)
                     aux_tensor = torch.cat([aux_tensor, aux_pad], dim=1)
+
+                if self.use_sign:
+                    sign_tensor = torch.cat([sign_tensor, torch.full((pad_T,), AUX_IGNORE, dtype=torch.int64)])
                 
         start_scaled = start_idx // self.temporal_downsample_factor
         end_scaled = end_idx // self.temporal_downsample_factor
@@ -872,5 +943,7 @@ class SignSegmentationDataset(Dataset):
             extras.append(cue_tensor)   # always LAST among the optional streams
         if self.use_aux:
             extras.append(aux_tensor)   # auxiliary TARGETS (train split only): after every input stream
+        if self.use_sign:
+            extras.append(sign_tensor)  # sign BIO targets (train split only): the very last extra
 
         return (final_input_tensor, labels_tensor, *extras, vid, start_scaled, end_scaled)

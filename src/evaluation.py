@@ -65,11 +65,11 @@ def _prepare_window(tensor_tv, start, end, k, target_T, is_graph):
 
 
 @torch.no_grad()
-def predict_video_probs(model, config, cached, device, batch_size=16):
+def predict_video_probs(model, config, cached, device, batch_size=16, with_sign=False):
     """
     cached: one entry of SignSegmentationDataset.video_cache.
     Returns a (3, num_frames) numpy array of stitched softmax probabilities (O, I, B)
-    at the RAW frame rate.
+    at the RAW frame rate. with_sign=True (models with a sign head): returns (phrase, sign) arrays.
     """
     window_size = config["window_size"]
     overlap = config.get("overlap", 0)
@@ -89,6 +89,7 @@ def predict_video_probs(model, config, cached, device, batch_size=16):
         # of thousands of padding frames through the backward LSTM before the content.
         target_T = -(-num_frames // k)
     prob_sum = np.zeros((3, num_frames), dtype=np.float64)
+    sign_sum = np.zeros((3, num_frames), dtype=np.float64) if with_sign else None
     counts = np.zeros(num_frames, dtype=np.float64)
 
     for b0 in range(0, len(windows), batch_size):
@@ -111,18 +112,24 @@ def predict_video_probs(model, config, cached, device, batch_size=16):
 
         logits = call_model(model, config, feats, hamer, dinov2, cues)        # (B, 3, T_model)
         probs = F.softmax(logits.float(), dim=1).cpu().numpy()
+        sprobs = (F.softmax(model._sign_logits.float(), dim=1).cpu().numpy() if with_sign
+                  else [None] * len(probs))
 
-        for (s, e), p in zip(batch_windows, probs):
+        for (s, e), p, sp in zip(batch_windows, probs, sprobs):
             raw_len = e - s
-            if k > 1:
-                p = np.repeat(p, k, axis=1)                              # back to raw frame rate
-            if p.shape[1] < raw_len:                                     # window not a multiple of k
-                p = np.concatenate([p, np.repeat(p[:, -1:], raw_len - p.shape[1], axis=1)], axis=1)
-            p = p[:, :raw_len]                                           # drop padding
-            prob_sum[:, s:e] += p
+            for arr, acc in ((p, prob_sum), (sp, sign_sum)):
+                if arr is None:
+                    continue
+                if k > 1:
+                    arr = np.repeat(arr, k, axis=1)                      # back to raw frame rate
+                if arr.shape[1] < raw_len:                               # window not a multiple of k
+                    arr = np.concatenate([arr, np.repeat(arr[:, -1:], raw_len - arr.shape[1], axis=1)], axis=1)
+                acc[:, s:e] += arr[:, :raw_len]                          # drop padding
             counts[s:e] += 1.0
 
     counts[counts == 0] = 1.0
+    if with_sign:
+        return (prob_sum / counts).astype(np.float32), (sign_sum / counts).astype(np.float32)
     return (prob_sum / counts).astype(np.float32)
 
 

@@ -132,6 +132,17 @@ MAMBA_DEFAULTS = {
     "fps_augment_p": 1.0,
     # Linear LR warmup (epochs) before the cosine schedule; 0 = off (attention encoders: ~5)
     "warmup_epochs": 0,
+    # Sign head (SIGN_HEAD_STUDY, src/sign_cascade.py): sign O/I/B on the encoder output, trained on
+    # sign_labels_dir (train split only). Off = the original model and loss.
+    "sign_head": False,
+    "sign_labels_dir": "processed_data/BIO_tags",
+    "sign_loss_weight": 0.5,
+    "sign_class_weights": "inv_sqrt",
+    "sign_cascade": None,            # None | "probs" | "tempo": what the phrase classifier reads from the sign head
+    "sign_cascade_detach": False,    # True: no phrase-loss gradient into the sign head through the cascade
+    "sign_level": False,             # phrase starts decided per predicted sign (BiLSTM over the signs)
+    "sign_level_pred_p": 0.0,        # training: prob. of using PREDICTED sign starts instead of gold ones
+    "sign_level_loss_weight": 1.0,
     # Training only: zero each stream of each sample with this probability
     "stream_dropout": 0.0,
     # Change-point layer after fusion: future-minus-past feature differences at these
@@ -884,6 +895,49 @@ TEMPORAL_CONTEXT_STUDY = [
 # TEMPORAL_CONTEXT_STUDY.append({**_MS_BEST, "stgcn_temporal_dilations": [1, 1, 1],
 #                                "description": "TC5c: B+H+Fc, 3 ST-GCN blocks, no dilation (25 frames)"})
 
+# ------------------------------------------------------------------------------
+# SIGN-HEAD STUDY (2026-11-07). Error analysis: phrase errors are mostly about WHERE starts go, and gold
+# sign timing / identity add information the video model lacks. Every arm = the best model + a sign
+# O/I/B head on the encoder output (processed_data/BIO_tags, train split); ONE more change per arm.
+# Reference: TC0 (multistream_bilstm-347) is the same model without the sign head and the same code.
+#   SH1a/b   sign head only (shared encoder), lambda 0.5 / 1.0                         (idea 1)
+#   SH2/SH3  cascade: phrase classifier also reads the sign probabilities (k=9 temporal conv);
+#            SH3 detached (the phrase loss does not train the sign head through this path)  (idea 3)
+#   SH4/SH5  cascade with soft pause features from the sign head (pause before each frame, relative
+#            to the window's typical pause and to the largest pause within +-1 s); SH5 detached (idea 3)
+#   SH6/SH7  sign-level decoder: one vector per predicted sign, BiLSTM over the signs, "phrase starts
+#            here?" per sign; trained on gold sign starts (SH6) or 50% predicted ones (SH7)   (idea 4)
+#   SH8/SH9  + sign-category head on the encoder output (SH8: 7 classes; SH9: palm-up / pointing /
+#            connective / other) -- the earlier signcat head sat on the HaMeR stream only     (idea 5)
+# Ideas 2 (snap phrase starts to sign starts) and 4-post-hoc need no training: after training,
+#   python evaluate_phrase.py ... --save-predictions        (val + test, as usual)
+#   python evaluate_sign_head.py --prefixes <runs> --splits val test
+#   python sign_decoding_study.py --runs <runs>
+# ------------------------------------------------------------------------------
+_SH = {"sign_head": True, "sign_loss_weight": 0.5}
+_SIGNCAT_SEQ = {**_AUX, "aux_loss_weights": {"signcat": 0.3}}
+SIGN_HEAD_STUDY = [
+    {**_MS_BEST, **_SH, "description": "SH1a: B+H+Fc + sign head (lambda 0.5)"},
+    {**_MS_BEST, **_SH, "sign_loss_weight": 1.0, "description": "SH1b: B+H+Fc + sign head (lambda 1.0)"},
+    {**_MS_BEST, **_SH, "sign_cascade": "probs",
+     "description": "SH2: sign head + cascade (phrase head reads sign probabilities)"},
+    {**_MS_BEST, **_SH, "sign_cascade": "probs", "sign_cascade_detach": True,
+     "description": "SH3: sign head + cascade, detached"},
+    {**_MS_BEST, **_SH, "sign_cascade": "tempo",
+     "description": "SH4: sign head + cascade with soft pause features"},
+    {**_MS_BEST, **_SH, "sign_cascade": "tempo", "sign_cascade_detach": True,
+     "description": "SH5: sign head + cascade with soft pause features, detached"},
+    {**_MS_BEST, **_SH, "sign_level": True, "sign_level_pred_p": 0.0,
+     "description": "SH6: sign head + sign-level decoder (trained on gold sign starts)"},
+    {**_MS_BEST, **_SH, "sign_level": True, "sign_level_pred_p": 0.5,
+     "description": "SH7: sign head + sign-level decoder (50% predicted sign starts in training)"},
+    {**_MS_BEST, **_SH, **_SIGNCAT_SEQ, "aux_heads": {"signcat": {"stream": "sequence", "classes": 7}},
+     "description": "SH8: sign head + sign-category head (7 classes) on the encoder output"},
+    {**_MS_BEST, **_SH, **_SIGNCAT_SEQ, "aux_heads": {"signcat": {"stream": "sequence", "classes": 4}},
+     "aux_label_map": {"signcat": {"3": 0, "4": 0, "5": 0, "6": 3}},
+     "description": "SH9: sign head + palm-up / pointing / connective / other head on the encoder output"},
+]
+
 # What runs now (earlier studies above are already trained). First batch of the C/A/B plan:
 # the new reference R0, the gold-sign tempo upper bound (A1) and the four auxiliary arms (B1-B4).
 # Give every entry 3 seeds when asked ("all"). Next: TEMPO_STUDY_A2 (if A1-full > A1-pos), then
@@ -930,7 +984,10 @@ FUSION_OPTIONAL = [{**a, "force_selection_metric": None} for a in fusion_optiona
 # Sixth batch (2026-11-06): temporal-context study. First pass: Enter at the seed prompt (1 seed each,
 # 9 runs: multistream_bilstm, multistream_transformer, multistream_bilstm_attn get their own prefixes);
 # then re-queue the arms that move boundary F1 with 3 seeds.
-EXPERIMENTS_TO_RUN = TEMPORAL_CONTEXT_STUDY
+# EXPERIMENTS_TO_RUN = TEMPORAL_CONTEXT_STUDY
+# Seventh batch (2026-11-07): sign-head study, 10 runs at 1 seed (Enter at the seed prompt); re-queue
+# the arms that beat TC0 (347) with 3 seeds ("all") before claiming anything.
+EXPERIMENTS_TO_RUN = SIGN_HEAD_STUDY
 # EXPERIMENTS_TO_RUN = [{**_MS_BEST, "force_selection_metric": None,
 #                        "description": "MS best: Body + HaMeR + Face(compact), no count loss"}]   # metric asked at training
 # then, after extracting the clean features: EXPERIMENTS_TO_RUN = TEMPO_STUDY_A2_CLEAN  (3 seeds: "all")

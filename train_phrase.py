@@ -309,6 +309,24 @@ def train_model(config, selection_metric="combined"):
         print(f"🧭 Auxiliary heads: " + ", ".join(
             f"{t} on '{AUX_HEADS[t]['stream']}' ({AUX_HEADS[t]['classes']} classes, lambda={AUX_LAMBDA[t]}, "
             f"weights={AUX_CLASS_W[t]})" for t in AUX_TASKS))
+    # Sign head (SIGN_HEAD_STUDY; src/sign_cascade.py): per-frame sign O/I/B on the encoder output,
+    #   sign_loss_weight         lambda of its cross-entropy (default 0.5)
+    #   sign_class_weights       "inv_sqrt" (from the train sign-frame counts, mean 1) or [w_O, w_I, w_B]
+    #   sign_level_loss_weight   lambda of the sign-level phrase-start BCE (sign_level runs, default 1.0)
+    USE_SIGN = bool(config.get("sign_head"))
+    USE_SIGN_LEVEL = USE_SIGN and bool(config.get("sign_level"))
+    SIGN_LAMBDA = float(config.get("sign_loss_weight", 0.5))
+    SIGN_LEVEL_LAMBDA = float(config.get("sign_level_loss_weight", 1.0))
+    if USE_SIGN:
+        if USE_FULL_LENGTH:
+            raise ValueError("sign_head is implemented for windowed training only (not use_full_length).")
+        if LOSS_FUNCTION in ("bcl", "unified_ctc"):
+            raise ValueError(f"sign_head is not implemented for loss_function '{LOSS_FUNCTION}'.")
+        print(f"🤟 Sign head: lambda={SIGN_LAMBDA}"
+              + (f", cascade={config.get('sign_cascade')} (detach={bool(config.get('sign_cascade_detach'))})"
+                 if config.get("sign_cascade") else "")
+              + (f", sign-level decoder (lambda={SIGN_LEVEL_LAMBDA}, predicted signs in training with "
+                 f"p={config.get('sign_level_pred_p', 0.0)})" if USE_SIGN_LEVEL else ""))
     D_MODEL = config["d_model"]
     N_LAYERS = config["n_layers"]
     FOCAL_LOSS_GAMMA = config.get("focal_loss_gamma", 2.0)
@@ -412,6 +430,17 @@ def train_model(config, selection_metric="combined"):
         config["class_weights_resolved"] = CLASS_WEIGHTS
         with open(os.path.join(exp_dir, "hyperparameters.json"), 'w') as f:
             json.dump(config, f, indent=4)
+    SIGN_W = None
+    if USE_SIGN:
+        cw = config.get("sign_class_weights", "inv_sqrt")
+        if cw == "inv_sqrt":
+            SIGN_W = [round(w, 4) for w in inv_sqrt_weights(train_dataset.sign_class_counts.tolist())]
+        else:
+            SIGN_W = [float(w) for w in cw]
+        config["sign_class_weights_resolved"] = SIGN_W
+        print(f"⚖️  Sign class weights (O/I/B): {SIGN_W}")
+        with open(os.path.join(exp_dir, "hyperparameters.json"), 'w') as f:
+            json.dump(config, f, indent=4)
     GRAD_CLIP = config.get("grad_clip_norm", 1.0)
     # micro_batch_size (full-video batches only): run a batch of full_length_batch_size
     # videos in chunks of this many videos, accumulating gradients -- same update as the
@@ -453,6 +482,7 @@ def train_model(config, selection_metric="combined"):
         model = model_class(**model_kwargs).to(device)
         weights = torch.tensor(CLASS_WEIGHTS, dtype=torch.float).to(device)
         aux_w = {t: torch.tensor(AUX_CLASS_W[t], dtype=torch.float, device=device) for t in AUX_TASKS} if USE_AUX else {}
+        sign_w = torch.tensor(SIGN_W, dtype=torch.float, device=device) if USE_SIGN else None
 
         # Centralizes the "pass hamer/dinov2 or don't" branching in one place instead
         # of repeating it at every model(...) call site below.
@@ -511,8 +541,9 @@ def train_model(config, selection_metric="combined"):
             writer.writerow(['epoch', 'train_loss', 'val_loss', 'frame_f1', 'iou', 'segment_pct',
                              'segment_f1_05', 'combined_score', 'epoch_time', 'epoch_nan_count',
                              'bnd_f1_5']
-                            + (['train_main_loss'] + [f'aux_loss_{t}' for t in AUX_TASKS]
-                               + [f'aux_acc_{t}' for t in AUX_TASKS] if USE_AUX else []))
+                            + (['train_main_loss'] if (USE_AUX or USE_SIGN) else [])
+                            + ([f'aux_loss_{t}' for t in AUX_TASKS] + [f'aux_acc_{t}' for t in AUX_TASKS] if USE_AUX else [])
+                            + (['sign_loss', 'sign_acc'] + (['sign_level_loss'] if USE_SIGN_LEVEL else []) if USE_SIGN else []))
         
         best_combined_score = -1.0
         best_epoch = 0
@@ -542,6 +573,8 @@ def train_model(config, selection_metric="combined"):
             aux_loss_n = {t: 0 for t in AUX_TASKS}
             aux_correct = {t: 0 for t in AUX_TASKS}
             aux_total = {t: 0 for t in AUX_TASKS}
+            sign_loss_sum, sign_n, sign_correct, sign_total = 0.0, 0, 0, 0
+            sl_loss_sum, sl_n = 0.0, 0
             
             loop = tqdm(train_loader, desc=f"Epoch {epoch}/{EPOCHS} [Train]", leave=False)
             # Add the 3 underscores to absorb the vid, start, and end metadata!
@@ -556,7 +589,8 @@ def train_model(config, selection_metric="combined"):
                 hamer = extras.pop(0) if USE_HAMER_FEATURES else None
                 dinov2 = extras.pop(0) if USE_DINOV2_FEATURES else None
                 cues = extras.pop(0) if USE_CUE_FEATURES else None
-                aux = extras.pop(0) if USE_AUX else None      # auxiliary targets: the LAST extra
+                aux = extras.pop(0) if USE_AUX else None      # auxiliary targets
+                sign_t = extras.pop(0) if USE_SIGN else None  # sign BIO targets: the LAST extra
                 if USE_MICRO:   # full-video batch: stays on the CPU, one video at a time on the GPU
                     optimizer.zero_grad()
                     acc = accumulated_ce(call_model, features, labels, hamer, dinov2, cues,
@@ -603,6 +637,9 @@ def train_model(config, selection_metric="combined"):
                     hard_labels = mask_padding(torch.argmax(labels, dim=1), labels)
                     loss, _, _ = criterion(logits, hard_labels)
                 else:
+                    if USE_SIGN_LEVEL:   # the sign-level decoder needs the gold starts of this batch
+                        model.set_targets(phrase=mask_padding(torch.argmax(labels, dim=1), labels),
+                                          sign=sign_t.to(device))
                     # Depending on the model, it might return (logits, embeddings) or just logits
                     output = call_model(features, hamer, dinov2, cues)
                     logits = output[0] if isinstance(output, tuple) else output
@@ -624,8 +661,27 @@ def train_model(config, selection_metric="combined"):
                                                            tau=COUNT_LOSS_TAU, mode=COUNT_LOSS_MODE)
                             return criterion(lg, mask_padding(torch.argmax(labels, dim=1), labels))
                         loss = loss + model.extra_loss(_same_loss)
-                    if USE_AUX:
+                    if USE_AUX or USE_SIGN:
                         main_loss_value = loss.item()
+                    if USE_SIGN:
+                        st = sign_t.to(device)
+                        sl = model._sign_logits.float()
+                        ls = F.cross_entropy(sl, st, weight=sign_w, ignore_index=-100)
+                        if torch.isfinite(ls):                # NaN when the window has no labelled frame
+                            loss = loss + SIGN_LAMBDA * ls
+                            sign_loss_sum += ls.item()
+                            sign_n += 1
+                        with torch.no_grad():
+                            m = st != -100
+                            sign_correct += int((sl.argmax(1)[m] == st[m]).sum())
+                            sign_total += int(m.sum())
+                        if USE_SIGN_LEVEL and "sign_level" in model._extra_losses:
+                            lsl = model._extra_losses["sign_level"]
+                            if torch.isfinite(lsl):
+                                loss = loss + SIGN_LEVEL_LAMBDA * lsl
+                                sl_loss_sum += lsl.item()
+                                sl_n += 1
+                    if USE_AUX:
                         aux = aux.to(device)
                         for j, task in enumerate(AUX_TASKS):
                             aux_lg = model._aux_logits[task].float()
@@ -658,7 +714,7 @@ def train_model(config, selection_metric="combined"):
                 
                 train_loss += loss.item()
                 valid_batches += 1
-                if USE_AUX:
+                if USE_AUX or USE_SIGN:
                     main_loss_sum += main_loss_value
                 loop.set_postfix(loss=loss.item(), nans=epoch_nan_count)
 
@@ -805,6 +861,8 @@ def train_model(config, selection_metric="combined"):
                   f"Time: {epoch_duration}s{nan_string}" + (" 🌟 (New Best!)" if is_best else f" (No improvement x{epochs_without_improvement})"))
                   
             aux_cols = []
+            if USE_SIGN and not USE_AUX:
+                aux_cols = [round(main_loss_sum / max(valid_batches, 1), 5)]
             if USE_AUX:
                 avg_main = main_loss_sum / max(valid_batches, 1)
                 aux_l = {t: aux_loss_sum[t] / max(aux_loss_n[t], 1) for t in AUX_TASKS}
@@ -818,6 +876,17 @@ def train_model(config, selection_metric="combined"):
                 if epoch <= 3 and weighted_aux > avg_main:
                     print(f"   ⚠️  weighted auxiliary loss ({weighted_aux:.3f}) exceeds the main loss ({avg_main:.3f}) "
                           f"in epoch {epoch} -- consider a lower aux_loss_weights (plan §4.7).")
+            if USE_SIGN:
+                avg_sign = sign_loss_sum / max(sign_n, 1)
+                acc_sign = sign_correct / max(sign_total, 1)
+                aux_cols += [round(avg_sign, 5), round(acc_sign, 4)]
+                msg = (f"   sign head: main loss {main_loss_sum / max(valid_batches, 1):.4f} | sign loss {avg_sign:.4f} "
+                       f"(x{SIGN_LAMBDA} = {SIGN_LAMBDA * avg_sign:.4f}), train acc {acc_sign:.3f}")
+                if USE_SIGN_LEVEL:
+                    avg_sl = sl_loss_sum / max(sl_n, 1)
+                    aux_cols.append(round(avg_sl, 5))
+                    msg += f" | sign-level loss {avg_sl:.4f} (x{SIGN_LEVEL_LAMBDA})"
+                print(msg)
             with open(metrics_log_path, mode='a', newline='') as file:
                 writer = csv.writer(file)
                 writer.writerow([epoch, avg_train_loss, avg_val_loss, epoch_f1, epoch_iou, epoch_pct,

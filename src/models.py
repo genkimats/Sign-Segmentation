@@ -10,6 +10,8 @@ from src.frontend import HaMeRFrontEnd, TemporalResidual, VertexPooling, BODY_PA
 from src.face_subsets import face_subset_for_vertex_count
 from src.skeleton_encoders import build_stream_encoder, SKATE_BODY_PARTS, STREAM_ENCODERS
 from src.skeleton_angles import skeleton_angle_features, ANGLE_FEATURE_DIM
+from src.sign_cascade import (SignLevelDecoder, TEMPO_DIM, combine_with_frames, segment_targets,
+                              soft_tempo_features, starts_from_labels, starts_from_logits)
 
 
 class STGCN_MLP_Mamba(nn.Module):
@@ -2396,7 +2398,10 @@ class MultiStreamSegmenter(nn.Module):
                  change_point_scales=None, stream_encoder="stgcn", stream_encoder_layers=2,
                  blockgcn_groups=8, blockgcn_ph=True, skate_local_frames=32,
                  aux_heads=None, aux_temporal_kernel=9, film_cue_idx=None,
-                 stgcn_temporal_dilations=None, hamer_temporal_layers=1, hamer_temporal_dilations=None):
+                 stgcn_temporal_dilations=None, hamer_temporal_layers=1, hamer_temporal_dilations=None,
+                 sign_head=False, sign_cascade=None, sign_cascade_detach=False, sign_cascade_dim=32,
+                 sign_level=False, sign_level_pred_p=0.0, sign_level_tol=4, sign_level_min_dist=3,
+                 sign_level_pos_weight=3.0):
         super().__init__()
         if stream_encoder not in STREAM_ENCODERS:
             raise ValueError(f"stream_encoder must be one of {STREAM_ENCODERS}, got '{stream_encoder}'.")
@@ -2550,11 +2555,13 @@ class MultiStreamSegmenter(nn.Module):
                 stream, n_cls = spec["stream"], int(spec["classes"])
                 if stream == "fused":
                     dim = d_model
+                elif stream == "sequence":                 # on the encoder output, like the BIO classifier
+                    dim = d_model * 2 if encoder == "bilstm" else d_model
                 elif stream in self.streams:
                     dim = self.stream_dims[stream]
                 else:
                     raise ValueError(f"aux head '{task}' sits on stream '{stream}', which is off "
-                                     f"(streams: {self.streams} or 'fused').")
+                                     f"(streams: {self.streams}, 'fused' or 'sequence').")
                 self.aux_heads[task] = nn.Sequential(
                     nn.Conv1d(dim, dim, k, padding=k // 2, groups=dim), nn.GELU(), nn.Conv1d(dim, n_cls, 1))
                 self.aux_streams[task] = stream
@@ -2597,8 +2604,47 @@ class MultiStreamSegmenter(nn.Module):
                     pos_encoding=pos_encoding, norm=transformer_norm, rope_base=rope_base)
             self.classifier = nn.Linear(d_model, num_classes)
 
+        # ---- sign head and what the phrase decision may take from it (SIGN_HEAD_STUDY) ----------
+        #   sign_head            O/I/B sign classifier on the encoder output, next to the phrase
+        #                        classifier (logits in self._sign_logits; the loss is in train_phrase.py)
+        #   sign_cascade         "probs": the phrase classifier also reads the sign probabilities
+        #                        (through a k=9 temporal conv); "tempo": + soft pause features from
+        #                        them (src/sign_cascade.py). sign_cascade_detach: no phrase gradient
+        #                        into the sign head through this path
+        #   sign_level           phrase starts decided per predicted SIGN by a BiLSTM over the signs;
+        #                        trained on gold sign starts with prob 1 - sign_level_pred_p
+        #                        (teacher forcing), always on predicted ones at evaluation
+        if sign_cascade not in (None, "probs", "tempo"):
+            raise ValueError(f"sign_cascade must be None, 'probs' or 'tempo', got '{sign_cascade}'.")
+        if (sign_cascade or sign_level) and not sign_head:
+            raise ValueError("sign_cascade / sign_level need sign_head=True.")
+        seq_dim = d_model * 2 if encoder == "bilstm" else d_model
+        self.sign_head = bool(sign_head)
+        self.sign_cascade = sign_cascade
+        self.sign_cascade_detach = bool(sign_cascade_detach)
+        self.sign_level = bool(sign_level)
+        self.sign_level_pred_p = float(sign_level_pred_p)
+        self.sign_level_tol = int(sign_level_tol)
+        self.sign_level_min_dist = int(sign_level_min_dist)
+        self.sign_level_pos_weight = float(sign_level_pos_weight)
+        if self.sign_head:
+            self.sign_classifier = nn.Linear(seq_dim, 3)
+        if sign_cascade:
+            f_in = TEMPO_DIM if sign_cascade == "tempo" else 3
+            self.sign_feat = nn.Sequential(nn.Conv1d(f_in, int(sign_cascade_dim), 9, padding=4), nn.GELU())
+            self.classifier = nn.Linear(seq_dim + int(sign_cascade_dim), num_classes)
+        if self.sign_level:
+            self.sign_level_decoder = SignLevelDecoder(seq_dim, dropout=dropout)
+        self._sign_logits = None
+        self._extra_losses = {}
+        self._targets = None
+
         self._capture = None   # callable(stream_inputs, stream_contributions) for diagnostics
         self._ablation = None  # (stream_name, constant vector) for diagnostics
+
+    def set_targets(self, phrase=None, sign=None):
+        """Training only (sign_level): hard phrase / sign BIO targets (B, T) of the NEXT forward pass."""
+        self._targets = {"phrase": phrase, "sign": sign}
 
     # ---- diagnostics hooks (used by check_stream_balance.py) ----------------
     def set_capture(self, fn):
@@ -2654,7 +2700,7 @@ class MultiStreamSegmenter(nn.Module):
         # auxiliary loss never sees a zeroed stream
         aux_logits = {}
         for task, stream in self.aux_streams.items():
-            if stream != "fused":
+            if stream not in ("fused", "sequence"):
                 aux_logits[task] = self.aux_heads[task](z[stream].transpose(1, 2))   # (B, C, T)
 
         if self.training and self.stream_dropout > 0 and len(self.streams) > 1:
@@ -2708,8 +2754,43 @@ class MultiStreamSegmenter(nn.Module):
             emb = self.transformer_encoder(self.pos_encoder(fused))
         else:
             emb = self.rel_encoder(fused)
-        logits = self.classifier(emb)
-        return logits.permute(0, 2, 1), emb.permute(0, 2, 1)
+
+        self._extra_losses = {}
+        self._sign_logits = None
+        if self.sign_head:
+            self._sign_logits = self.sign_classifier(emb).permute(0, 2, 1)          # (B, 3, T)
+        if self.sign_cascade:
+            sp = torch.softmax(self._sign_logits.float(), dim=1)
+            if self.sign_cascade_detach:
+                sp = sp.detach()
+            f = soft_tempo_features(sp) if self.sign_cascade == "tempo" else sp
+            g = self.sign_feat(f.to(emb.dtype)).transpose(1, 2)                    # (B, T, cascade_dim)
+            logits = self.classifier(torch.cat([emb, g], dim=-1))
+        else:
+            logits = self.classifier(emb)
+        logits = logits.permute(0, 2, 1)
+        for task, stream in self.aux_streams.items():
+            if stream == "sequence":
+                aux_logits[task] = self.aux_heads[task](emb.transpose(1, 2))
+
+        if self.sign_level:
+            tg = self._targets or {}
+            self._targets = None
+            use_gold = (self.training and tg.get("sign") is not None
+                        and torch.rand(1).item() >= self.sign_level_pred_p)
+            starts = (starts_from_labels(tg["sign"]) if use_gold
+                      else starts_from_logits(self._sign_logits, self.sign_level_min_dist))
+            tempo = soft_tempo_features(torch.softmax(self._sign_logits.float(), dim=1).detach())
+            seg = self.sign_level_decoder(emb, tempo.to(emb.dtype), starts)
+            if self.training and tg.get("phrase") is not None:
+                lg, y = torch.cat(seg), torch.cat(segment_targets(starts, tg["phrase"], self.sign_level_tol))
+                if len(lg):
+                    self._extra_losses["sign_level"] = nn.functional.binary_cross_entropy_with_logits(
+                        lg.float(), y, pos_weight=torch.tensor(self.sign_level_pos_weight, device=lg.device))
+            if not self.training:
+                # P(B) only at predicted sign starts (= the sign-level decision), O / I from the frame head
+                logits = combine_with_frames(logits, starts, seg)
+        return logits, emb.permute(0, 2, 1)
 
 
 class MultiStream_BiLSTM(MultiStreamSegmenter):
