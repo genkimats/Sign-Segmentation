@@ -138,7 +138,8 @@ def test_models(train_ds):
             n_cls = lg.shape[1]
             loss = loss + 0.3 * F.cross_entropy(lg, torch.randint(0, n_cls, (2, T)))
         loss.backward()
-        skip = () if "sign_level" in model._extra_losses else ("sign_level_decoder",)
+        had_sl = "sign_level" in model._extra_losses           # read before eval() clears it
+        skip = () if had_sl else ("sign_level_decoder",)
         no_grad = [n for n, p in model.named_parameters()
                    if n.startswith(("sign_", "classifier")) and not n.startswith(skip) and p.requires_grad
                    and p.grad is None]
@@ -158,7 +159,7 @@ def test_models(train_ds):
                 off[b, s] = False
             pb_off = float(p[:, 2][off].max()) if bool(off.any()) else 0.0
             valid = valid and pb_off < 1e-3
-            extra += (f", sign-level loss {'yes' if 'sign_level' in model._extra_losses else 'NO'}"
+            extra += (f", sign-level loss {'yes' if had_sl else 'NO'}"
                       f", {sum(len(s) for s in st)} predicted sign starts, max P(B) elsewhere {pb_off:.1e}")
         n = sum(p_.numel() for p_ in model.parameters())
         check(exp["description"][:62], valid and grads and bool(torch.isfinite(loss)),

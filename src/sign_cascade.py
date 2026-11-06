@@ -139,7 +139,7 @@ class SignLevelDecoder(nn.Module):
         x = self.inp(pad_sequence(feats, batch_first=True))                  # (B, Kmax, H)
         lengths = torch.tensor([max(1, n) for n in lens])
         packed = pack_padded_sequence(x, lengths, batch_first=True, enforce_sorted=False)
-        h, _ = pad_packed_sequence(packed, batch_first=True, total_length=x.shape[1])
+        h, _ = pad_packed_sequence(self.rnn(packed)[0], batch_first=True, total_length=x.shape[1])
         logits = self.out(h)[..., 0]                                         # (B, Kmax)
         return [logits[b, :n] for b, n in enumerate(lens)]
 
