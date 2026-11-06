@@ -139,21 +139,27 @@ def test_models(train_ds):
             loss = loss + 0.3 * F.cross_entropy(lg, torch.randint(0, n_cls, (2, T)))
         loss.backward()
         skip = () if "sign_level" in model._extra_losses else ("sign_level_decoder",)
-        grads = all(p.grad is not None for n, p in model.named_parameters()
-                    if n.startswith(("sign_", "classifier")) and not n.startswith(skip) and p.requires_grad)
+        no_grad = [n for n, p in model.named_parameters()
+                   if n.startswith(("sign_", "classifier")) and not n.startswith(skip) and p.requires_grad
+                   and p.grad is None]
+        grads = not no_grad
         model.eval()
         with torch.no_grad():
             out = model(x, hamer=ham)[0]
         p = out.float().softmax(1)
-        valid = bool(torch.isfinite(out).all()) and torch.allclose(p.sum(1), torch.ones(2, T), atol=1e-4)
-        extra = ""
+        finite = bool(torch.isfinite(out).all())
+        sums = float((p.sum(1) - 1).abs().max())
+        valid = finite and sums < 1e-4
+        extra = f", finite {finite}, max |sum P - 1| {sums:.1e}" + (f", NO GRAD: {no_grad[:4]}" if no_grad else "")
         if c.get("sign_level"):
             st = starts_from_logits(model._sign_logits)
             off = torch.ones(2, T, dtype=torch.bool)
             for b, s in enumerate(st):
                 off[b, s] = False
-            valid = valid and float(p[:, 2][off].max()) < 1e-3
-            extra = f", P(B) only at {sum(len(s) for s in st)} predicted sign starts"
+            pb_off = float(p[:, 2][off].max()) if bool(off.any()) else 0.0
+            valid = valid and pb_off < 1e-3
+            extra += (f", sign-level loss {'yes' if 'sign_level' in model._extra_losses else 'NO'}"
+                      f", {sum(len(s) for s in st)} predicted sign starts, max P(B) elsewhere {pb_off:.1e}")
         n = sum(p_.numel() for p_ in model.parameters())
         check(exp["description"][:62], valid and grads and bool(torch.isfinite(loss)),
               f"loss {loss.item():.3f}, {n / 1e6:.2f}M params{extra}")
