@@ -72,6 +72,10 @@ def test_resampling():
             good &= int((soft[idx[0]:end, 2] > 0).sum()) == int((out[:, 2] > 0).sum())
             good &= np.allclose(out.sum(1), 1.0)
     check("512 frames, every phrase start kept, rows sum to 1", good)
+    # videos only slightly shorter than the stretched window (rounding used to give 513 frames)
+    worst = max(len(fps_resample_indices(n, 0, 512, r)[0])
+                for r in np.linspace(0.5, 1.0, 501) for n in range(int(512 / r) - 3, int(512 / r) + 4))
+    check("never more frames than the window", worst <= 512, f"max {worst}")
 
 
 def _make_data(d, n_videos=4, T=1500):

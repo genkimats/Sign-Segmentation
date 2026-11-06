@@ -127,7 +127,7 @@ def fps_resample_indices(num_frames, start, length, rate):
     step = 1.0 / rate
     span = int(np.ceil(length * step))
     if span >= num_frames:
-        start, n = 0, int(np.ceil(num_frames / step))
+        start, n = 0, min(int(length), int(np.ceil(num_frames / step)))   # never more than the window
     else:
         start, n = min(int(start), num_frames - span), int(length)
     idx = start + np.floor(np.arange(n) * step).astype(np.int64)
