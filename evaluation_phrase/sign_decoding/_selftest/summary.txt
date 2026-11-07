@@ -1,0 +1,10 @@
+Sign-head decoders on a, b (test; tuned on val by boundary F1@5).
+mean over runs; diff vs peak_thr = paired bootstrap over videos (runs averaged).
+
+peak_thr             F1@2 0.380  F1@5 0.849  F1@10 0.984  IoU 0.879  K/gold 0.97
+snap_product         F1@2 0.417  F1@5 0.923  F1@10 0.923  IoU 0.917  K/gold 0.98  | vs peak_thr +0.0743 [+0.0342, +0.1057] P<=0 0.000
+snap_move            F1@2 0.984  F1@5 0.984  F1@10 0.984  IoU 0.979  K/gold 0.97  | vs peak_thr +0.1348 [+0.0901, +0.1716] P<=0 0.000
+snap_move_drop       F1@2 0.984  F1@5 0.984  F1@10 0.984  IoU 0.979  K/gold 0.97  | vs peak_thr +0.1348 [+0.0901, +0.1716] P<=0 0.000
+posthoc_lr           F1@2 1.000  F1@5 1.000  F1@10 1.000  IoU 0.995  K/gold 1.00  | vs peak_thr +0.1512 [+0.1022, +0.1897] P<=0 0.000
+posthoc_gbm          F1@2 1.000  F1@5 1.000  F1@10 1.000  IoU 0.995  K/gold 1.00  | vs peak_thr +0.1512 [+0.1022, +0.1897] P<=0 0.000
+posthoc_gbm_timing   F1@2 0.880  F1@5 0.880  F1@10 0.880  IoU 0.841  K/gold 0.82  | vs peak_thr +0.0315 [-0.0289, +0.0829] P<=0 0.170
