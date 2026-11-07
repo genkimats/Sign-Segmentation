@@ -17,7 +17,8 @@ from src.models import (PureMambaBaseline, BiMambaBaseline, STGCN_Mamba, STGCN_M
                         CTRGCN_Mamba, InfoGCN_Mamba, ShiftGCN_Mamba, SpatialTransformer_Mamba,
                         HDGCN_Mamba, HyperSign_Mamba, STGCN_HybridSequential, STGCN_HybridParallel,
                         MultiStreamSegmenter, MultiStream_BiLSTM, MultiStream_Transformer,
-                        MultiStream_BiLSTMAttn, Moryossef2023_BiLSTM)
+                        MultiStream_BiLSTMAttn, MultiStream_UNetRoPE, Moryossef2023_BiLSTM)
+from src.moryossef2026 import Moryossef2026
 # fusion study (fusion_study/): frame-wise gate, time-lagged face, late fusion, face FiLM
 from fusion_study.models_fusion import MultiStream_Fusion, fusion_model_kwargs
 
@@ -47,10 +48,14 @@ MODEL_REGISTRY = {
     "multistream_fusion": MultiStream_Fusion,   # fusion_study/models_fusion.py (config key fusion_mode)
     # Moryossef et al. 2023 E1s / E2s (phrase head), see src/models.py
     "bilstm_2023": Moryossef2023_BiLSTM,
+    # Moryossef et al. 2026 (CNN-medium-attn + RoPE), src/moryossef2026.py: the whole model, and its
+    # temporal part (UNet over time + RoPE transformer) as the encoder of the multi-stream model
+    "moryossef_2026": Moryossef2026,
+    "multistream_unet_rope": MultiStream_UNetRoPE,
 }
 
 MULTISTREAM_MODELS = ["multistream_bilstm", "multistream_transformer", "multistream_bilstm_attn",
-                      "multistream_fusion"]
+                      "multistream_fusion", "multistream_unet_rope"]
 
 MAMBA_BASED_MODELS = ["pure_mamba", "bi_mamba", "stgcn_mamba", "stgcn_mlp_mamba", "stgcn_bimamba",
                       "decoupled_stgcn_mamba", "latent_stgcn_mamba", "ctrgcn_mamba", "infogcn_mamba",
@@ -63,7 +68,7 @@ HAMER_SUPPORTED_MODELS = ["stgcn_mamba", "latent_stgcn_mamba", "ctrgcn_mamba", "
                           "stgcn_mlp_mamba", "stgcn_bimamba", "decoupled_stgcn_mamba",
                           "stgcn_hybrid_seq", "stgcn_hybrid_parallel",
                           "multistream_bilstm", "multistream_transformer", "multistream_bilstm_attn",
-                          "multistream_fusion"]
+                          "multistream_fusion", "multistream_unet_rope", "moryossef_2026"]
 
 # Own list (not an alias of HAMER_SUPPORTED_MODELS, so appending can't mutate it):
 # the graph-free baselines also accept DINOv2, e.g. for pure_hamer + DINOv2 runs.
@@ -129,6 +134,19 @@ def build_model_kwargs(config, detected_hamer_dim=None, detected_dinov2_dim=None
                       "multistream_bilstm_attn"]:
         model_kwargs["nhead"] = config.get("nhead", 8)
         model_kwargs["dim_feedforward"] = config.get("dim_feedforward", d_model * 4)
+
+    if model_name in ("moryossef_2026", "multistream_unet_rope"):
+        # 2026 attention settings (their defaults: 8 heads, FFN x2, dropout 0.1, RoPE base 10000)
+        model_kwargs["nhead"] = int(config.get("nhead", 8))
+        model_kwargs["attn_ff_mult"] = int(config.get("attn_ff_mult", 2))
+        model_kwargs["attn_dropout"] = float(config.get("attn_dropout", 0.1))
+        model_kwargs["rope_base"] = float(config.get("rope_base", 10000.0))
+        if model_name == "multistream_unet_rope":
+            model_kwargs["unet_stage"] = bool(config.get("unet_stage", True))
+        else:
+            model_kwargs["sign_head"] = bool(config.get("sign_head", False))
+            if config.get("sign_cascade") or config.get("sign_level") or config.get("aux_heads"):
+                raise ValueError("moryossef_2026 supports sign_head only (no sign_cascade / sign_level / aux_heads).")
 
     if model_name == "stgcn_mlp_mamba":
         model_kwargs["mlp_expansion_factor"] = config.get("mlp_expansion_factor", 4)
@@ -282,7 +300,7 @@ def build_model_kwargs(config, detected_hamer_dim=None, detected_dinov2_dim=None
             model_kwargs["transformer_norm"] = config.get("transformer_norm", "post")
             model_kwargs["rope_base"] = float(config.get("rope_base", 10000.0))
 
-    if model_name not in MULTISTREAM_MODELS and config.get("sign_head"):
+    if model_name not in MULTISTREAM_MODELS + ["moryossef_2026"] and config.get("sign_head"):
         raise ValueError(f"sign_head is implemented for multistream models only, not '{model_name}'.")
     if model_name not in MULTISTREAM_MODELS and (config.get("aux_heads") or config.get("film_cue_names")):
         raise ValueError(f"aux_heads / film_cue_names are implemented for multistream models only, not '{model_name}'.")

@@ -10,6 +10,7 @@ from src.frontend import HaMeRFrontEnd, TemporalResidual, VertexPooling, BODY_PA
 from src.face_subsets import face_subset_for_vertex_count
 from src.skeleton_encoders import build_stream_encoder, SKATE_BODY_PARTS, STREAM_ENCODERS
 from src.skeleton_angles import skeleton_angle_features, ANGLE_FEATURE_DIM
+from src.moryossef2026 import UNetRoPETemporalEncoder
 from src.sign_cascade import (SignLevelDecoder, TEMPO_DIM, combine_with_frames, segment_targets,
                               soft_tempo_features, starts_from_labels, starts_from_logits)
 
@@ -2401,7 +2402,7 @@ class MultiStreamSegmenter(nn.Module):
                  stgcn_temporal_dilations=None, hamer_temporal_layers=1, hamer_temporal_dilations=None,
                  sign_head=False, sign_cascade=None, sign_cascade_detach=False, sign_cascade_dim=32,
                  sign_level=False, sign_level_pred_p=0.0, sign_level_tol=4, sign_level_min_dist=3,
-                 sign_level_pos_weight=3.0):
+                 sign_level_pos_weight=3.0, attn_ff_mult=2, attn_dropout=0.1, unet_stage=True):
         super().__init__()
         if stream_encoder not in STREAM_ENCODERS:
             raise ValueError(f"stream_encoder must be one of {STREAM_ENCODERS}, got '{stream_encoder}'.")
@@ -2426,8 +2427,8 @@ class MultiStreamSegmenter(nn.Module):
                                         int(stream_encoder_layers), dropout=0.0, **enc_opts)
         if fusion not in ("concat", "gated_sum"):
             raise ValueError(f"fusion must be 'concat' or 'gated_sum', got '{fusion}'.")
-        if encoder not in ("bilstm", "transformer", "bilstm_attn"):
-            raise ValueError(f"encoder must be 'bilstm', 'transformer' or 'bilstm_attn', got '{encoder}'.")
+        if encoder not in ("bilstm", "transformer", "bilstm_attn", "unet_rope"):
+            raise ValueError(f"encoder must be 'bilstm', 'transformer', 'bilstm_attn' or 'unet_rope', got '{encoder}'.")
         self.streams = [name for name, on in zip(self.STREAM_ORDER,
                                                  (use_stream_body_hands, use_stream_face, use_stream_hamer,
                                                   use_stream_cues)) if on]
@@ -2570,6 +2571,15 @@ class MultiStreamSegmenter(nn.Module):
             self.lstm = nn.LSTM(input_size=d_model, hidden_size=d_model, num_layers=n_layers,
                                 batch_first=True, dropout=dropout if n_layers > 1 else 0, bidirectional=True)
             self.classifier = nn.Linear(d_model * 2, num_classes)
+        elif encoder == "unet_rope":
+            # The temporal part of Moryossef et al.'s 2026 model (src/moryossef2026.py): stage-2 UNet over
+            # time (each of the d_model units as a 1-channel signal) -> RMSNorm -> n_layers pre-norm RoPE
+            # layers (FFN d_model * attn_ff_mult, dropout attn_dropout); unet_stage=False: RoPE layers only
+            if d_model % nhead != 0:
+                raise ValueError(f"d_model ({d_model}) must be divisible by nhead ({nhead}).")
+            self.unet_rope = UNetRoPETemporalEncoder(d_model, n_layers, nhead, int(attn_ff_mult),
+                                                     float(attn_dropout), rope_base, unet=bool(unet_stage))
+            self.classifier = nn.Linear(d_model, num_classes)
         elif encoder == "bilstm_attn":
             # BiLSTM followed by `attn_layers` self-attention layers. RoPE / ALiBi only exist
             # inside attention, so position encodings are compared on this attention head;
@@ -2747,6 +2757,8 @@ class MultiStreamSegmenter(nn.Module):
 
         if self.encoder_type == "bilstm":
             emb, _ = self.lstm(fused)
+        elif self.encoder_type == "unet_rope":
+            emb = self.unet_rope(fused)
         elif self.encoder_type == "bilstm_attn":
             h, _ = self.lstm(fused)
             emb = self.rel_encoder(self.lstm_proj(h))
@@ -2810,3 +2822,10 @@ class MultiStream_BiLSTMAttn(MultiStreamSegmenter):
     def __init__(self, **kwargs):
         kwargs.pop("encoder", None)
         super().__init__(encoder="bilstm_attn", **kwargs)
+
+
+class MultiStream_UNetRoPE(MultiStreamSegmenter):
+    """Multi-stream front-end + the temporal part of the 2026 model (UNet over time + RoPE transformer)."""
+    def __init__(self, **kwargs):
+        kwargs.pop("encoder", None)
+        super().__init__(encoder="unet_rope", **kwargs)

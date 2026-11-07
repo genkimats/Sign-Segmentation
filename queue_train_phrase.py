@@ -938,6 +938,44 @@ SIGN_HEAD_STUDY = [
      "description": "SH9: sign head + palm-up / pointing / connective / other head on the encoder output"},
 ]
 
+# ------------------------------------------------------------------------------
+# MORYOSSEF 2026 ARCHITECTURE STUDY (2026-11-07): the 2026 network of sign-language-processing/segmentation
+# ("CNN-medium-attn + RoPE", commit 22ca3a6), re-implemented in src/moryossef2026.py. ARCHITECTURE ONLY:
+# our data, labels (v2), window 512, weighted CE [1.0, 1.1, 8.5], AdamW + cosine, early stopping, as every
+# other run; NOT their Dice loss, fps / frame / hand dropout augmentation, velocity channels or 1024 windows.
+# Attention models get a 5-epoch LR warmup (as TC6 / TC7). References: TC0 = multistream_bilstm-347
+# (same code, our model) and SH1b (= our model + sign head, lambda 1.0).
+#   M26a  the 2026 model on our keypoints (body + hands + face compact, 96 joints), phrase + sign heads
+#         trained jointly (sign lambda 1.0 = their equal weighting)                         = faithful
+#   M26b  M26a without the sign head                                         (what does the sign head do?)
+#   M26c  M26a + HaMeR (our addition, fused before the temporal stage) = the same inputs as our model
+#   M26d  M26c at THEIR learning rate 1e-3 (ours 1e-4; transformers are LR-sensitive)
+#   M26e  OUR multi-stream front-end + THEIR temporal part (UNet over time + 4 RoPE layers, width 384)
+#         instead of the BiLSTM; no sign head                 (one change vs TC0: the temporal encoder)
+#   M26f  M26e + sign head (lambda 1.0)                                                 (vs SH1b)
+# Reading: M26c vs TC0 = their whole network vs ours on the same inputs; M26e vs TC0 = their temporal
+# encoder vs our BiLSTM. Evaluate with evaluate_phrase.py + phrase_stats.py as usual.
+# ------------------------------------------------------------------------------
+_M26_TRAIN = {"warmup_epochs": 5}
+_M26 = {**_MS_BEST, **_M26_TRAIN, "basename": "moryossef_2026", "d_model": 384, "n_layers": 4, "nhead": 8,
+        "attn_ff_mult": 2, "attn_dropout": 0.1,
+        # not a multi-stream model: the data to load is set directly
+        "use_face_keypoints": True, "use_hamer_features": False}
+_M26_HYBRID = {**_MS_BEST, **_M26_TRAIN, "basename": "multistream_unet_rope", "d_model": 384, "n_layers": 4,
+               "nhead": 8, "attn_ff_mult": 2, "attn_dropout": 0.1}
+MORYOSSEF2026_STUDY = [
+    {**_M26, **_SH, "sign_loss_weight": 1.0,
+     "description": "M26a: Moryossef 2026 model (B+H+Fc keypoints), phrase + sign heads"},
+    {**_M26, "description": "M26b: Moryossef 2026 model (B+H+Fc keypoints), phrase head only"},
+    {**_M26, **_SH, "sign_loss_weight": 1.0, "use_hamer_features": True,
+     "description": "M26c: Moryossef 2026 model + HaMeR, phrase + sign heads"},
+    {**_M26, **_SH, "sign_loss_weight": 1.0, "use_hamer_features": True, "learning_rate": 0.001,
+     "description": "M26d: M26c at their learning rate 1e-3"},
+    {**_M26_HYBRID, "description": "M26e: B+H+Fc front-end + 2026 temporal encoder (UNet + RoPE x4)"},
+    {**_M26_HYBRID, **_SH, "sign_loss_weight": 1.0,
+     "description": "M26f: M26e + sign head (lambda 1.0)"},
+]
+
 # What runs now (earlier studies above are already trained). First batch of the C/A/B plan:
 # the new reference R0, the gold-sign tempo upper bound (A1) and the four auxiliary arms (B1-B4).
 # Give every entry 3 seeds when asked ("all"). Next: TEMPO_STUDY_A2 (if A1-full > A1-pos), then
@@ -987,7 +1025,10 @@ FUSION_OPTIONAL = [{**a, "force_selection_metric": None} for a in fusion_optiona
 # EXPERIMENTS_TO_RUN = TEMPORAL_CONTEXT_STUDY
 # Seventh batch (2026-11-07): sign-head study, 10 runs at 1 seed (Enter at the seed prompt); re-queue
 # the arms that beat TC0 (347) with 3 seeds ("all") before claiming anything.
-EXPERIMENTS_TO_RUN = SIGN_HEAD_STUDY
+# EXPERIMENTS_TO_RUN = SIGN_HEAD_STUDY
+# Eighth batch (2026-11-07): Moryossef 2026 architecture, 6 runs at 1 seed (Enter at the seed prompt);
+# moryossef_2026 and multistream_unet_rope get their own prefixes (start at 1).
+EXPERIMENTS_TO_RUN = MORYOSSEF2026_STUDY
 # EXPERIMENTS_TO_RUN = [{**_MS_BEST, "force_selection_metric": None,
 #                        "description": "MS best: Body + HaMeR + Face(compact), no count loss"}]   # metric asked at training
 # then, after extracting the clean features: EXPERIMENTS_TO_RUN = TEMPO_STUDY_A2_CLEAN  (3 seeds: "all")
@@ -1112,7 +1153,8 @@ if __name__ == "__main__":
         current_model_prefix[m_name] += 1 
         
         # 1b. Multi-stream models: the data that gets loaded follows the stream switches
-        if m_name in ("multistream_bilstm", "multistream_transformer", "multistream_bilstm_attn", "multistream_fusion"):
+        if m_name in ("multistream_bilstm", "multistream_transformer", "multistream_bilstm_attn", "multistream_fusion",
+                      "multistream_unet_rope"):
             full_config["use_face_keypoints"] = bool(full_config.get("use_stream_face", False))
             full_config["use_hamer_features"] = bool(full_config.get("use_stream_hamer", False))
             full_config["use_cue_features"] = bool(full_config.get("use_stream_cues", False))
