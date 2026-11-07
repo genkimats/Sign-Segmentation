@@ -650,7 +650,7 @@ SCALING_STUDY = [
 # data would help; if it is flat, the limit is the information in the input, not the amount of data.
 LEARNING_CURVE_STUDY = [
     {**_MS_BEST, "train_fraction": f, "description": f"LC: B+H+Fc, {f * 100:g}% of training videos"}
-    for f in (0.125, 0.25)
+    for f in (0.5, 1.0)
 ]
 
 # ------------------------------------------------------------------------------
