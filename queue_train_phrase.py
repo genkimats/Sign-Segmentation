@@ -969,11 +969,11 @@ MORYOSSEF2026_STUDY = [
     {**_M26, "description": "M26b: Moryossef 2026 model (B+H+Fc keypoints), phrase head only"},
     {**_M26, **_SH, "sign_loss_weight": 1.0, "use_hamer_features": True,
      "description": "M26c: Moryossef 2026 model + HaMeR, phrase + sign heads"},
-    {**_M26, **_SH, "sign_loss_weight": 1.0, "use_hamer_features": True, "learning_rate": 0.001,
-     "description": "M26d: M26c at their learning rate 1e-3"},
-    {**_M26_HYBRID, "description": "M26e: B+H+Fc front-end + 2026 temporal encoder (UNet + RoPE x4)"},
-    {**_M26_HYBRID, **_SH, "sign_loss_weight": 1.0,
-     "description": "M26f: M26e + sign head (lambda 1.0)"},
+    # {**_M26, **_SH, "sign_loss_weight": 1.0, "use_hamer_features": True, "learning_rate": 0.001,
+    #  "description": "M26d: M26c at their learning rate 1e-3"},
+    # {**_M26_HYBRID, "description": "M26e: B+H+Fc front-end + 2026 temporal encoder (UNet + RoPE x4)"},
+    # {**_M26_HYBRID, **_SH, "sign_loss_weight": 1.0,
+    #  "description": "M26f: M26e + sign head (lambda 1.0)"},
 ]
 
 # What runs now (earlier studies above are already trained). First batch of the C/A/B plan:
