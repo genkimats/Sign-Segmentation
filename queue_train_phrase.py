@@ -643,6 +643,15 @@ SCALING_STUDY = [
     {**_MS_BEST, "train_fraction": f, "description": f"SCALE: B+H+Fc, {f * 100:g}% of training videos"}
     for f in (0.125, 0.25, 0.5)
 ]
+# Learning curve for the thesis (analysis F, 2026-11-08): the best model on a nested 12.5 / 25 / 50 / 100% of
+# the training videos, all trained on THIS machine with the current code (the 100% point is part of the batch, so
+# the curve does not mix machines: 115-117 and 347 differ by ~.01 for that reason alone). 3 seeds per point.
+# Reading: if boundary F1 still rises clearly from 50% to 100% (more than the seed SD, ~.01), more annotated
+# data would help; if it is flat, the limit is the information in the input, not the amount of data.
+LEARNING_CURVE_STUDY = [
+    {**_MS_BEST, "train_fraction": f, "description": f"LC: B+H+Fc, {f * 100:g}% of training videos"}
+    for f in (0.125, 0.25, 0.5, 1.0)
+]
 
 # ------------------------------------------------------------------------------
 # HaMeR TEMPORAL-CONV STUDY: the mixing study showed temporal conv is the whole multistream
@@ -1028,7 +1037,11 @@ FUSION_OPTIONAL = [{**a, "force_selection_metric": None} for a in fusion_optiona
 # EXPERIMENTS_TO_RUN = SIGN_HEAD_STUDY
 # Eighth batch (2026-11-07): Moryossef 2026 architecture, 6 runs at 1 seed (Enter at the seed prompt);
 # moryossef_2026 and multistream_unet_rope get their own prefixes (start at 1).
-EXPERIMENTS_TO_RUN = MORYOSSEF2026_STUDY
+# EXPERIMENTS_TO_RUN = MORYOSSEF2026_STUDY
+# Ninth batch (2026-11-08): learning curve (analysis F), 4 points x 3 seeds = 12 runs -> enter "all" at the
+# seed prompt. Then evaluate_phrase.py (val + test, --save-predictions) and plot boundary F1 (peak decoder)
+# against the number of training videos.
+EXPERIMENTS_TO_RUN = LEARNING_CURVE_STUDY
 # EXPERIMENTS_TO_RUN = [{**_MS_BEST, "force_selection_metric": None,
 #                        "description": "MS best: Body + HaMeR + Face(compact), no count loss"}]   # metric asked at training
 # then, after extracting the clean features: EXPERIMENTS_TO_RUN = TEMPO_STUDY_A2_CLEAN  (3 seeds: "all")
