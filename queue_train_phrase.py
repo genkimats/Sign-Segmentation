@@ -653,6 +653,15 @@ LEARNING_CURVE_STUDY = [
     for f in (0.5, 1.0)
 ]
 
+# Class-weight sweep (2026-11-09): the B-class weight of the best model, O / I fixed at 1.0 / 1.1.
+# 8.5 (DEFAULT_CLASS_WEIGHTS) is the reference used by every other run (TC0 = 347, 115-117).
+# Quick pass: 1 seed each. Compare with the THRESHOLD and PEAK decoders, not argmax: the B weight mainly
+# moves how often argmax flips to B (duplicate starts), which the decoders remove anyway.
+CLASS_WEIGHT_STUDY = [
+    {**_MS_BEST, "class_weights": [1.0, 1.1, float(w)], "description": f"CW: B+H+Fc, class weights [1.0, 1.1, {w:g}]"}
+    for w in (5, 6, 7, 8, 9, 10, 11)
+]
+
 # ------------------------------------------------------------------------------
 # HaMeR TEMPORAL-CONV STUDY: the mixing study showed temporal conv is the whole multistream
 # gain for the body stream; the HaMeR stream (MLP) has none. Switch on ONLY the residual
@@ -1041,7 +1050,9 @@ FUSION_OPTIONAL = [{**a, "force_selection_metric": None} for a in fusion_optiona
 # Ninth batch (2026-11-08): learning curve (analysis F), 4 points x 3 seeds = 12 runs -> enter "all" at the
 # seed prompt. Then evaluate_phrase.py (val + test, --save-predictions) and plot boundary F1 (peak decoder)
 # against the number of training videos.
-EXPERIMENTS_TO_RUN = LEARNING_CURVE_STUDY
+# EXPERIMENTS_TO_RUN = LEARNING_CURVE_STUDY
+# Tenth batch (2026-11-09): B-class weight sweep, 7 runs at 1 seed (Enter at the seed prompt).
+EXPERIMENTS_TO_RUN = CLASS_WEIGHT_STUDY
 # EXPERIMENTS_TO_RUN = [{**_MS_BEST, "force_selection_metric": None,
 #                        "description": "MS best: Body + HaMeR + Face(compact), no count loss"}]   # metric asked at training
 # then, after extracting the clean features: EXPERIMENTS_TO_RUN = TEMPO_STUDY_A2_CLEAN  (3 seeds: "all")
