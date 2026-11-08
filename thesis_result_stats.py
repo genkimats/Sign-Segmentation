@@ -373,8 +373,9 @@ def make_figures(out, groups, dist, curves_c, offsets, curves_d, vrows, corr_row
     gnames = list(groups)
     # B: linear axis, LEN_BIN_S-second bins up to LEN_MAX_S (longer segments counted in the last bin)
     edges = np.linspace(0, LEN_MAX_S, LEN_BINS + 1)
-    fig, axes = plt.subplots(1, len(gnames), figsize=(5.5 * len(gnames), 3.6), squeeze=False, sharey=True)
-    for ax, gname in zip(axes[0], gnames):
+    # main group (--runs) only; the --compare group stays in the tables and in figures C / D
+    fig, axes = plt.subplots(1, 1, figsize=(6.0, 3.6), squeeze=False)
+    for ax, gname in zip(axes[0], gnames[:1]):
         for d in ("gold",) + DECODERS:
             x = dist[(gname, d)]
             if len(x):
@@ -384,7 +385,6 @@ def make_figures(out, groups, dist, curves_c, offsets, curves_d, vrows, corr_row
         ax.set_xticks(np.arange(0, LEN_MAX_S + 1e-9, 2))
         ax.set_xlabel(f"phrase duration (s); {LEN_BINS} bins of {LEN_BIN_S:.2g} s, last bin includes longer phrases")
         ax.set_ylabel("share of segments (%)")
-        ax.set_title(gname)
         ax.legend(frameon=False, fontsize=8)
     fig.tight_layout()
     fig.savefig(os.path.join(out, "fig_B_lengths.png"), dpi=200)
