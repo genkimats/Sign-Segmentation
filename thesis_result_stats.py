@@ -4,8 +4,10 @@ Result statistics for the thesis (analyses B-E), from saved predictions:
   -> python evaluate_phrase.py --model <model> --prefixes ... --split val  --save-predictions
      python evaluate_phrase.py --model <model> --prefixes ... --split test --save-predictions
 
-Decoders (as in count_oracle_decoding.py): argmax | argmax_merge (the run's tuned merge distance,
-default 10) | peak (peak picking; min_dist / sigma / threshold tuned on VAL by boundary F1@5).
+Decoders: argmax | threshold (the 2023 paper's decoder, src.metrics.decode_threshold_2023, with the B / O
+thresholds tuned on VAL: the run's own tuned_thresholds from evaluate_phrase.py --tune-on val if saved,
+otherwise tuned here by boundary F1@5 on a 0.1..0.9 grid) | peak (peak picking; min_dist / sigma /
+threshold tuned on VAL by boundary F1@5).
 
   B  SEGMENT LENGTHS   phrase durations of gold vs every decoder (pooled over the runs of a group):
                        median / quartiles / share < 0.3 s, Wasserstein distance and KS statistic on
@@ -46,39 +48,65 @@ from scipy.stats import ks_2samp, spearmanr, wasserstein_distance
 
 from count_oracle_decoding import peaks_with_heights, starts_to_segments, tune_peaks_on_val
 from phrase_stats import PRED_ROOT, f1_from_counts, gold_starts_of, load_predictions
-from src.metrics import B_TAG, O_TAG, extract_segments, match_boundaries, merge_close_starts
+from src.metrics import B_TAG, O_TAG, decode_threshold_2023, extract_segments, match_boundaries
 
 FPS = 50.0
 TOL_CURVE = list(range(0, 26))
-DECODERS = ("argmax", "argmax_merge", "peak")
-DEC_LABEL = {"argmax": "Argmax", "argmax_merge": "Merge", "peak": "Peak picking", "gold": "Gold"}
+DECODERS = ("argmax", "threshold", "peak")
+DEC_LABEL = {"argmax": "Argmax", "threshold": "Threshold", "peak": "Peak picking", "gold": "Gold"}
+THR_TUNE_GRID = [round(x, 1) for x in np.arange(0.1, 0.91, 0.1)]   # B / O thresholds, if the run has none tuned
 SHORT_S = 0.3
-LEN_BIN_S = 1.0      # figure B: bin width (s)
 LEN_MAX_S = 20.0     # figure B: axis end (s); longer segments go into the last bin
+LEN_BINS = 60        # figure B: number of bins over 0..LEN_MAX_S (60 -> 1/3 s per bin)
+LEN_BIN_S = LEN_MAX_S / LEN_BINS
 
 
 # ----------------------------------------------------------------------------- decoding
+def tune_threshold_on_val(val):
+    """B / O thresholds of the 2023 decoder by pooled boundary F1@5 on val."""
+    probs, _, gold = val
+    gstarts = {v: gold_starts_of(gold[v]) for v in probs}
+    best = None
+    for b in THR_TUNE_GRID:
+        for o in THR_TUNE_GRID:
+            tp = npred = ngold = 0
+            for v in probs:
+                st = np.array([a for a, _ in decode_threshold_2023(probs[v], b, o)], dtype=np.int64)
+                x, y, z = counts(gstarts[v], st, 5)
+                tp, npred, ngold = tp + x, npred + y, ngold + z
+            f1 = f1_from_counts(tp, npred, ngold)
+            if best is None or f1 > best[0]:
+                best = (f1, b, o)
+    return best[1], best[2], round(best[0], 4)
+
+
 def decode_run(run, split, pred_root):
     """-> {"gold": {vid: gold}, "probs": ..., "dec": {decoder: {vid: (starts, segments)}},
            "peaks": {vid: (idx, heights)}, "tuned": {...}}"""
     probs, meta, gold = load_predictions(pred_root, run, split)
-    tuned = tune_peaks_on_val(load_predictions(pred_root, run, "val"))
+    val = load_predictions(pred_root, run, "val")
+    tuned = tune_peaks_on_val(val)
     md, sg, thr = tuned["min_dist"], tuned["sigma"], tuned["thr"]
-    merge_d = int((meta.get("merge_starts") or {}).get("argmax_merge") or 10)
+    saved = (val[1].get("tuned_thresholds") if val[1].get("tuned_on") == "val" else None) or meta.get("tuned_thresholds")
+    if saved:
+        b_thr, o_thr, src = float(saved[0]), float(saved[1]), "saved (evaluate_phrase.py --tune-on val)"
+    else:
+        b_thr, o_thr, f1 = tune_threshold_on_val(val)
+        src = f"tuned here on val (boundary F1@5 {f1})"
     dec = {d: {} for d in DECODERS}
     peaks = {}
     for v in probs:
         p = probs[v]
         segs = extract_segments(p.argmax(axis=0))
         dec["argmax"][v] = (np.array([s for s, _ in segs], dtype=np.int64), segs)
-        ms = merge_close_starts(segs, p[B_TAG], merge_d)
-        dec["argmax_merge"][v] = (np.array([s for s, _ in ms], dtype=np.int64), ms)
+        ts = decode_threshold_2023(p, b_thr, o_thr)
+        dec["threshold"][v] = (np.array([s for s, _ in ts], dtype=np.int64), ts)
         idx, h = peaks_with_heights(p[B_TAG], md, sg)
         peaks[v] = (idx, h)
         st = np.sort(idx[h >= thr]).astype(np.int64)
         dec["peak"][v] = (st, starts_to_segments(st, p))
     return {"run": run, "gold": gold, "probs": probs, "dec": dec, "peaks": peaks,
-            "tuned": {**tuned, "merge_d": merge_d}}
+            "tuned": {**tuned, "threshold_b": b_thr, "threshold_o": o_thr, "threshold_source": src}}
 
 
 def counts(gs, ps, k):
@@ -137,11 +165,11 @@ def analysis_B(groups):
                 row["wasserstein_log10"] = round(float(wasserstein_distance(lg, lp)), 4)
                 row["ks_stat"] = round(float(ks_2samp(lg, lp).statistic), 4)
             rows.append(row)
-            edges = np.arange(0, LEN_MAX_S + LEN_BIN_S / 2, LEN_BIN_S)
+            edges = np.linspace(0, LEN_MAX_S, LEN_BINS + 1)
             if len(x):
                 h = np.histogram(np.minimum(x, LEN_MAX_S - 1e-9), bins=edges)[0] / len(x)
                 HIST_ROWS.append({"group": gname, "segments": DEC_LABEL[d],
-                                  **{f"{a:g}-{b:g}s" if b < LEN_MAX_S else f">={a:g}s": round(float(v), 4)
+                                  **{f"{a:.2f}-{b:.2f}s" if b < LEN_MAX_S - 1e-9 else f">={a:.2f}s": round(float(v), 4)
                                      for a, b, v in zip(edges[:-1], edges[1:], h)}})
         rows.append({"group": gname, "segments": "Gold pauses between phrases", "n_per_run": len(pauses),
                      "median_s": round(q(pauses, .5)[0], 3), "q25_s": round(q(pauses, .25)[0], 3),
@@ -341,10 +369,10 @@ def make_figures(out, groups, dist, curves_c, offsets, curves_d, vrows, corr_row
     except ImportError:
         print("matplotlib not installed: figures skipped")
         return
-    colors = {"gold": "#222222", "argmax": "#C0504D", "argmax_merge": "#4F81BD", "peak": "#2E8B57"}
+    colors = {"gold": "#222222", "argmax": "#C0504D", "threshold": "#4F81BD", "peak": "#2E8B57"}
     gnames = list(groups)
     # B: linear axis, LEN_BIN_S-second bins up to LEN_MAX_S (longer segments counted in the last bin)
-    edges = np.arange(0, LEN_MAX_S + LEN_BIN_S / 2, LEN_BIN_S)
+    edges = np.linspace(0, LEN_MAX_S, LEN_BINS + 1)
     fig, axes = plt.subplots(1, len(gnames), figsize=(5.5 * len(gnames), 3.6), squeeze=False, sharey=True)
     for ax, gname in zip(axes[0], gnames):
         for d in ("gold",) + DECODERS:
@@ -353,8 +381,8 @@ def make_figures(out, groups, dist, curves_c, offsets, curves_d, vrows, corr_row
                 share = np.histogram(np.minimum(x, LEN_MAX_S - 1e-9), bins=edges)[0] / len(x) * 100
                 ax.stairs(share, edges, lw=2.2 if d == "gold" else 1.4, color=colors[d], label=DEC_LABEL[d])
         ax.set_xlim(0, LEN_MAX_S)
-        ax.set_xticks(edges[::2])
-        ax.set_xlabel(f"phrase duration (s), {LEN_BIN_S:g}-s bins; last bin = {LEN_MAX_S - LEN_BIN_S:g} s or longer")
+        ax.set_xticks(np.arange(0, LEN_MAX_S + 1e-9, 2))
+        ax.set_xlabel(f"phrase duration (s); {LEN_BINS} bins of {LEN_BIN_S:.2g} s, last bin includes longer phrases")
         ax.set_ylabel("share of segments (%)")
         ax.set_title(gname)
         ax.legend(frameon=False, fontsize=8)
