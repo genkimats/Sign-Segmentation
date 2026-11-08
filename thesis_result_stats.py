@@ -380,7 +380,7 @@ def make_figures(out, groups, dist, curves_c, offsets, curves_d, vrows, corr_row
             if len(x):
                 share = np.histogram(np.minimum(x, LEN_MAX_S - 1e-9), bins=edges)[0] / len(x) * 100
                 ax.stairs(share, edges, lw=2.2 if d == "gold" else 1.4, color=colors[d], label=DEC_LABEL[d])
-        ax.set_xlim(0, LEN_MAX_S)
+        ax.set_xlim(-0.02 * LEN_MAX_S, LEN_MAX_S)
         ax.set_xticks(np.arange(0, LEN_MAX_S + 1e-9, 2))
         ax.set_xlabel(f"phrase duration (s); {LEN_BINS} bins of {LEN_BIN_S:.2g} s, last bin includes longer phrases")
         ax.set_ylabel("share of segments (%)")
