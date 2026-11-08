@@ -1,0 +1,10 @@
+Sign-head decoders on multistream_bilstm-354, multistream_bilstm-355, multistream_bilstm-356, multistream_bilstm-357, multistream_bilstm-358, multistream_bilstm-359, multistream_bilstm-360, multistream_bilstm-361, multistream_bilstm-362, multistream_bilstm-363 (test; tuned on val by boundary F1@5).
+mean over runs; diff vs peak_thr = paired bootstrap over videos (runs averaged).
+
+peak_thr             F1@2 0.386  F1@5 0.498  F1@10 0.550  IoU 0.836  K/gold 1.25
+snap_product         F1@2 0.401  F1@5 0.507  F1@10 0.553  IoU 0.820  K/gold 1.05  | vs peak_thr +0.0088 [+0.0036, +0.0141] P<=0 0.001
+snap_move            F1@2 0.391  F1@5 0.497  F1@10 0.550  IoU 0.836  K/gold 1.25  | vs peak_thr -0.0012 [-0.0036, +0.0011] P<=0 0.845
+snap_move_drop       F1@2 0.395  F1@5 0.499  F1@10 0.552  IoU 0.833  K/gold 1.19  | vs peak_thr +0.0010 [-0.0034, +0.0056] P<=0 0.331
+posthoc_lr           F1@2 0.404  F1@5 0.507  F1@10 0.558  IoU 0.836  K/gold 1.15  | vs peak_thr +0.0091 [+0.0034, +0.0151] P<=0 0.001
+posthoc_gbm          F1@2 0.398  F1@5 0.500  F1@10 0.549  IoU 0.830  K/gold 1.13  | vs peak_thr +0.0013 [-0.0033, +0.0065] P<=0 0.321
+posthoc_gbm_timing   F1@2 0.337  F1@5 0.422  F1@10 0.464  IoU 0.783  K/gold 1.23  | vs peak_thr -0.0763 [-0.0888, -0.0619] P<=0 1.000

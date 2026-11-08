@@ -1,0 +1,7 @@
+{
+  "run": "multistream_bilstm-359",
+  "split": "val",
+  "sign_labels_dir": "processed_data/BIO_tags",
+  "labels_dir": "processed_data/BIO_tags_phrase_v2",
+  "description": "SH5: sign head + cascade with soft pause features, detached"
+}

@@ -1,0 +1,7 @@
+{
+  "run": "multistream_bilstm-362",
+  "split": "test",
+  "sign_labels_dir": "processed_data/BIO_tags",
+  "labels_dir": "processed_data/BIO_tags_phrase_v2",
+  "description": "SH8: sign head + sign-category head (7 classes) on the encoder output"
+}

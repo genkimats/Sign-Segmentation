@@ -1,0 +1,24 @@
+529 videos (train+val+test); a 'filled' frame = the hand was not detected and extract_poses.py interpolated it. 95% CI: bootstrap over videos.
+
+1. HOW MUCH IS FILLED (share of all frames)
+   left    7.5% [6.6%, 8.4%]
+   right   7.1% [6.2%, 8.0%]
+   either  12.2% [11.1%, 13.4%]
+   both    2.3% [1.8%, 3.0%]
+   left gaps: 189556; median 0.02 s; >= 0.5 s: 3% of gaps, holding 60% of filled frames; longest 121.1 s
+   right gaps: 216529; median 0.02 s; >= 0.5 s: 2% of gaps, holding 55% of filled frames; longest 123.0 s
+
+2. FILLED HANDS vs PHRASES (either hand filled)
+   outside phrases (O): 14.7% [12.9%, 16.5%]
+   inside phrases (I/B): 8.6% [8.1%, 9.0%]
+   difference O - inside: +0.061 [+0.044, +0.080] (share of frames)
+
+3. THE 0.5 s BEFORE A START (either hand filled)
+   before phrase starts:              9.4% [8.9%, 9.9%]
+   before sign starts inside phrases: 7.9% [7.5%, 8.4%]
+   difference:                        +0.015 [+0.012, +0.018]
+
+4. vs ERRORS (test; share of the 0.5 s before the phrase start with a filled hand)
+   starts found by <= 10% of runs (n=419): 5.3%
+   starts found by >= 90% of runs (n=421): 9.2%
+   Mann-Whitney p = nan

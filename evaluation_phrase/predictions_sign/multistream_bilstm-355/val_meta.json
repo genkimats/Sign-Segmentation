@@ -1,0 +1,7 @@
+{
+  "run": "multistream_bilstm-355",
+  "split": "val",
+  "sign_labels_dir": "processed_data/BIO_tags",
+  "labels_dir": "processed_data/BIO_tags_phrase_v2",
+  "description": "SH1b: B+H+Fc + sign head (lambda 1.0)"
+}
