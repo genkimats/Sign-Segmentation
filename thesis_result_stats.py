@@ -56,8 +56,8 @@ DECODERS = ("argmax", "threshold", "peak")
 DEC_LABEL = {"argmax": "Argmax", "threshold": "Threshold", "peak": "Peak picking", "gold": "Gold"}
 THR_TUNE_GRID = [round(x, 1) for x in np.arange(0.1, 0.91, 0.1)]   # B / O thresholds, if the run has none tuned
 SHORT_S = 0.3
-LEN_MAX_S = None     # figure B: axis end (s); None = the longest segment plotted (gold + decoders of --runs)
-LEN_BINS = 60        # figure B: number of bins over 0..axis end
+LEN_MAX_S = 15.0     # figure B: axis end (s); longer segments go into the last bin. None = the longest segment
+LEN_BINS = 60        # figure B: number of bins over 0..LEN_MAX_S (60 -> 0.25 s per bin)
 
 
 def len_axis_max(dist, gname):
@@ -391,7 +391,9 @@ def make_figures(out, groups, dist, curves_c, offsets, curves_d, vrows, corr_row
                 share = np.histogram(np.minimum(x, x_max - 1e-9), bins=edges)[0] / len(x) * 100
                 ax.stairs(share, edges, lw=2.2 if d == "gold" else 1.4, color=colors[d], label=DEC_LABEL[d])
         ax.set_xlim(-0.02 * x_max, x_max)
-        ax.set_xlabel(f"phrase duration (s); {LEN_BINS} bins of {x_max / LEN_BINS:.2g} s")
+        ax.set_xticks(np.arange(0, x_max + 1e-9, 1))
+        ax.set_xlabel(f"phrase duration (s); {LEN_BINS} bins of {x_max / LEN_BINS:.2g} s"
+                      + ("; last bin includes longer phrases" if LEN_MAX_S else ""))
         ax.set_ylabel("share of segments (%)")
         ax.legend(frameon=False, fontsize=8)
     fig.tight_layout()
