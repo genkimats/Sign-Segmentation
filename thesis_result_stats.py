@@ -378,6 +378,7 @@ def make_figures(out, groups, dist, curves_c, offsets, curves_d, vrows, corr_row
         print("matplotlib not installed: figures skipped")
         return
     colors = {"gold": "#222222", "argmax": "#C0504D", "threshold": "#4F81BD", "peak": "#2E8B57"}
+    vivid = {"gold": "#222222", "argmax": "#E8382B", "threshold": "#1F78E0", "peak": "#12A150"}   # figure B
     gnames = list(groups)
     # B: linear axis, LEN_BINS bins from 0 to the axis end (the longest segment unless LEN_MAX_S is set)
     # main group (--runs) only; the --compare group stays in the tables and in figures C / D
@@ -389,7 +390,9 @@ def make_figures(out, groups, dist, curves_c, offsets, curves_d, vrows, corr_row
             x = dist[(gname, d)]
             if len(x):
                 share = np.histogram(np.minimum(x, x_max - 1e-9), bins=edges)[0] / len(x) * 100
-                ax.stairs(share, edges, lw=2.2 if d == "gold" else 1.4, color=colors[d], label=DEC_LABEL[d])
+                ax.stairs(share, edges, fill=True, color=vivid[d], alpha=0.08 if d == "gold" else 0.38,
+                          lw=0)                                   # shaded area (gold lighter: it is black)
+                ax.stairs(share, edges, lw=2.2 if d == "gold" else 1.4, color=vivid[d], label=DEC_LABEL[d])
         ax.set_xlim(-0.02 * x_max, x_max)
         ax.set_xticks(np.arange(0, x_max + 1e-9, 1))
         ax.set_xlabel(f"phrase duration (s); {LEN_BINS} bins of {x_max / LEN_BINS:.2g} s"
