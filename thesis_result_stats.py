@@ -390,7 +390,7 @@ def make_figures(out, groups, dist, curves_c, offsets, curves_d, vrows, corr_row
             x = dist[(gname, d)]
             if len(x):
                 share = np.histogram(np.minimum(x, x_max - 1e-9), bins=edges)[0] / len(x) * 100
-                ax.stairs(share, edges, fill=True, color=vivid[d], alpha=0.08 if d == "gold" else 0.38,
+                ax.stairs(share, edges, fill=True, color=vivid[d], alpha=0.08 if d == "gold" else 0.5,
                           lw=0)                                   # shaded area (gold lighter: it is black)
                 ax.stairs(share, edges, lw=2.2 if d == "gold" else 1.4, color=vivid[d], label=DEC_LABEL[d])
         ax.set_xlim(-0.02 * x_max, x_max)
