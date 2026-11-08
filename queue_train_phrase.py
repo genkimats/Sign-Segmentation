@@ -670,6 +670,11 @@ WINDOW_STUDY = [
     for w in (64, 128, 256, 512, 768, 1024)
 ]
 
+# Learning-rate check (2026-11-09): the best model at lr 3e-4 (reference 1e-4, every other run). 1 seed.
+LR_STUDY = [
+    {**_MS_BEST, "learning_rate": 0.0003, "description": "LR: B+H+Fc, learning rate 3e-4"},
+]
+
 # ------------------------------------------------------------------------------
 # HaMeR TEMPORAL-CONV STUDY: the mixing study showed temporal conv is the whole multistream
 # gain for the body stream; the HaMeR stream (MLP) has none. Switch on ONLY the residual
@@ -1062,7 +1067,9 @@ FUSION_OPTIONAL = [{**a, "force_selection_metric": None} for a in fusion_optiona
 # Tenth batch (2026-11-09): B-class weight sweep, 7 runs at 1 seed (Enter at the seed prompt).
 # EXPERIMENTS_TO_RUN = CLASS_WEIGHT_STUDY
 # Eleventh batch (2026-11-09): window-size sweep, 6 runs at 1 seed (Enter at the seed prompt).
-EXPERIMENTS_TO_RUN = WINDOW_STUDY
+# EXPERIMENTS_TO_RUN = WINDOW_STUDY
+# Twelfth batch (2026-11-09): learning rate 3e-4, 1 run (Enter at the seed prompt).
+EXPERIMENTS_TO_RUN = LR_STUDY
 # EXPERIMENTS_TO_RUN = [{**_MS_BEST, "force_selection_metric": None,
 #                        "description": "MS best: Body + HaMeR + Face(compact), no count loss"}]   # metric asked at training
 # then, after extracting the clean features: EXPERIMENTS_TO_RUN = TEMPO_STUDY_A2_CLEAN  (3 seeds: "all")
