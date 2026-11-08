@@ -1,0 +1,7 @@
+{
+  "run": "multistream_bilstm-363",
+  "split": "val",
+  "sign_labels_dir": "processed_data/BIO_tags",
+  "labels_dir": "processed_data/BIO_tags_phrase_v2",
+  "description": "SH9: sign head + palm-up / pointing / connective / other head on the encoder output"
+}

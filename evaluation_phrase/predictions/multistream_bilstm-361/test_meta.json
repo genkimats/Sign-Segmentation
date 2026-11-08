@@ -1,0 +1,24 @@
+{
+  "run": "multistream_bilstm-361",
+  "model": "multistream_bilstm",
+  "prefix": "361",
+  "split": "test",
+  "labels_dir": "processed_data/BIO_tags_phrase_v2",
+  "description": "SH7: sign head + sign-level decoder (50% predicted sign starts in training)",
+  "seed": "",
+  "fixed_thresholds": [
+    0.5,
+    0.5
+  ],
+  "swept_thresholds": null,
+  "tuned_thresholds": [
+    0.5,
+    0.5
+  ],
+  "tuned_on": "val",
+  "sweep_metric": "iou_pct",
+  "merge_starts": {
+    "argmax_merge": 10,
+    "tuned_merge": 5
+  }
+}

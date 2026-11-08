@@ -1,0 +1,7 @@
+{
+  "run": "multistream_bilstm-361",
+  "split": "val",
+  "sign_labels_dir": "processed_data/BIO_tags",
+  "labels_dir": "processed_data/BIO_tags_phrase_v2",
+  "description": "SH7: sign head + sign-level decoder (50% predicted sign starts in training)"
+}
