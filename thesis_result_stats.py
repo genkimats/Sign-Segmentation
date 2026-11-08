@@ -56,9 +56,16 @@ DECODERS = ("argmax", "threshold", "peak")
 DEC_LABEL = {"argmax": "Argmax", "threshold": "Threshold", "peak": "Peak picking", "gold": "Gold"}
 THR_TUNE_GRID = [round(x, 1) for x in np.arange(0.1, 0.91, 0.1)]   # B / O thresholds, if the run has none tuned
 SHORT_S = 0.3
-LEN_MAX_S = 20.0     # figure B: axis end (s); longer segments go into the last bin
-LEN_BINS = 60        # figure B: number of bins over 0..LEN_MAX_S (60 -> 1/3 s per bin)
-LEN_BIN_S = LEN_MAX_S / LEN_BINS
+LEN_MAX_S = None     # figure B: axis end (s); None = the longest segment plotted (gold + decoders of --runs)
+LEN_BINS = 60        # figure B: number of bins over 0..axis end
+
+
+def len_axis_max(dist, gname):
+    """Axis end of figure B: LEN_MAX_S if set, else the longest segment of this group (rounded up to 1 s)."""
+    if LEN_MAX_S:
+        return float(LEN_MAX_S)
+    longest = max(float(x.max()) for (g, d), x in dist.items() if g == gname and len(x))
+    return float(np.ceil(longest))
 
 
 # ----------------------------------------------------------------------------- decoding
@@ -165,11 +172,12 @@ def analysis_B(groups):
                 row["wasserstein_log10"] = round(float(wasserstein_distance(lg, lp)), 4)
                 row["ks_stat"] = round(float(ks_2samp(lg, lp).statistic), 4)
             rows.append(row)
-            edges = np.linspace(0, LEN_MAX_S, LEN_BINS + 1)
+            x_max = len_axis_max(dist, gname)
+            edges = np.linspace(0, x_max, LEN_BINS + 1)
             if len(x):
-                h = np.histogram(np.minimum(x, LEN_MAX_S - 1e-9), bins=edges)[0] / len(x)
+                h = np.histogram(np.minimum(x, x_max - 1e-9), bins=edges)[0] / len(x)
                 HIST_ROWS.append({"group": gname, "segments": DEC_LABEL[d],
-                                  **{f"{a:.2f}-{b:.2f}s" if b < LEN_MAX_S - 1e-9 else f">={a:.2f}s": round(float(v), 4)
+                                  **{f"{a:.2f}-{b:.2f}s": round(float(v), 4)
                                      for a, b, v in zip(edges[:-1], edges[1:], h)}})
         rows.append({"group": gname, "segments": "Gold pauses between phrases", "n_per_run": len(pauses),
                      "median_s": round(q(pauses, .5)[0], 3), "q25_s": round(q(pauses, .25)[0], 3),
@@ -371,19 +379,19 @@ def make_figures(out, groups, dist, curves_c, offsets, curves_d, vrows, corr_row
         return
     colors = {"gold": "#222222", "argmax": "#C0504D", "threshold": "#4F81BD", "peak": "#2E8B57"}
     gnames = list(groups)
-    # B: linear axis, LEN_BIN_S-second bins up to LEN_MAX_S (longer segments counted in the last bin)
-    edges = np.linspace(0, LEN_MAX_S, LEN_BINS + 1)
+    # B: linear axis, LEN_BINS bins from 0 to the axis end (the longest segment unless LEN_MAX_S is set)
     # main group (--runs) only; the --compare group stays in the tables and in figures C / D
     fig, axes = plt.subplots(1, 1, figsize=(6.0, 3.6), squeeze=False)
     for ax, gname in zip(axes[0], gnames[:1]):
+        x_max = len_axis_max(dist, gname)
+        edges = np.linspace(0, x_max, LEN_BINS + 1)
         for d in ("gold",) + DECODERS:
             x = dist[(gname, d)]
             if len(x):
-                share = np.histogram(np.minimum(x, LEN_MAX_S - 1e-9), bins=edges)[0] / len(x) * 100
+                share = np.histogram(np.minimum(x, x_max - 1e-9), bins=edges)[0] / len(x) * 100
                 ax.stairs(share, edges, lw=2.2 if d == "gold" else 1.4, color=colors[d], label=DEC_LABEL[d])
-        ax.set_xlim(-0.02 * LEN_MAX_S, LEN_MAX_S)
-        ax.set_xticks(np.arange(0, LEN_MAX_S + 1e-9, 2))
-        ax.set_xlabel(f"phrase duration (s); {LEN_BINS} bins of {LEN_BIN_S:.2g} s, last bin includes longer phrases")
+        ax.set_xlim(-0.02 * x_max, x_max)
+        ax.set_xlabel(f"phrase duration (s); {LEN_BINS} bins of {x_max / LEN_BINS:.2g} s")
         ax.set_ylabel("share of segments (%)")
         ax.legend(frameon=False, fontsize=8)
     fig.tight_layout()
