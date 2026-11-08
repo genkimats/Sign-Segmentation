@@ -5,8 +5,8 @@ Result statistics for the thesis (analyses B-E), from saved predictions:
      python evaluate_phrase.py --model <model> --prefixes ... --split test --save-predictions
 
 Decoders: argmax | threshold (the 2023 paper's decoder, src.metrics.decode_threshold_2023, with the B / O
-thresholds tuned on VAL: the run's own tuned_thresholds from evaluate_phrase.py --tune-on val if saved,
-otherwise tuned here by boundary F1@5 on a 0.1..0.9 grid) | peak (peak picking; min_dist / sigma /
+thresholds tuned on VAL by IoU + %-score, the 2023 criterion (as decoder_comparison.py),
+on a 0.1..0.9 grid) | peak (peak picking; min_dist / sigma /
 threshold tuned on VAL by boundary F1@5).
 
   B  SEGMENT LENGTHS   phrase durations of gold vs every decoder (pooled over the runs of a group):
@@ -48,7 +48,8 @@ from scipy.stats import ks_2samp, spearmanr, wasserstein_distance
 
 from count_oracle_decoding import peaks_with_heights, starts_to_segments, tune_peaks_on_val
 from phrase_stats import PRED_ROOT, f1_from_counts, gold_starts_of, load_predictions
-from src.metrics import B_TAG, O_TAG, decode_threshold_2023, extract_segments, match_boundaries
+from src.metrics import (B_TAG, O_TAG, decode_threshold_2023, extract_segments, match_boundaries, pct_score,
+                         segment_iou, segment_percentage)
 
 FPS = 50.0
 TOL_CURVE = list(range(0, 26))
@@ -70,20 +71,23 @@ def len_axis_max(dist, gname):
 
 # ----------------------------------------------------------------------------- decoding
 def tune_threshold_on_val(val):
-    """B / O thresholds of the 2023 decoder by pooled boundary F1@5 on val."""
+    """B / O thresholds of the 2023 decoder, tuned the 2023 way: max IoU + %-score (1 - |% - 1|) on val
+    (per-video means, as evaluate_phrase.py --sweep-metric iou_pct). Same rule as decoder_comparison.py."""
     probs, _, gold = val
-    gstarts = {v: gold_starts_of(gold[v]) for v in probs}
+    gsegs = {v: extract_segments(gold[v]) for v in probs}
     best = None
     for b in THR_TUNE_GRID:
         for o in THR_TUNE_GRID:
-            tp = npred = ngold = 0
+            ious, pcts = [], []
             for v in probs:
-                st = np.array([a for a, _ in decode_threshold_2023(probs[v], b, o)], dtype=np.int64)
-                x, y, z = counts(gstarts[v], st, 5)
-                tp, npred, ngold = tp + x, npred + y, ngold + z
-            f1 = f1_from_counts(tp, npred, ngold)
-            if best is None or f1 > best[0]:
-                best = (f1, b, o)
+                segs = decode_threshold_2023(probs[v], b, o)
+                ious.append(segment_iou(segs, gsegs[v], len(gold[v])))
+                pc = segment_percentage(segs, gsegs[v])
+                if not np.isnan(pc):
+                    pcts.append(pc)
+            sc = float(np.mean(ious)) + pct_score(float(np.mean(pcts)) if pcts else float("nan"))
+            if best is None or sc > best[0]:
+                best = (sc, b, o)
     return best[1], best[2], round(best[0], 4)
 
 
@@ -94,12 +98,8 @@ def decode_run(run, split, pred_root):
     val = load_predictions(pred_root, run, "val")
     tuned = tune_peaks_on_val(val)
     md, sg, thr = tuned["min_dist"], tuned["sigma"], tuned["thr"]
-    saved = (val[1].get("tuned_thresholds") if val[1].get("tuned_on") == "val" else None) or meta.get("tuned_thresholds")
-    if saved:
-        b_thr, o_thr, src = float(saved[0]), float(saved[1]), "saved (evaluate_phrase.py --tune-on val)"
-    else:
-        b_thr, o_thr, f1 = tune_threshold_on_val(val)
-        src = f"tuned here on val (boundary F1@5 {f1})"
+    b_thr, o_thr, sc = tune_threshold_on_val(val)     # always IoU+% (saved thresholds may be bF1-tuned)
+    src = f"tuned here on val by IoU + %-score ({sc})"
     dec = {d: {} for d in DECODERS}
     peaks = {}
     for v in probs:
@@ -390,7 +390,7 @@ def make_figures(out, groups, dist, curves_c, offsets, curves_d, vrows, corr_row
             x = dist[(gname, d)]
             if len(x):
                 share = np.histogram(np.minimum(x, x_max - 1e-9), bins=edges)[0] / len(x) * 100
-                ax.stairs(share, edges, fill=True, color=vivid[d], alpha=0.08 if d == "gold" else 0.5,
+                ax.stairs(share, edges, fill=True, color=vivid[d], alpha=0.08 if d == "gold" else 0.38,
                           lw=0, zorder=1)                         # shaded area (gold lighter: it is black)
                 ax.stairs(share, edges, lw=2.2 if d == "gold" else 1.4, color=vivid[d], label=DEC_LABEL[d],
                           zorder=5 if d == "gold" else 3)          # gold outline drawn on top of everything
