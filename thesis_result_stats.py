@@ -53,6 +53,8 @@ TOL_CURVE = list(range(0, 26))
 DECODERS = ("argmax", "argmax_merge", "peak")
 DEC_LABEL = {"argmax": "Argmax", "argmax_merge": "Merge", "peak": "Peak picking", "gold": "Gold"}
 SHORT_S = 0.3
+LEN_BIN_S = 1.0      # figure B: bin width (s)
+LEN_MAX_S = 20.0     # figure B: axis end (s); longer segments go into the last bin
 
 
 # ----------------------------------------------------------------------------- decoding
@@ -111,6 +113,9 @@ def gold_pauses(g):
     return [s - e - 1 for (_, e), (s, _) in zip(segs[:-1], segs[1:]) if s - e - 1 > 0]
 
 
+HIST_ROWS = []
+
+
 def analysis_B(groups):
     rows, dist = [], {}
     for gname, runs in groups.items():
@@ -132,6 +137,12 @@ def analysis_B(groups):
                 row["wasserstein_log10"] = round(float(wasserstein_distance(lg, lp)), 4)
                 row["ks_stat"] = round(float(ks_2samp(lg, lp).statistic), 4)
             rows.append(row)
+            edges = np.arange(0, LEN_MAX_S + LEN_BIN_S / 2, LEN_BIN_S)
+            if len(x):
+                h = np.histogram(np.minimum(x, LEN_MAX_S - 1e-9), bins=edges)[0] / len(x)
+                HIST_ROWS.append({"group": gname, "segments": DEC_LABEL[d],
+                                  **{f"{a:g}-{b:g}s" if b < LEN_MAX_S else f">={a:g}s": round(float(v), 4)
+                                     for a, b, v in zip(edges[:-1], edges[1:], h)}})
         rows.append({"group": gname, "segments": "Gold pauses between phrases", "n_per_run": len(pauses),
                      "median_s": round(q(pauses, .5)[0], 3), "q25_s": round(q(pauses, .25)[0], 3),
                      "q75_s": round(q(pauses, .75)[0], 3), "q10_s": round(q(pauses, .1)[0], 3),
@@ -332,20 +343,19 @@ def make_figures(out, groups, dist, curves_c, offsets, curves_d, vrows, corr_row
         return
     colors = {"gold": "#222222", "argmax": "#C0504D", "argmax_merge": "#4F81BD", "peak": "#2E8B57"}
     gnames = list(groups)
-    # B
-    fig, axes = plt.subplots(1, len(gnames), figsize=(5.5 * len(gnames), 3.6), squeeze=False)
-    bins = np.linspace(-1.7, 1.5, 65)
+    # B: linear axis, LEN_BIN_S-second bins up to LEN_MAX_S (longer segments counted in the last bin)
+    edges = np.arange(0, LEN_MAX_S + LEN_BIN_S / 2, LEN_BIN_S)
+    fig, axes = plt.subplots(1, len(gnames), figsize=(5.5 * len(gnames), 3.6), squeeze=False, sharey=True)
     for ax, gname in zip(axes[0], gnames):
         for d in ("gold",) + DECODERS:
             x = dist[(gname, d)]
             if len(x):
-                ax.hist(np.log10(x), bins=bins, density=True, histtype="step", lw=2 if d == "gold" else 1.4,
-                        color=colors[d], label=DEC_LABEL[d])
-        ax.axvline(np.log10(SHORT_S), color="#999999", ls=":", lw=1)
-        ticks = [0.05, 0.1, 0.3, 1, 3, 10, 30]
-        ax.set_xticks(np.log10(ticks), [f"{t:g}" for t in ticks])
-        ax.set_xlabel("phrase duration (s, log scale)")
-        ax.set_ylabel("density")
+                share = np.histogram(np.minimum(x, LEN_MAX_S - 1e-9), bins=edges)[0] / len(x) * 100
+                ax.stairs(share, edges, lw=2.2 if d == "gold" else 1.4, color=colors[d], label=DEC_LABEL[d])
+        ax.set_xlim(0, LEN_MAX_S)
+        ax.set_xticks(edges[::2])
+        ax.set_xlabel(f"phrase duration (s), {LEN_BIN_S:g}-s bins; last bin = {LEN_MAX_S - LEN_BIN_S:g} s or longer")
+        ax.set_ylabel("share of segments (%)")
         ax.set_title(gname)
         ax.legend(frameon=False, fontsize=8)
     fig.tight_layout()
@@ -414,7 +424,7 @@ def run_all(groups_runs, split, pred_root, out, sign_dir=None, missing=None):
     c_rows, curves_c, offsets, off_rows = analysis_C(groups)
     d_rows, rel_rows, curves_d = analysis_D(groups)
     v_rows, corr_rows, var_rows = analysis_E(groups, sign_dir, missing)
-    for name, rows in (("B_lengths", b_rows), ("C_tolerance", c_rows), ("C_offsets", off_rows),
+    for name, rows in (("B_lengths", b_rows), ("B_length_hist", HIST_ROWS), ("C_tolerance", c_rows), ("C_offsets", off_rows),
                        ("D_pr", d_rows), ("D_reliability", rel_rows), ("E_per_video", v_rows),
                        ("E_correlations", corr_rows), ("E_variance", var_rows)):
         write_csv(os.path.join(out, f"{name}.csv"), rows)
