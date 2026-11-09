@@ -167,6 +167,12 @@ def build_model_kwargs(config, detected_hamer_dim=None, detected_dinov2_dim=None
         model_kwargs["temporal_kernel"] = int(config.get("temporal_kernel", 1))
         model_kwargs["temporal_layers"] = int(config.get("temporal_layers", 2))
         model_kwargs["temporal_dropout"] = float(config.get("temporal_dropout", 0.0))
+        # fusion-mechanism controls: only passed when on, so older configs rebuild unchanged
+        if config.get("modality_norm"):
+            model_kwargs["modality_norm"] = True
+        if int(config.get("joint_temporal_layers", 0) or 0) > 0:
+            model_kwargs["joint_temporal_layers"] = int(config["joint_temporal_layers"])
+            model_kwargs["joint_temporal_channels"] = int(config.get("joint_temporal_channels", 64))
 
     if config.get("use_hamer_features", False):
         if model_name not in HAMER_SUPPORTED_MODELS:

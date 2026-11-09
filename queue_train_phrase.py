@@ -717,6 +717,29 @@ BL2023_TCN_STUDY = [
 ]
 
 # ------------------------------------------------------------------------------
+# EARLY-FUSION MECHANISM STUDY (2026-11-10): why does early fusion (+ temporal conv) lose to multistream on
+# the same inputs? Two candidate reasons, one switch each, on the 2023 model with my recipe (early fusion):
+#   EF-norm   per-modality LayerNorm before the shared Linear (body+hands / face / HaMeR) -- tests modality
+#             balance: multistream normalises every stream before fusion, early fusion does not
+#   EF-joint  per-joint temporal conv BEFORE flattening (2 ST-GCN blocks with identity graph, 64 channels = the
+#             multistream "tcn" body encoder), then the same single Linear -- tests where the temporal conv sits
+#             (BL2023+TC applies it after mixing and gained nothing)
+# Both on Body + HaMeR and Body + HaMeR + Face(compact). References: early 259-261 / 268-270, early + TC
+# 280-282 / 289-291 (bilstm_2023), multistream 112-114 / 115-117. Compare with decoder_comparison.py --compare.
+# Reading: the arm that closes most of the gap to multistream names the mechanism; neither -> it is the
+# separate per-stream branches themselves.
+# ------------------------------------------------------------------------------
+EARLY_FUSION_MECHANISM_STUDY = [
+    {**_C, "use_hamer_features": True, "modality_norm": True, "description": "EF-norm: B+H, per-modality LayerNorm"},
+    {**_C, **COMBO_FACE, "use_hamer_features": True, "modality_norm": True,
+     "description": f"EF-norm: B+F+H ({_FS}), per-modality LayerNorm"},
+    {**_C, "use_hamer_features": True, "joint_temporal_layers": 2,
+     "description": "EF-joint: B+H, per-joint temporal conv before fusion"},
+    {**_C, **COMBO_FACE, "use_hamer_features": True, "joint_temporal_layers": 2,
+     "description": f"EF-joint: B+F+H ({_FS}), per-joint temporal conv before fusion"},
+]
+
+# ------------------------------------------------------------------------------
 # BOUNDARY STUDIES on the final model (multistream B+H+Fc, v2 labels; reference = 115-117).
 # Both change ONLY the training loss / targets; model, data and evaluation stay the same.
 #
@@ -1070,7 +1093,9 @@ FUSION_OPTIONAL = [{**a, "force_selection_metric": None} for a in fusion_optiona
 # EXPERIMENTS_TO_RUN = WINDOW_STUDY
 # Twelfth batch (2026-11-09): learning rate 3e-4, 1 run (Enter at the seed prompt).
 # EXPERIMENTS_TO_RUN = LR_STUDY
-EXPERIMENTS_TO_RUN = [BL2023_TCN_STUDY[6], BL2023_TCN_STUDY[3]]
+# EXPERIMENTS_TO_RUN = [BL2023_TCN_STUDY[6], BL2023_TCN_STUDY[3]]
+# Thirteenth batch (2026-11-10): why early fusion loses -- 4 configs x 3 seeds = 12 runs (enter "all").
+EXPERIMENTS_TO_RUN = EARLY_FUSION_MECHANISM_STUDY
 # EXPERIMENTS_TO_RUN = [{**_MS_BEST, "force_selection_metric": None,
 #                        "description": "MS best: Body + HaMeR + Face(compact), no count loss"}]   # metric asked at training
 # then, after extracting the clean features: EXPERIMENTS_TO_RUN = TEMPO_STUDY_A2_CLEAN  (3 seeds: "all")

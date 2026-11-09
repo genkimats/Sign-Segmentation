@@ -2280,13 +2280,42 @@ class Moryossef2023_BiLSTM(nn.Module):
 
     def __init__(self, in_channels, num_vertices, num_classes=3, d_model=256, n_layers=4,
                  hamer_dim=None, use_pose_input=True, temporal_kernel=1, temporal_layers=2,
-                 temporal_dropout=0.0, **unused):
+                 temporal_dropout=0.0, modality_norm=False, joint_temporal_layers=0,
+                 joint_temporal_channels=64, body_vertices=65, **unused):
         super().__init__()
         if d_model % 2:
             raise ValueError("d_model (their hidden_dim) must be even.")
         self.use_pose_input = bool(use_pose_input)
         self.hamer_dim = int(hamer_dim) if hamer_dim else 0
-        in_dim = (in_channels * num_vertices if self.use_pose_input else 0) + self.hamer_dim
+        # Fusion-mechanism controls (EARLY_FUSION_MECHANISM_STUDY; both off = unchanged model):
+        #   modality_norm          LayerNorm on each modality's flattened vector (body+hands keypoints,
+        #                          face keypoints, HaMeR) before the shared Linear projection -- the
+        #                          per-stream normalisation the multistream branches have, nothing else
+        #   joint_temporal_layers  > 0: that many ST-GCN blocks with an IDENTITY graph (= the multistream
+        #                          "tcn" encoder: per-joint temporal conv k=9, joint_temporal_channels
+        #                          channels) on the keypoints BEFORE flattening; fusion stays early (one
+        #                          Linear over all modalities, no per-stream branches)
+        self.modality_norm = bool(modality_norm)
+        self.body_vertices = int(body_vertices)
+        self.joint_tcn = None
+        c_pose = in_channels
+        if int(joint_temporal_layers) > 0 and self.use_pose_input:
+            A_id = np.eye(num_vertices)
+            ch = int(joint_temporal_channels)
+            self.joint_tcn = nn.Sequential(*[STGCNBlock(in_channels if i == 0 else ch, ch, A_id)
+                                             for i in range(int(joint_temporal_layers))])
+            c_pose = ch
+        self.parts_dims = []
+        if self.use_pose_input:
+            n_body = min(self.body_vertices, num_vertices)
+            self.parts_dims.append(c_pose * n_body)
+            if num_vertices > n_body:
+                self.parts_dims.append(c_pose * (num_vertices - n_body))
+        if self.hamer_dim:
+            self.parts_dims.append(self.hamer_dim)
+        if self.modality_norm:
+            self.part_norms = nn.ModuleList([nn.LayerNorm(d) for d in self.parts_dims])
+        in_dim = sum(self.parts_dims)
         if in_dim == 0:
             raise ValueError("bilstm_2023 has no input: use_pose_input=False and no HaMeR.")
         self.pose_projection = nn.Linear(in_dim, d_model)
@@ -2302,11 +2331,18 @@ class Moryossef2023_BiLSTM(nn.Module):
         B, C, T, V = x.shape
         parts = []
         if self.use_pose_input:
-            parts.append(x.permute(0, 2, 1, 3).reshape(B, T, C * V))
+            xp = self.joint_tcn(x) if self.joint_tcn is not None else x          # (B, C', T, V)
+            Cp = xp.shape[1]
+            nb = min(self.body_vertices, V)
+            parts.append(xp[..., :nb].permute(0, 2, 1, 3).reshape(B, T, Cp * nb))
+            if V > nb:
+                parts.append(xp[..., nb:].permute(0, 2, 1, 3).reshape(B, T, Cp * (V - nb)))
         if self.hamer_dim:
             if hamer is None:
                 raise ValueError("bilstm_2023 was built with HaMeR input but got hamer=None.")
             parts.append(hamer.permute(0, 2, 1)[:, :T])               # (B, D, T) -> (B, T, D)
+        if self.modality_norm:
+            parts = [n(p_) for n, p_ in zip(self.part_norms, parts)]
         h = self.pose_projection(torch.cat(parts, dim=-1) if len(parts) > 1 else parts[0])
         if self.temporal is not None:
             h = self.temporal(h)                                       # (B, T, d_model)
