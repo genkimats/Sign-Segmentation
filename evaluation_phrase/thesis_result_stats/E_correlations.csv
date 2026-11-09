@@ -1,0 +1,25 @@
+group,target,descriptor,n_videos,spearman_rho,p
+Multi-stream,bnd_f1_5_peak,phrases_per_min,17,0.199,0.4447
+Multi-stream,bnd_f1_5_peak,median_phrase_s,17,0.047,0.8591
+Multi-stream,bnd_f1_5_peak,median_pause_before_phrase_s,17,0.197,0.4484
+Multi-stream,bnd_f1_5_peak,share_starts_pause_lt_0.25s,17,-0.056,0.8298
+Multi-stream,bnd_f1_5_peak,signs_per_s_signing,17,-0.147,0.5733
+Multi-stream,bnd_f1_5_peak,median_pause_between_signs_s,17,0.021,0.9353
+Multi-stream,recall_5_peak,phrases_per_min,17,-0.077,0.7682
+Multi-stream,recall_5_peak,median_phrase_s,17,0.414,0.0983
+Multi-stream,recall_5_peak,median_pause_before_phrase_s,17,0.509,0.0371
+Multi-stream,recall_5_peak,share_starts_pause_lt_0.25s,17,-0.375,0.138
+Multi-stream,recall_5_peak,signs_per_s_signing,17,-0.412,0.1005
+Multi-stream,recall_5_peak,median_pause_between_signs_s,17,0.281,0.2753
+2023 (retrained),bnd_f1_5_peak,phrases_per_min,17,0.199,0.4444
+2023 (retrained),bnd_f1_5_peak,median_phrase_s,17,-0.112,0.6698
+2023 (retrained),bnd_f1_5_peak,median_pause_before_phrase_s,17,0.288,0.2628
+2023 (retrained),bnd_f1_5_peak,share_starts_pause_lt_0.25s,17,-0.194,0.4562
+2023 (retrained),bnd_f1_5_peak,signs_per_s_signing,17,-0.029,0.9107
+2023 (retrained),bnd_f1_5_peak,median_pause_between_signs_s,17,0.081,0.7559
+2023 (retrained),recall_5_peak,phrases_per_min,17,-0.146,0.5763
+2023 (retrained),recall_5_peak,median_phrase_s,17,0.424,0.0898
+2023 (retrained),recall_5_peak,median_pause_before_phrase_s,17,0.53,0.0288
+2023 (retrained),recall_5_peak,share_starts_pause_lt_0.25s,17,-0.444,0.0745
+2023 (retrained),recall_5_peak,signs_per_s_signing,17,-0.375,0.138
+2023 (retrained),recall_5_peak,median_pause_between_signs_s,17,0.287,0.2643

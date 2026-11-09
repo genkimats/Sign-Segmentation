@@ -1,0 +1,7 @@
+group,decoder,n_matched_25,median_offset_fr,mean_offset_fr,mad_fr,share_within_1,share_within_2,share_within_5
+Multi-stream,Argmax,3163,0.0,-0.212,1.0,0.6247,0.7028,0.8018
+Multi-stream,Threshold,3669,-1.0,-0.68,2.0,0.3494,0.55,0.8177
+Multi-stream,Peak picking,3836,0.0,0.415,2.0,0.4455,0.6262,0.8087
+2023 (retrained),Argmax,2520,0.0,-0.112,1.0,0.5409,0.6373,0.7619
+2023 (retrained),Threshold,3171,-2.0,-1.022,2.0,0.2835,0.4443,0.7395
+2023 (retrained),Peak picking,3786,0.0,0.618,2.0,0.3624,0.5291,0.7404

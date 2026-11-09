@@ -1,0 +1,3 @@
+group,videos,runs,mean_bnd_f1_5,sd_between_videos,sd_between_runs_within_video,min_video,max_video
+Multi-stream,17,3,0.5218,0.0578,0.0313,0.4358,0.6252
+2023 (retrained),17,3,0.4411,0.0556,0.0153,0.3571,0.5521

@@ -1,0 +1,7 @@
+run,val_bnd_f1_5,min_dist,sigma,thr,threshold_b,threshold_o,threshold_source
+multistream_bilstm-115,0.4947,10,2,0.2,0.3,0.7,tuned here on val by IoU + %-score (1.6774)
+multistream_bilstm-116,0.4911,25,5,0.1,0.3,0.6,tuned here on val by IoU + %-score (1.7616)
+multistream_bilstm-117,0.4848,10,5,0.15,0.3,0.6,tuned here on val by IoU + %-score (1.666)
+bilstm_2023-244,0.4302,10,2,0.15,0.2,0.6,tuned here on val by IoU + %-score (1.5871)
+bilstm_2023-245,0.4271,25,5,0.1,0.3,0.7,tuned here on val by IoU + %-score (1.5997)
+bilstm_2023-246,0.4268,25,5,0.1,0.3,0.7,tuned here on val by IoU + %-score (1.8033)

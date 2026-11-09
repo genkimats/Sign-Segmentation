@@ -1,0 +1,11 @@
+group,segments,n_per_run,median_s,q25_s,q75_s,q10_s,q90_s,share_lt_0.3s,wasserstein_log10,ks_stat
+Multi-stream,Gold,1747.0,2.08,1.16,3.36,0.62,4.888,0.0286,,
+Multi-stream,Argmax,4062.7,0.02,0.02,1.46,0.02,3.94,0.6574,1.2344,0.6355
+Multi-stream,Threshold,2097.7,1.82,1.08,2.88,0.54,4.18,0.0458,0.0582,0.0861
+Multi-stream,Peak picking,2168.3,1.76,1.04,2.72,0.52,3.972,0.0583,0.108,0.1181
+Multi-stream,Gold pauses between phrases,1722,0.38,0.2,1.495,0.12,11.438,0.3885,,
+2023 (retrained),Gold,1747.0,2.08,1.16,3.36,0.62,4.888,0.0286,,
+2023 (retrained),Argmax,3270.0,0.02,0.02,1.56,0.02,4.84,0.6422,1.1973,0.617
+2023 (retrained),Threshold,1877.0,2.0,1.12,3.28,0.58,4.84,0.041,0.0221,0.0261
+2023 (retrained),Peak picking,2395.7,1.66,0.96,2.54,0.46,3.54,0.068,0.1552,0.1576
+2023 (retrained),Gold pauses between phrases,1722,0.38,0.2,1.495,0.12,11.438,0.3885,,
