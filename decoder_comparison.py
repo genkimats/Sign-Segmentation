@@ -15,7 +15,9 @@ threshold -> peak-picking hybrid beat both? Every decoder is tuned on VAL and sc
   hybrid (IoU+%)      the same, tuned by IoU + %-score
 
 Reported on test: boundary F1 at +-2 / +-5 / +-10, P / R at +-5, IoU and % (per-video means, 2023 style),
-and boundary F1@5 of every decoder minus peak picking: paired bootstrap over test videos (runs averaged).
+Segment F1@0.5 (each predicted phrase matched one-to-one to a gold phrase with IoU >= 0.5:
+the quality of whole phrases), and every decoder minus peak picking on bF1@5 and Segment F1@0.5: paired
+bootstrap over test videos (runs averaged). --compare: a second configuration, compared decoder by decoder.
 
   python decoder_comparison.py --runs multistream_bilstm-115 multistream_bilstm-116 multistream_bilstm-117
   python decoder_comparison.py --selftest
@@ -31,7 +33,7 @@ from scipy.ndimage import gaussian_filter1d
 from count_oracle_decoding import peaks_with_heights, starts_to_segments, tune_peaks_on_val
 from phrase_stats import PRED_ROOT, f1_from_counts, gold_starts_of, load_predictions, paired_bootstrap
 from src.metrics import (B_TAG, decode_threshold_2023, extract_segments, match_boundaries, pct_score,
-                         segment_iou, segment_percentage)
+                         segment_f1_at, segment_iou, segment_percentage)
 
 THR_GRID = [round(x, 1) for x in np.arange(0.1, 0.91, 0.1)]
 SIGMA_GRID = (0, 2, 5)
@@ -74,26 +76,32 @@ def refine(segs, p_b, b_thr, sigma, min_dist):
 def score(segs_by_vid, gold):
     tp = {k: 0 for k in TOLS}
     npred = ngold = 0
-    ious, pcts, per_vid = [], [], {}
+    ious, pcts, sf1s, per_vid = [], [], [], {}
     for v, segs in segs_by_vid.items():
         g = gold[v]
         gsegs = extract_segments(g)
         gs = np.array([s for s, _ in gsegs], dtype=np.int64)
         st = np.array([s for s, _ in segs], dtype=np.int64)
+        bnd5 = None
         for k in TOLS:
             ok, _, _ = match_boundaries(gs, st, k)
             tp[k] += int(ok.sum())
             if k == 5:
-                per_vid[v] = (int(ok.sum()), len(st), len(gs))
+                bnd5 = (int(ok.sum()), len(st), len(gs))
         npred += len(st)
         ngold += len(gs)
-        ious.append(segment_iou(segs, gsegs, len(g)))
+        iou = segment_iou(segs, gsegs, len(g))
+        ious.append(iou)
         pc = segment_percentage(segs, gsegs)
         if not np.isnan(pc):
             pcts.append(pc)
+        sf = segment_f1_at(segs, gsegs, 0.5)
+        sf1s.append(sf)
+        per_vid[v] = {"bnd5": bnd5, "seg_f1_05": sf, "iou": iou, "pct": pc}
     out = {f"bnd_f1_{k}": f1_from_counts(tp[k], npred, ngold) for k in TOLS}
     out.update({"bnd_p_5": tp[5] / npred if npred else 0.0, "bnd_r_5": tp[5] / ngold if ngold else 0.0,
-                "iou": float(np.mean(ious)), "pct": float(np.mean(pcts)) if pcts else float("nan")})
+                "iou": float(np.mean(ious)), "pct": float(np.mean(pcts)) if pcts else float("nan"),
+                "seg_f1_05": float(np.mean(sf1s))})
     out["iou_pct_score"] = out["iou"] + pct_score(out["pct"])
     return out, per_vid
 
@@ -146,6 +154,30 @@ def decode_all(run, split, pred_root):
     return res, settings
 
 
+# ----------------------------------------------------------------------------- bootstrap
+def _bnd(per_vids):
+    return [{v: d["bnd5"] for v, d in pv.items()} for pv in per_vids]
+
+
+def mean_bootstrap(pv_a, pv_b, key, n_boot=2000, seed=0):
+    """Per-video metric (key) averaged over videos, runs averaged within each arm; A - B, videos resampled
+    together (paired). NaN values (e.g. % of a video without gold phrases) are skipped."""
+    vids = sorted(set.intersection(*[set(p) for p in pv_a + pv_b]))
+    A = np.array([[p[v][key] for v in vids] for p in pv_a], dtype=float)
+    B = np.array([[p[v][key] for v in vids] for p in pv_b], dtype=float)
+
+    def stat(idx):
+        return float(np.nanmean(np.nanmean(A[:, idx], 1)) - np.nanmean(np.nanmean(B[:, idx], 1)))
+    rng = np.random.default_rng(seed)
+    draws = np.array([stat(rng.integers(0, len(vids), len(vids))) for _ in range(n_boot)])
+    return {"diff": stat(np.arange(len(vids))), "ci95": (float(np.percentile(draws, 2.5)),
+                                                           float(np.percentile(draws, 97.5)))}
+
+
+def fmt_ci(b):
+    return f"{b['diff']:+.3f} [{b['ci95'][0]:+.3f}, {b['ci95'][1]:+.3f}]"
+
+
 # ----------------------------------------------------------------------------- report
 def run(runs, split, pred_root, out_dir, n_boot=2000):
     os.makedirs(out_dir, exist_ok=True)
@@ -162,10 +194,11 @@ def run(runs, split, pred_root, out_dir, n_boot=2000):
         w.writeheader()
         w.writerows(rows)
     L = [f"Decoder comparison ({split}; every decoder tuned on val); runs: {', '.join(runs)}",
-         "Boundary F1 pooled over videos; IoU / % = per-video means (2023 style). Mean +- SD over runs.", "",
+         "Boundary F1 pooled over videos; IoU / % / Segment F1@0.5 (one-to-one phrase matches with IoU >= 0.5) =",
+         "per-video means (2023 style). Mean +- SD over runs.", "",
          f"{'decoder':20s} {'bF1@2':>13s} {'bF1@5':>13s} {'bF1@10':>13s} {'P@5':>6s} {'R@5':>6s} {'IoU':>6s} "
-         f"{'%':>6s}   bF1@5 vs peak picking [95% CI]"]
-    peak_counts = [per_run[r]["peak picking"][1] for r in runs]
+         f"{'%':>6s} {'SegF1@.5':>13s}   vs peak picking [95% CI]: bF1@5 | SegF1@.5"]
+    peak_pv = [per_run[r]["peak picking"][1] for r in runs]
     for k in ORDER:
         M = {m: np.array([per_run[r][k][0][m] for r in runs]) for m in per_run[runs[0]][k][0]}
 
@@ -175,11 +208,12 @@ def run(runs, split, pred_root, out_dir, n_boot=2000):
         if k == "peak picking":
             cmp = "(reference)"
         else:
-            b = paired_bootstrap([per_run[r][k][1] for r in runs], peak_counts, n_boot=n_boot)
-            cmp = f"{b['diff']:+.3f} [{b['ci95'][0]:+.3f}, {b['ci95'][1]:+.3f}]"
+            pv = [per_run[r][k][1] for r in runs]
+            cmp = (fmt_ci(paired_bootstrap(_bnd(pv), _bnd(peak_pv), n_boot=n_boot)) + " | "
+                   + fmt_ci(mean_bootstrap(pv, peak_pv, "seg_f1_05", n_boot)))
         L.append(f"{k:20s} {ms('bnd_f1_2'):>13s} {ms('bnd_f1_5'):>13s} {ms('bnd_f1_10'):>13s} "
                  f"{M['bnd_p_5'].mean():6.3f} {M['bnd_r_5'].mean():6.3f} {M['iou'].mean():6.3f} "
-                 f"{M['pct'].mean():6.2f}   {cmp}")
+                 f"{M['pct'].mean():6.2f} {ms('seg_f1_05'):>13s}   {cmp}")
     L += ["", "Settings tuned on val (per run): see decoder_comparison_runs.csv"]
     for r in runs:
         L.append(f"  {r}: " + " | ".join(f"{row['decoder']}: {row['settings_tuned_on_val']}"
@@ -189,6 +223,22 @@ def run(runs, split, pred_root, out_dir, n_boot=2000):
         f.write(text)
     print(text)
     return per_run
+
+
+def compare_groups(res_a, res_b, label_a, label_b, out_dir, n_boot=2000):
+    """Every decoder: group A minus group B (each run tuned on its own val), paired over test videos."""
+    L = [f"GROUP COMPARISON: {label_a} minus {label_b} (paired bootstrap over test videos, runs averaged)",
+         f"{'decoder':20s} {'bF1@5':>24s} {'SegF1@.5':>24s} {'IoU':>24s} {'%':>24s}"]
+    for k in ORDER:
+        pa = [res_a[r][k][1] for r in res_a]
+        pb = [res_b[r][k][1] for r in res_b]
+        cells = [fmt_ci(paired_bootstrap(_bnd(pa), _bnd(pb), n_boot=n_boot))]
+        cells += [fmt_ci(mean_bootstrap(pa, pb, m, n_boot)) for m in ("seg_f1_05", "iou", "pct")]
+        L.append(f"{k:20s} " + " ".join(f"{c:>24s}" for c in cells))
+    text = "\n".join(L) + "\n"
+    with open(os.path.join(out_dir, "group_comparison.txt"), "w") as f:
+        f.write(text)
+    print(text)
 
 
 def selftest():
@@ -229,7 +279,12 @@ def selftest():
             np.savez_compressed(f"{d}/pred/m-1/{split}.npz", **arrs)
             with open(f"{d}/pred/m-1/{split}_meta.json", "w") as f:
                 json.dump({"run": "m-1", "labels_dir": f"{d}/labels", "description": "m"}, f)
-        res = run(["m-1"], "test", f"{d}/pred", f"{d}/out", n_boot=200)["m-1"]
+        full = run(["m-1"], "test", f"{d}/pred", f"{d}/out", n_boot=200)
+        res = full["m-1"]
+        ok.append(("Segment F1@0.5 of the peak decoder > .9", res["peak picking"][0]["seg_f1_05"] > 0.9))
+        compare_groups(full, full, "m", "m", f"{d}/out", n_boot=100)
+        ok.append(("group comparison written (a group against itself)", os.path.exists(f"{d}/out/group_comparison.txt")
+                   and "+0.000 [+0.000, +0.000]" in open(f"{d}/out/group_comparison.txt").read()))
         ok.append(("peak picking finds the bumps (bF1@5 > .95)", res["peak picking"][0]["bnd_f1_5"] > 0.95))
         ok.append(("hybrid finds the bumps (bF1@5 > .95)", res["hybrid (bF1)"][0]["bnd_f1_5"] > 0.95))
         ok.append(("hybrid starts are on the peak (bF1@1-level: bF1@2 > .95)", res["hybrid (bF1)"][0]["bnd_f1_2"] > 0.95))
@@ -241,6 +296,9 @@ def selftest():
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--runs", nargs="+")
+    ap.add_argument("--compare", nargs="+", default=None,
+                    help="runs of a second configuration: adds group_comparison.txt (--runs minus --compare)")
+    ap.add_argument("--labels", nargs=2, default=["A", "B"], help="names of --runs and --compare")
     ap.add_argument("--split", default="test")
     ap.add_argument("--pred-root", default=PRED_ROOT)
     ap.add_argument("--out-dir", default=os.path.join("evaluation_phrase", "decoder_comparison"))
@@ -251,7 +309,10 @@ def main():
         sys.exit(0 if selftest() else 1)
     if not a.runs:
         ap.error("--runs is required (or --selftest)")
-    run(a.runs, a.split, a.pred_root, a.out_dir, a.n_boot)
+    res_a = run(a.runs, a.split, a.pred_root, a.out_dir, a.n_boot)
+    if a.compare:
+        res_b = run(a.compare, a.split, a.pred_root, os.path.join(a.out_dir, "compare"), a.n_boot)
+        compare_groups(res_a, res_b, a.labels[0], a.labels[1], a.out_dir, a.n_boot)
 
 
 if __name__ == "__main__":
