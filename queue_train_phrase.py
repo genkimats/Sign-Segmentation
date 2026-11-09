@@ -1069,7 +1069,8 @@ FUSION_OPTIONAL = [{**a, "force_selection_metric": None} for a in fusion_optiona
 # Eleventh batch (2026-11-09): window-size sweep, 6 runs at 1 seed (Enter at the seed prompt).
 # EXPERIMENTS_TO_RUN = WINDOW_STUDY
 # Twelfth batch (2026-11-09): learning rate 3e-4, 1 run (Enter at the seed prompt).
-EXPERIMENTS_TO_RUN = LR_STUDY
+# EXPERIMENTS_TO_RUN = LR_STUDY
+EXPERIMENTS_TO_RUN = [BL2023_TCN_STUDY[6], BL2023_TCN_STUDY[3]]
 # EXPERIMENTS_TO_RUN = [{**_MS_BEST, "force_selection_metric": None,
 #                        "description": "MS best: Body + HaMeR + Face(compact), no count loss"}]   # metric asked at training
 # then, after extracting the clean features: EXPERIMENTS_TO_RUN = TEMPO_STUDY_A2_CLEAN  (3 seeds: "all")
