@@ -730,13 +730,13 @@ BL2023_TCN_STUDY = [
 # separate per-stream branches themselves.
 # ------------------------------------------------------------------------------
 EARLY_FUSION_MECHANISM_STUDY = [
-    {**_C, "use_hamer_features": True, "modality_norm": True, "description": "EF-norm: B+H, per-modality LayerNorm"},
-    {**_C, **COMBO_FACE, "use_hamer_features": True, "modality_norm": True,
-     "description": f"EF-norm: B+F+H ({_FS}), per-modality LayerNorm"},
-    # {**_C, "use_hamer_features": True, "joint_temporal_layers": 2,
-    #  "description": "EF-joint: B+H, per-joint temporal conv before fusion"},
-    # {**_C, **COMBO_FACE, "use_hamer_features": True, "joint_temporal_layers": 2,
-    #  "description": f"EF-joint: B+F+H ({_FS}), per-joint temporal conv before fusion"},
+    # {**_C, "use_hamer_features": True, "modality_norm": True, "description": "EF-norm: B+H, per-modality LayerNorm"},
+    # {**_C, **COMBO_FACE, "use_hamer_features": True, "modality_norm": True,
+    #  "description": f"EF-norm: B+F+H ({_FS}), per-modality LayerNorm"},
+    {**_C, "use_hamer_features": True, "joint_temporal_layers": 2,
+     "description": "EF-joint: B+H, per-joint temporal conv before fusion"},
+    {**_C, **COMBO_FACE, "use_hamer_features": True, "joint_temporal_layers": 2,
+     "description": f"EF-joint: B+F+H ({_FS}), per-joint temporal conv before fusion"},
 ]
 
 # ------------------------------------------------------------------------------
