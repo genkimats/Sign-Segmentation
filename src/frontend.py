@@ -149,6 +149,68 @@ def mirror_hamer(h):
 
 
 # ==============================================================================
+# Hand-tree encoder for the HaMeR stream (HAMER_ENCODER_STUDY)
+# ==============================================================================
+# MANO kinematic tree over the 16 rotations of one hand: node 0 = global orientation (wrist), nodes 1-15 =
+# hand_pose joints in MANO order (index 1-3, middle 1-3, pinky 1-3, ring 1-3, thumb 1-3); every finger is a
+# chain of three joints hanging from the wrist. Parents: [-, 0, 1, 2, 0, 4, 5, 0, 7, 8, 0, 10, 11, 0, 13, 14].
+MANO_PARENTS = [-1, 0, 1, 2, 0, 4, 5, 0, 7, 8, 0, 10, 11, 0, 13, 14]
+
+
+def mano_adjacency(graph="tree"):
+    """(16, 16) normalised adjacency D^-1/2 (A + I) D^-1/2 of the MANO tree ("tree") or the identity ("joint":
+    no spatial mixing, temporal convolution per joint only) -- same normalisation as src/graph.py."""
+    A = np.eye(16)
+    if graph == "tree":
+        for j, p in enumerate(MANO_PARENTS):
+            if p >= 0:
+                A[j, p] = A[p, j] = 1.0
+        d = A.sum(1) ** -0.5
+        A = d[:, None] * A * d[None, :]
+    elif graph != "joint":
+        raise ValueError(f"hamer graph must be 'tree' or 'joint', got '{graph}'.")
+    return A
+
+
+class HandTreeEncoder(nn.Module):
+    """
+    (B, 288, T) raw HaMeR -> (B, T, out_dim). One graph per hand, 16 nodes (global orientation + 15 joints),
+    node features = 6D rotation (first two columns of the matrix) + a "hand detected" flag (7 channels).
+    `layers` ST-GCN blocks (spatial conv over the MANO tree, or none for graph="joint", then temporal conv
+    k=9 per node) with weights SHARED by both hands (HaMeR returns left hands in mirrored right-hand form).
+    The two hands keep their slot order (0 = left, 1 = right; dominant / non-dominant with hand_canonicalize)
+    and their node features are flattened: out_dim = 2 hands x 16 nodes x channels, like the body stream's
+    flattened ST-GCN output.
+    """
+
+    def __init__(self, graph="tree", channels=64, layers=2, temporal_kernel=9):
+        super().__init__()
+        from src.stgcn import STGCNBlock
+        A = mano_adjacency(graph)
+        self.blocks = nn.Sequential(*[STGCNBlock(7 if i == 0 else channels, channels, A, temporal_kernel=temporal_kernel)
+                                      for i in range(int(layers))])
+        self.channels = int(channels)
+        self.out_dim = 2 * 16 * self.channels
+
+    def forward(self, h):
+        B, D, T = h.shape
+        if D != 288:
+            raise ValueError(f"HandTreeEncoder needs the 288-dim HaMeR layout, got {D}.")
+        x = h.permute(0, 2, 1)                                              # (B, T, 288)
+        H = x[..., :270].reshape(B, T, 2, 15, 3, 3)
+        G = x[..., 270:].reshape(B, T, 2, 3, 3)
+        R = torch.cat([G.unsqueeze(3), H], dim=3)                          # (B, T, 2, 16, 3, 3)
+        rot6d = R[..., :, :2].reshape(B, T, 2, 16, 6)
+        detected = (G.abs().flatten(-2).sum(-1) > 1e-6).to(x.dtype)        # (B, T, 2)
+        det = detected[..., None, None].expand(B, T, 2, 16, 1)
+        nodes = torch.cat([rot6d, det], dim=-1)                            # (B, T, 2, 16, 7)
+        nodes = nodes.permute(0, 2, 4, 1, 3).reshape(B * 2, 7, T, 16)      # hands into the batch
+        y = self.blocks(nodes)                                             # (B*2, C, T, 16)
+        y = y.reshape(B, 2, self.channels, T, 16).permute(0, 3, 1, 4, 2)   # (B, T, 2, 16, C)
+        return y.reshape(B, T, self.out_dim)
+
+
+# ==============================================================================
 # HaMeR front-end
 # ==============================================================================
 class HaMeRFrontEnd(nn.Module):

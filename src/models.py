@@ -6,7 +6,7 @@ from mamba_ssm import Mamba
 from src.graph import SkeletonGraph
 from src.stgcn import STGCNBlock
 from src.stgcn import DecoupledSTGCNBlock
-from src.frontend import HaMeRFrontEnd, TemporalResidual, VertexPooling, BODY_PARTS, face_parts, ChangePointLayer
+from src.frontend import HandTreeEncoder, HaMeRFrontEnd, TemporalResidual, VertexPooling, BODY_PARTS, face_parts, ChangePointLayer
 from src.face_subsets import face_subset_for_vertex_count
 from src.skeleton_encoders import build_stream_encoder, SKATE_BODY_PARTS, STREAM_ENCODERS
 from src.skeleton_angles import skeleton_angle_features, ANGLE_FEATURE_DIM
@@ -2438,7 +2438,8 @@ class MultiStreamSegmenter(nn.Module):
                  stgcn_temporal_dilations=None, hamer_temporal_layers=1, hamer_temporal_dilations=None,
                  sign_head=False, sign_cascade=None, sign_cascade_detach=False, sign_cascade_dim=32,
                  sign_level=False, sign_level_pred_p=0.0, sign_level_tol=4, sign_level_min_dist=3,
-                 sign_level_pos_weight=3.0, attn_ff_mult=2, attn_dropout=0.1, unet_stage=True):
+                 sign_level_pos_weight=3.0, attn_ff_mult=2, attn_dropout=0.1, unet_stage=True,
+                 hamer_encoder="mlp", hamer_tree_channels=64, hamer_tree_layers=2):
         super().__init__()
         if stream_encoder not in STREAM_ENCODERS:
             raise ValueError(f"stream_encoder must be one of {STREAM_ENCODERS}, got '{stream_encoder}'.")
@@ -2528,7 +2529,18 @@ class MultiStreamSegmenter(nn.Module):
                 raise ValueError("hamer stream is on but hamer_dim is None -- set use_hamer_features=True.")
             self.hamer_dim = hamer_dim
             hamer_in = hamer_dim
-            if hamer_rep != "matrix" or hamer_mask or hamer_motion:
+            # hamer_encoder (HAMER_ENCODER_STUDY): "mlp" = the original per-frame branch on the flat vector;
+            # "tree" / "joint" = HandTreeEncoder (ST-GCN per hand over the MANO tree / per joint only) before it
+            if hamer_encoder not in ("mlp", "tree", "joint"):
+                raise ValueError(f"hamer_encoder must be 'mlp', 'tree' or 'joint', got '{hamer_encoder}'.")
+            if hamer_encoder != "mlp":
+                if hamer_rep != "matrix" or hamer_mask or hamer_motion or int(hamer_temporal_kernel) > 1:
+                    raise ValueError("hamer_encoder 'tree' / 'joint' has its own rotation / mask / temporal "
+                                     "processing; leave hamer_rep / hamer_mask / hamer_motion / "
+                                     "hamer_temporal_kernel at their defaults.")
+                self.hamer_tree = HandTreeEncoder(hamer_encoder, int(hamer_tree_channels), int(hamer_tree_layers))
+                hamer_in = self.hamer_tree.out_dim
+            elif hamer_rep != "matrix" or hamer_mask or hamer_motion:
                 self.hamer_frontend = HaMeRFrontEnd(hamer_dim, rep=hamer_rep, mask=hamer_mask,
                                                     motion=hamer_motion, motion_lag=hamer_motion_lag)
                 hamer_in = self.hamer_frontend.out_dim
@@ -2728,7 +2740,9 @@ class MultiStreamSegmenter(nn.Module):
         if "hamer" in self.streams:
             if hamer is None:
                 raise ValueError("hamer stream is on but forward() got no `hamer` tensor.")
-            if hasattr(self, "hamer_frontend"):
+            if hasattr(self, "hamer_tree"):
+                z["hamer"] = self.branches["hamer"](self.hamer_tree(hamer))       # (B, T, dim)
+            elif hasattr(self, "hamer_frontend"):
                 z["hamer"] = self.branches["hamer"](self.hamer_frontend(hamer))   # (B, T, dim)
             else:
                 z["hamer"] = self.branches["hamer"](hamer.permute(0, 2, 1))       # (B, T, dim)

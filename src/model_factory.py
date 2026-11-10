@@ -285,6 +285,11 @@ def build_model_kwargs(config, detected_hamer_dim=None, detected_dinov2_dim=None
             model_kwargs["hamer_motion"] = bool(config.get("hamer_motion", False))
             model_kwargs["hamer_motion_lag"] = int(config.get("hamer_motion_lag", 1))
             model_kwargs["hamer_temporal_kernel"] = int(config.get("hamer_temporal_kernel", 1))
+            # HaMeR encoder (HAMER_ENCODER_STUDY): only passed when not the original MLP branch
+            if config.get("hamer_encoder", "mlp") != "mlp":
+                model_kwargs["hamer_encoder"] = config["hamer_encoder"]
+                model_kwargs["hamer_tree_channels"] = int(config.get("hamer_tree_channels", 64))
+                model_kwargs["hamer_tree_layers"] = int(config.get("hamer_tree_layers", 2))
             if int(config.get("hamer_temporal_layers", 1)) > 1:
                 model_kwargs["hamer_temporal_layers"] = int(config["hamer_temporal_layers"])
             if config.get("hamer_temporal_dilations"):

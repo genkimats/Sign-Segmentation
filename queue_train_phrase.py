@@ -740,6 +740,25 @@ EARLY_FUSION_MECHANISM_STUDY = [
 ]
 
 # ------------------------------------------------------------------------------
+# HaMeR ENCODER STUDY (2026-11-10): the HaMeR stream encoded the way the body stream is -- per element, in time,
+# before fusion. HaMeR = 2 hands x 16 rotations (global orientation + 15 MANO joints); the original branch
+# flattens all 288 values per frame. EF-joint showed temporal conv helps only per joint BEFORE mixing, and
+# the earlier HaMeR temporal convs (TC2 / TC3) were applied after flattening.
+#   H1  hand tree: 2 ST-GCN blocks per hand over the MANO kinematic tree (6D rotation + detected flag per
+#       node, 64 channels), weights shared by both hands, then the usual branch
+#   H2  per joint only: the same blocks with an identity graph (does the tree matter, or only per-joint time?)
+#   H3  H1 + hand_canonicalize (each video mirrored so the dominant hand is always slot 1)
+# All on B+H+Fc. Reference on THIS machine: 373-375 (LC 100% = the same B+H+Fc config, 3 seeds); 115-117 were
+# trained on the other machine. Compare with decoder_comparison.py --compare.
+# ------------------------------------------------------------------------------
+HAMER_ENCODER_STUDY = [
+    {**_MS_BEST, "hamer_encoder": "tree", "description": "HE1: B+H+Fc, HaMeR hand-tree ST-GCN (MANO tree)"},
+    {**_MS_BEST, "hamer_encoder": "joint", "description": "HE2: B+H+Fc, HaMeR per-joint temporal conv (no tree)"},
+    {**_MS_BEST, "hamer_encoder": "tree", "hand_canonicalize": True,
+     "description": "HE3: B+H+Fc, HaMeR hand-tree ST-GCN + dominant-hand canonicalization"},
+]
+
+# ------------------------------------------------------------------------------
 # BOUNDARY STUDIES on the final model (multistream B+H+Fc, v2 labels; reference = 115-117).
 # Both change ONLY the training loss / targets; model, data and evaluation stay the same.
 #
@@ -1095,7 +1114,9 @@ FUSION_OPTIONAL = [{**a, "force_selection_metric": None} for a in fusion_optiona
 # EXPERIMENTS_TO_RUN = LR_STUDY
 # EXPERIMENTS_TO_RUN = [BL2023_TCN_STUDY[6], BL2023_TCN_STUDY[3]]
 # Thirteenth batch (2026-11-10): why early fusion loses -- 4 configs x 3 seeds = 12 runs (enter "all").
-EXPERIMENTS_TO_RUN = EARLY_FUSION_MECHANISM_STUDY
+# EXPERIMENTS_TO_RUN = EARLY_FUSION_MECHANISM_STUDY
+# Fourteenth batch (2026-11-10): HaMeR encoders, 3 arms x 3 seeds = 9 runs (enter "all").
+EXPERIMENTS_TO_RUN = HAMER_ENCODER_STUDY
 # EXPERIMENTS_TO_RUN = [{**_MS_BEST, "force_selection_metric": None,
 #                        "description": "MS best: Body + HaMeR + Face(compact), no count loss"}]   # metric asked at training
 # then, after extracting the clean features: EXPERIMENTS_TO_RUN = TEMPO_STUDY_A2_CLEAN  (3 seeds: "all")
