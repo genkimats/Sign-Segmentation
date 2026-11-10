@@ -1,0 +1,24 @@
+Decoder comparison (test; every decoder tuned on val); runs: multistream_bilstm-376, multistream_bilstm-377, multistream_bilstm-378, multistream_bilstm-379, multistream_bilstm-380, multistream_bilstm-381, multistream_bilstm-382, multistream_bilstm-383, multistream_bilstm-384, multistream_bilstm-385, multistream_bilstm-386, multistream_bilstm-387, multistream_bilstm-388
+Boundary F1 pooled over videos; IoU / % = per-video means (2023 style). Mean +- SD over runs.
+
+decoder                      bF1@2         bF1@5        bF1@10    P@5    R@5    IoU      %   bF1@5 vs peak picking [95% CI]
+threshold (IoU+%)     0.328+-0.020  0.484+-0.014  0.535+-0.015  0.451  0.525  0.823   1.20   -0.014 [-0.019, -0.008]
+threshold (bF1)       0.323+-0.021  0.483+-0.015  0.535+-0.015  0.442  0.534  0.374   1.24   -0.014 [-0.020, -0.009]
+peak picking          0.375+-0.016  0.497+-0.016  0.553+-0.017  0.467  0.535  0.832   1.17   (reference)
+hybrid (bF1)          0.380+-0.016  0.493+-0.011  0.543+-0.012  0.460  0.533  0.384   1.19   -0.004 [-0.007, -0.000]
+hybrid (IoU+%)        0.381+-0.013  0.492+-0.012  0.543+-0.012  0.471  0.516  0.820   1.12   -0.005 [-0.008, -0.001]
+
+Settings tuned on val (per run): see decoder_comparison_runs.csv
+  multistream_bilstm-376: threshold (IoU+%): b=0.2 o=0.6 | threshold (bF1): b=0.2 o=0.1 | peak picking: min_dist=10 sigma=5 thr=0.1 | hybrid (bF1): b=0.2 o=0.1 sigma=5 min_dist=10 | hybrid (IoU+%): b=0.2 o=0.6 sigma=2 min_dist=50
+  multistream_bilstm-377: threshold (IoU+%): b=0.3 o=0.8 | threshold (bF1): b=0.2 o=0.1 | peak picking: min_dist=25 sigma=5 thr=0.1 | hybrid (bF1): b=0.2 o=0.1 sigma=5 min_dist=50 | hybrid (IoU+%): b=0.2 o=0.6 sigma=5 min_dist=50
+  multistream_bilstm-378: threshold (IoU+%): b=0.3 o=0.7 | threshold (bF1): b=0.3 o=0.1 | peak picking: min_dist=10 sigma=2 thr=0.2 | hybrid (bF1): b=0.3 o=0.1 sigma=5 min_dist=25 | hybrid (IoU+%): b=0.3 o=0.7 sigma=5 min_dist=25
+  multistream_bilstm-379: threshold (IoU+%): b=0.3 o=0.7 | threshold (bF1): b=0.3 o=0.1 | peak picking: min_dist=10 sigma=2 thr=0.2 | hybrid (bF1): b=0.2 o=0.1 sigma=5 min_dist=50 | hybrid (IoU+%): b=0.3 o=0.7 sigma=5 min_dist=25
+  multistream_bilstm-380: threshold (IoU+%): b=0.3 o=0.7 | threshold (bF1): b=0.3 o=0.1 | peak picking: min_dist=25 sigma=5 thr=0.15 | hybrid (bF1): b=0.3 o=0.1 sigma=5 min_dist=25 | hybrid (IoU+%): b=0.3 o=0.7 sigma=2 min_dist=50
+  multistream_bilstm-381: threshold (IoU+%): b=0.3 o=0.6 | threshold (bF1): b=0.3 o=0.1 | peak picking: min_dist=50 sigma=2 thr=0.2 | hybrid (bF1): b=0.3 o=0.1 sigma=2 min_dist=0 | hybrid (IoU+%): b=0.3 o=0.6 sigma=5 min_dist=0
+  multistream_bilstm-382: threshold (IoU+%): b=0.3 o=0.7 | threshold (bF1): b=0.3 o=0.1 | peak picking: min_dist=25 sigma=2 thr=0.2 | hybrid (bF1): b=0.3 o=0.1 sigma=2 min_dist=25 | hybrid (IoU+%): b=0.3 o=0.7 sigma=5 min_dist=25
+  multistream_bilstm-383: threshold (IoU+%): b=0.3 o=0.7 | threshold (bF1): b=0.3 o=0.1 | peak picking: min_dist=10 sigma=5 thr=0.1 | hybrid (bF1): b=0.3 o=0.1 sigma=5 min_dist=10 | hybrid (IoU+%): b=0.3 o=0.7 sigma=5 min_dist=50
+  multistream_bilstm-384: threshold (IoU+%): b=0.3 o=0.7 | threshold (bF1): b=0.3 o=0.1 | peak picking: min_dist=10 sigma=5 thr=0.15 | hybrid (bF1): b=0.3 o=0.1 sigma=5 min_dist=50 | hybrid (IoU+%): b=0.3 o=0.7 sigma=0 min_dist=50
+  multistream_bilstm-385: threshold (IoU+%): b=0.3 o=0.7 | threshold (bF1): b=0.3 o=0.1 | peak picking: min_dist=10 sigma=2 thr=0.2 | hybrid (bF1): b=0.3 o=0.1 sigma=5 min_dist=25 | hybrid (IoU+%): b=0.3 o=0.7 sigma=5 min_dist=25
+  multistream_bilstm-386: threshold (IoU+%): b=0.3 o=0.7 | threshold (bF1): b=0.3 o=0.1 | peak picking: min_dist=10 sigma=5 thr=0.15 | hybrid (bF1): b=0.3 o=0.1 sigma=5 min_dist=50 | hybrid (IoU+%): b=0.3 o=0.7 sigma=5 min_dist=50
+  multistream_bilstm-387: threshold (IoU+%): b=0.3 o=0.6 | threshold (bF1): b=0.3 o=0.1 | peak picking: min_dist=10 sigma=5 thr=0.1 | hybrid (bF1): b=0.3 o=0.1 sigma=5 min_dist=25 | hybrid (IoU+%): b=0.3 o=0.6 sigma=2 min_dist=25
+  multistream_bilstm-388: threshold (IoU+%): b=0.3 o=0.6 | threshold (bF1): b=0.3 o=0.1 | peak picking: min_dist=25 sigma=5 thr=0.15 | hybrid (bF1): b=0.3 o=0.1 sigma=2 min_dist=0 | hybrid (IoU+%): b=0.3 o=0.6 sigma=0 min_dist=50

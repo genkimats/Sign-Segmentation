@@ -1,0 +1,18 @@
+{
+  "run": "multistream_bilstm-382",
+  "model": "multistream_bilstm",
+  "prefix": "382",
+  "split": "val",
+  "labels_dir": "processed_data/BIO_tags_phrase_v2",
+  "description": "CW: B+H+Fc, class weights [1.0, 1.1, 11]",
+  "seed": "",
+  "fixed_thresholds": [
+    0.5,
+    0.5
+  ],
+  "swept_thresholds": null,
+  "tuned_thresholds": null,
+  "tuned_on": null,
+  "sweep_metric": "iou_pct",
+  "merge_starts": {}
+}
