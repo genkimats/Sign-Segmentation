@@ -825,10 +825,10 @@ TEMPO_STUDY_A1 = [
 # vs the reference 373-375 (same machine): an extra input stream from the GOLD sign annotation (train / val /
 # test). Choose the same best-epoch selection metric at the prompt as for 373-375.
 GOLD_SIGN_MAIN_STUDY = [
-    {**_MS_BEST, **_TEMPO, "cue_dir": _TEMPO_GOLD, "cue_set": TEMPO_SUBSETS["pos"],
-     "description": "GS-pos: B+H+Fc + gold sign stream, 4 positional channels"},
-    # {**_MS_BEST, **_TEMPO, "cue_dir": _TEMPO_GOLD,
-    #  "description": "GS-full: B+H+Fc + gold sign stream, all 17 channels"},
+    # {**_MS_BEST, **_TEMPO, "cue_dir": _TEMPO_GOLD, "cue_set": TEMPO_SUBSETS["pos"],
+    #  "description": "GS-pos: B+H+Fc + gold sign stream, 4 positional channels"},
+    {**_MS_BEST, **_TEMPO, "cue_dir": _TEMPO_GOLD,
+     "description": "GS-full: B+H+Fc + gold sign stream, all 17 channels"},
 ]
 TEMPO_STUDY_A2 = [
     {**_R0, **_TEMPO, "cue_dir": _TEMPO_PRED,
