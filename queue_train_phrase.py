@@ -819,6 +819,17 @@ TEMPO_STUDY_A1 = [
     {**_R0, **_TEMPO, "cue_dir": _TEMPO_GOLD,
      "description": "A1-full: R0 + tempo stream (GOLD signs), all 17 channels"},
 ]
+
+# Gold sign information on the MAIN recipe (2026-11-11): the A1 arms rebuilt on _MS_BEST (the 115-117 / 373-375
+# configuration, no count loss), so the analysis section uses the same model as the results. One change each
+# vs the reference 373-375 (same machine): an extra input stream from the GOLD sign annotation (train / val /
+# test). Choose the same best-epoch selection metric at the prompt as for 373-375.
+GOLD_SIGN_MAIN_STUDY = [
+    {**_MS_BEST, **_TEMPO, "cue_dir": _TEMPO_GOLD, "cue_set": TEMPO_SUBSETS["pos"],
+     "description": "GS-pos: B+H+Fc + gold sign stream, 4 positional channels"},
+    {**_MS_BEST, **_TEMPO, "cue_dir": _TEMPO_GOLD,
+     "description": "GS-full: B+H+Fc + gold sign stream, all 17 channels"},
+]
 TEMPO_STUDY_A2 = [
     {**_R0, **_TEMPO, "cue_dir": _TEMPO_PRED,
      "description": "A2-full: R0 + tempo stream (PREDICTED signs), all 17 channels"},
@@ -1116,7 +1127,9 @@ FUSION_OPTIONAL = [{**a, "force_selection_metric": None} for a in fusion_optiona
 # Thirteenth batch (2026-11-10): why early fusion loses -- 4 configs x 3 seeds = 12 runs (enter "all").
 # EXPERIMENTS_TO_RUN = EARLY_FUSION_MECHANISM_STUDY
 # Fourteenth batch (2026-11-10): HaMeR encoders, 3 arms x 3 seeds = 9 runs (enter "all").
-EXPERIMENTS_TO_RUN = HAMER_ENCODER_STUDY
+# EXPERIMENTS_TO_RUN = HAMER_ENCODER_STUDY
+# Fifteenth batch (2026-11-11): gold sign stream on the main recipe, 2 arms x 3 seeds = 6 runs (enter "all").
+EXPERIMENTS_TO_RUN = GOLD_SIGN_MAIN_STUDY
 # EXPERIMENTS_TO_RUN = [{**_MS_BEST, "force_selection_metric": None,
 #                        "description": "MS best: Body + HaMeR + Face(compact), no count loss"}]   # metric asked at training
 # then, after extracting the clean features: EXPERIMENTS_TO_RUN = TEMPO_STUDY_A2_CLEAN  (3 seeds: "all")

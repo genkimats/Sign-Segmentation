@@ -1,0 +1,20 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  checks:
+    # GitHub assigns this job to a registered self-hosted runner.
+    runs-on: self-hosted
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Run hierarchy core checks
+        run: python hierarchy_phrase/test_cores.py
+
+      - name: Run hierarchy pipeline stub checks
+        run: python hierarchy_phrase/test_pipeline_stub.py
