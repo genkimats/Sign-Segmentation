@@ -784,10 +784,10 @@ TAILORED_ENCODER_STUDY = [
      "description": "TE-hand-proto: B+H+Fc, HaMeR prototype-handshape encoder (k=32)"},
     {**_MS_BEST, "hamer_encoder": "proto_linear", "hamer_proto_k": 32,
      "description": "TE-hand-linear: B+H+Fc, HaMeR control (Linear 90->32 in place of the prototypes)"},
-    {**_MS_BEST, "face_encoder": "regions", "face_region_dilations": {"eyes": 1, "mouth": 2, "brows": 4},
-     "description": "TE-face-multirate: B+H+Fc, face per articulator (eyes 0.34 s, mouth 0.66 s, brows 1.3 s)"},
-    {**_MS_BEST, "face_encoder": "regions", "face_region_dilations": {"eyes": 1, "mouth": 1, "brows": 1},
-     "description": "TE-face-regions: B+H+Fc, face per articulator, all 0.34 s (control)"},
+    # {**_MS_BEST, "face_encoder": "regions", "face_region_dilations": {"eyes": 1, "mouth": 2, "brows": 4},
+    #  "description": "TE-face-multirate: B+H+Fc, face per articulator (eyes 0.34 s, mouth 0.66 s, brows 1.3 s)"},
+    # {**_MS_BEST, "face_encoder": "regions", "face_region_dilations": {"eyes": 1, "mouth": 1, "brows": 1},
+    #  "description": "TE-face-regions: B+H+Fc, face per articulator, all 0.34 s (control)"},
 ]
 # After choosing on validation: the winning change of each modality together (3 seeds), e.g.
 # TAILORED_COMBINED = [{**_MS_BEST, "body_stream_hands": False, "hamer_encoder": "proto", "hamer_proto_k": 32,
