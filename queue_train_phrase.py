@@ -759,6 +759,43 @@ HAMER_ENCODER_STUDY = [
 ]
 
 # ------------------------------------------------------------------------------
+# TAILORED-ENCODER STUDY (2026-11-11): an encoder made for what each modality IS, one change per arm on
+# B+H+Fc (everything else = 373-375). Every arm keeps a temporal convolution, so each comparison tests the
+# added structure, not temporal context.
+#   TE-body          body stream = the 23 pose vertices only (head, arms, wrists); the 42 MediaPipe hand
+#                    keypoints are dropped, hand shape is left to HaMeR (body = location / movement)
+#   TE-hand-proto    HaMeR: each hand's finger rotations -> soft assignment to 32 prototype handshapes
+#                    (k-means on the training frames) + wrist orientation + detected flag -> 2 per-hand
+#                    temporal blocks (k=9, weights shared by both hands)
+#   TE-hand-linear   control for TE-hand-proto: the prototype layer replaced by Linear(90 -> 32), rest equal
+#   TE-face-multirate  face: eyes / brows / mouth each with their own ST-GCN blocks and time scale
+#                    (eyes 0.34 s, mouth 0.66 s, brows 1.3 s receptive field)
+#   TE-face-regions  control for TE-face-multirate: the same split, all at 0.34 s (= the original scale)
+# Comparisons: TE-hand-proto vs TE-hand-linear (prototypes), TE-face-multirate vs TE-face-regions (time
+# scales), TE-face-regions vs 373-375 (separate weights per articulator), TE-body vs 373-375. HE2 (per-joint
+# HaMeR temporal conv) shows what temporal conv on HaMeR alone gives. Choose on VALIDATION, report all on test.
+# BEFORE queueing TE-hand-proto, once: python data_processing/fit_hamer_prototypes.py   (-> the npz below)
+# ------------------------------------------------------------------------------
+_HAMER_PROTOTYPES = "processed_data/hamer_prototypes_k32.npz"
+TAILORED_ENCODER_STUDY = [
+    {**_MS_BEST, "body_stream_hands": False,
+     "description": "TE-body: B+H+Fc, body stream without MediaPipe hand keypoints (pose 23 only)"},
+    {**_MS_BEST, "hamer_encoder": "proto", "hamer_proto_k": 32, "hamer_proto_init": _HAMER_PROTOTYPES,
+     "description": "TE-hand-proto: B+H+Fc, HaMeR prototype-handshape encoder (k=32)"},
+    {**_MS_BEST, "hamer_encoder": "proto_linear", "hamer_proto_k": 32,
+     "description": "TE-hand-linear: B+H+Fc, HaMeR control (Linear 90->32 in place of the prototypes)"},
+    {**_MS_BEST, "face_encoder": "regions", "face_region_dilations": {"eyes": 1, "mouth": 2, "brows": 4},
+     "description": "TE-face-multirate: B+H+Fc, face per articulator (eyes 0.34 s, mouth 0.66 s, brows 1.3 s)"},
+    {**_MS_BEST, "face_encoder": "regions", "face_region_dilations": {"eyes": 1, "mouth": 1, "brows": 1},
+     "description": "TE-face-regions: B+H+Fc, face per articulator, all 0.34 s (control)"},
+]
+# After choosing on validation: the winning change of each modality together (3 seeds), e.g.
+# TAILORED_COMBINED = [{**_MS_BEST, "body_stream_hands": False, "hamer_encoder": "proto", "hamer_proto_k": 32,
+#                       "hamer_proto_init": _HAMER_PROTOTYPES, "face_encoder": "regions",
+#                       "face_region_dilations": {"eyes": 1, "mouth": 2, "brows": 4},
+#                       "description": "TE-all: B+H+Fc, tailored body + hand + face encoders"}]
+
+# ------------------------------------------------------------------------------
 # BOUNDARY STUDIES on the final model (multistream B+H+Fc, v2 labels; reference = 115-117).
 # Both change ONLY the training loss / targets; model, data and evaluation stay the same.
 #
@@ -1129,7 +1166,10 @@ FUSION_OPTIONAL = [{**a, "force_selection_metric": None} for a in fusion_optiona
 # Fourteenth batch (2026-11-10): HaMeR encoders, 3 arms x 3 seeds = 9 runs (enter "all").
 # EXPERIMENTS_TO_RUN = HAMER_ENCODER_STUDY
 # Fifteenth batch (2026-11-11): gold sign stream on the main recipe, 2 arms x 3 seeds = 6 runs (enter "all").
-EXPERIMENTS_TO_RUN = GOLD_SIGN_MAIN_STUDY
+# EXPERIMENTS_TO_RUN = GOLD_SIGN_MAIN_STUDY
+# Sixteenth batch (2026-11-11): tailored encoders, 5 arms x 3 seeds = 15 runs (enter "all").
+# First, once: python data_processing/fit_hamer_prototypes.py
+EXPERIMENTS_TO_RUN = TAILORED_ENCODER_STUDY
 # EXPERIMENTS_TO_RUN = [{**_MS_BEST, "force_selection_metric": None,
 #                        "description": "MS best: Body + HaMeR + Face(compact), no count loss"}]   # metric asked at training
 # then, after extracting the clean features: EXPERIMENTS_TO_RUN = TEMPO_STUDY_A2_CLEAN  (3 seeds: "all")
@@ -1172,6 +1212,14 @@ if __name__ == "__main__":
         for m_name, p_list in prefixes_data.items():
             print(f"  - {m_name}: {p_list}")
     print()
+
+    # The prototype HaMeR encoder needs its k-means file before training starts
+    for exp in experiments_to_run:
+        if exp.get("hamer_encoder") == "proto":
+            p = exp.get("hamer_proto_init", f"processed_data/hamer_prototypes_k{exp.get('hamer_proto_k', 32)}.npz")
+            if not os.path.exists(p):
+                raise SystemExit(f"'{exp['description']}' needs {p}. Run once, from the repo root:\n"
+                                 f"    python data_processing/fit_hamer_prototypes.py --k {exp.get('hamer_proto_k', 32)}")
 
     # --- SEED SELECTION PHASE ---
     # Choose which experiments run with 3 seeds vs 1, THEN expand the list --

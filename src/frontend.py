@@ -367,6 +367,171 @@ class VertexPooling(nn.Module):
 
 
 # ==============================================================================
+# Modality-specific encoders (TAILORED_ENCODER_STUDY)
+# ==============================================================================
+def hamer_hand_parts(h):
+    """(B, 288, T) raw HaMeR -> per hand (slot 0 = left, 1 = right; HaMeR returns left hands in mirrored
+    right-hand form, so both slots share one coordinate convention):
+      shape   (B, T, 2, 90)  the 15 finger-joint rotations as 6D (first two matrix columns) = hand shape
+      orient  (B, T, 2, 6)   the global (wrist) orientation as 6D = palm orientation
+      det     (B, T, 2)      1 where the hand was detected (missing hands are all-zero matrices)
+    The 6D layout is R[..., :, :2] flattened row-major, the same as HandTreeEncoder / HaMeRFrontEnd and
+    data_processing/fit_hamer_prototypes.py (the prototypes must live in the same space)."""
+    B, D, T = h.shape
+    if D != 288:
+        raise ValueError(f"The HaMeR hand-shape encoder needs the 288-dim HaMeR layout, got {D}.")
+    x = h.permute(0, 2, 1)                                                  # (B, T, 288)
+    H = x[..., :270].reshape(B, T, 2, 15, 3, 3)
+    G = x[..., 270:].reshape(B, T, 2, 3, 3)
+    shape = H[..., :, :2].reshape(B, T, 2, 90)
+    orient = G[..., :, :2].reshape(B, T, 2, 6)
+    det = (G.abs().flatten(-2).sum(-1) > 1e-6).to(x.dtype)
+    return shape, orient, det
+
+
+def load_hamer_prototypes(path, k):
+    """Prototype file from data_processing/fit_hamer_prototypes.py: centroids (k, 90) + tau."""
+    import os
+    if not os.path.exists(path):
+        raise FileNotFoundError(
+            f"HaMeR prototype file '{path}' not found. Run (repo root, once):\n"
+            f"    python data_processing/fit_hamer_prototypes.py --k {k}\n"
+            f"before training the 'proto' HaMeR encoder.")
+    z = np.load(path)
+    c = np.asarray(z["centroids"], dtype=np.float32)
+    if c.shape != (k, 90):
+        raise ValueError(f"{path}: centroids have shape {c.shape}, the model expects ({k}, 90) "
+                         f"(hamer_proto_k = {k}).")
+    return c, float(z["tau"])
+
+
+class HandShapePrototypeEncoder(nn.Module):
+    """
+    (B, 288, T) raw HaMeR -> (B, T, 2 * channels). Hand shape is categorical in sign phonology (a limited
+    inventory of distinctive handshapes), while HaMeR gives continuous joint rotations. Per hand and frame:
+
+      mode="proto"   finger rotations (6D, 90 values) -> soft assignment to K learned prototype handshapes,
+                     p_k = softmax_k(-||x - c_k||^2 / tau)   (c_k initialised by k-means on the TRAINING
+                     frames, tau learned in log space; both fine-tuned)
+      mode="linear"  control: the same position filled by a plain Linear(90 -> K) (same size, no prototypes)
+
+    then [K values | wrist orientation 6D | detected flag] -> `layers` per-hand temporal blocks (ST-GCN
+    blocks on one vertex = 1x1 conv + k=9 temporal conv, the body stream's "tcn" block), weights shared by
+    both hands. A missing hand gives zeros for the K values and the orientation (flag 0). Output: both
+    hands' channels side by side, slot order kept.
+    """
+
+    def __init__(self, mode="proto", k=32, channels=64, layers=2, temporal_kernel=9, init_path=None):
+        super().__init__()
+        from src.stgcn import STGCNBlock
+        if mode not in ("proto", "linear"):
+            raise ValueError(f"HandShapePrototypeEncoder mode must be 'proto' or 'linear', got '{mode}'.")
+        self.mode, self.k, self.channels = mode, int(k), int(channels)
+        if mode == "proto":
+            if init_path:
+                c, tau = load_hamer_prototypes(init_path, self.k)
+                centroids, log_tau = torch.from_numpy(c), float(np.log(max(tau, 1e-6)))
+            else:
+                # no file: identity-like hands + noise (unit tests only; the queue always passes a file)
+                eye6 = torch.tensor([1., 0., 0., 1., 0., 0.]).repeat(15)
+                centroids, log_tau = eye6 + 0.3 * torch.randn(self.k, 90), 0.0
+            self.prototypes = nn.Parameter(centroids.clone())                 # (K, 90)
+            self.log_tau = nn.Parameter(torch.tensor(log_tau))
+        else:
+            self.shape_proj = nn.Linear(90, self.k)
+        A = np.eye(1)
+        self.blocks = nn.Sequential(*[STGCNBlock(self.k + 7 if i == 0 else self.channels, self.channels, A,
+                                                 temporal_kernel=temporal_kernel) for i in range(int(layers))])
+        self.out_dim = 2 * self.channels
+        self._last_assign = None                                               # (B, T, 2, K) for analysis
+
+    def assign(self, shape):
+        """(..., 90) -> (..., K) soft prototype assignment, computed in float32."""
+        x = shape.float()
+        c = self.prototypes.float()
+        d2 = (x.pow(2).sum(-1, keepdim=True) - 2.0 * x @ c.t() + c.pow(2).sum(-1)).clamp_min(0.0)
+        return torch.softmax(-d2 / self.log_tau.exp(), dim=-1)
+
+    def forward(self, h):
+        B, _, T = h.shape
+        shape, orient, det = hamer_hand_parts(h)
+        if self.mode == "proto":
+            z = self.assign(shape).to(h.dtype)
+        else:
+            z = self.shape_proj(shape)
+        z = z * det.unsqueeze(-1)                                              # missing hand -> zeros
+        self._last_assign = z.detach() if self.mode == "proto" else None
+        feats = torch.cat([z, orient, det.unsqueeze(-1)], dim=-1)             # (B, T, 2, K + 7)
+        x = feats.permute(0, 2, 3, 1).reshape(B * 2, self.k + 7, T, 1)        # hands into the batch
+        y = self.blocks(x)                                                     # (B*2, C, T, 1)
+        y = y.reshape(B, 2, self.channels, T).permute(0, 3, 1, 2)             # (B, T, 2, C)
+        return y.reshape(B, T, self.out_dim)
+
+
+# Face articulators and the time scale each one works on (FaceRegionEncoder, TAILORED_ENCODER_STUDY):
+#   eyes   blinks, short (~0.1-0.4 s), mark prosodic boundaries          -> dilation 1: 17 frames = 0.34 s
+#   mouth  mouthings / mouth gestures, about one sign long               -> dilation 2: 33 frames = 0.66 s
+#   brows  raises / furrows spread over a whole phrase or clause         -> dilation 4: 65 frames = 1.3 s
+# (receptive field of 2 blocks with kernel 9 and dilation d = 1 + 16 d frames at 50 fps)
+FACE_REGION_DILATIONS = {"eyes": 1, "mouth": 2, "brows": 4, "oval": 1}
+_ARTICULATOR = {"left eye": "eyes", "right eye": "eyes", "left brow": "brows", "right brow": "brows",
+                "mouth": "mouth", "face oval": "oval"}
+
+
+def face_articulator_regions(face_subset):
+    """[(articulator, [face vertex positions])] for a face subset, in the order eyes, brows, mouth, oval
+    (only those present). Built on face_parts(), so the iris goes with its eye."""
+    groups = {}
+    for name, idx in face_parts(face_subset):
+        groups.setdefault(_ARTICULATOR[name], set()).update(idx)
+    return [(a, sorted(groups[a])) for a in ("eyes", "brows", "mouth", "oval") if a in groups]
+
+
+class FaceRegionEncoder(nn.Module):
+    """
+    (B, C_in, T, V_face) -> (B, channels, T, V_face), a drop-in for the face stream's 2 ST-GCN blocks.
+    The face is split into articulators (eyes, brows, mouth), each with its OWN ST-GCN blocks over its own
+    part of the face graph (the compact face graph has no edges between articulators, so no edge is lost)
+    and its own temporal dilation (`dilations`: articulator -> d, default FACE_REGION_DILATIONS). The
+    outputs go back to the original vertex order, so flatten / part pooling / branch are unchanged.
+    dilations all 1 = the control: separate weights per articulator, the original time scale.
+    """
+
+    def __init__(self, in_channels, channels, num_face, dilations=None, layers=2, temporal_kernel=9):
+        super().__init__()
+        from src.graph import SkeletonGraph
+        from src.face_subsets import face_subset_for_vertex_count
+        from src.stgcn import STGCNBlock
+        subset = face_subset_for_vertex_count(num_face)
+        self.regions = face_articulator_regions(subset)
+        dil = dict(FACE_REGION_DILATIONS)
+        for name, d in (dilations or {}).items():
+            if name not in FACE_REGION_DILATIONS:
+                raise ValueError(f"face_region_dilations: unknown articulator '{name}' "
+                                 f"(known: {sorted(FACE_REGION_DILATIONS)}).")
+            dil[name] = int(d)
+        self.dilations = {name: dil[name] for name, _ in self.regions}
+        g = SkeletonGraph(num_vertices=num_face, face_only=True)
+        edges = g._get_face_edges(offset=0)
+        self.encoders = nn.ModuleDict()
+        for name, idx in self.regions:
+            A = g._get_subgraph_adjacency(idx, edges)
+            self.encoders[name] = nn.Sequential(*[
+                STGCNBlock(in_channels if i == 0 else channels, channels, A, temporal_kernel=temporal_kernel,
+                           temporal_dilation=self.dilations[name]) for i in range(int(layers))])
+        order = [i for _, idx in self.regions for i in idx]
+        if sorted(order) != list(range(num_face)):
+            raise RuntimeError(f"Face articulators do not cover the {num_face} face vertices exactly once.")
+        for name, idx in self.regions:
+            self.register_buffer(f"idx_{name}", torch.tensor(idx, dtype=torch.long), persistent=False)
+        self.register_buffer("inverse", torch.argsort(torch.tensor(order, dtype=torch.long)), persistent=False)
+
+    def forward(self, x):
+        outs = [self.encoders[name](x.index_select(-1, getattr(self, f"idx_{name}"))) for name, _ in self.regions]
+        return torch.cat(outs, dim=-1).index_select(-1, self.inverse)
+
+
+# ==============================================================================
 # Change-point layer (between fusion and encoder)
 # ==============================================================================
 class ChangePointLayer(nn.Module):

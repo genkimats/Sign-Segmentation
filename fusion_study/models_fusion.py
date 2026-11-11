@@ -135,7 +135,8 @@ class MultiStream_Fusion(MultiStreamSegmenter):
         z = {}
         if "body_hands" in self.streams:
             z["body_hands"] = self.branches["body_hands"](self._graph_stream(
-                self.body_hands_stgcn, x[..., :65], getattr(self, "body_hands_pool", None)))
+                self.body_hands_stgcn, x[..., :getattr(self, "n_body_vertices", 65)],
+                getattr(self, "body_hands_pool", None)))
         if "face" in self.streams:
             xf = x[..., 65:]
             if self.face_channels is not None:

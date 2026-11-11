@@ -260,6 +260,15 @@ def build_model_kwargs(config, detected_hamer_dim=None, detected_dinov2_dim=None
             model_kwargs["stgcn_temporal_dilations"] = [int(d) for d in config["stgcn_temporal_dilations"]]
         if config.get("change_point_scales"):
             model_kwargs["change_point_scales"] = [int(w) for w in config["change_point_scales"]]
+        # Modality-specific encoders (TAILORED_ENCODER_STUDY): only passed when not the default, so older
+        # configs / checkpoints rebuild unchanged
+        if config.get("body_stream_hands", True) is False:
+            model_kwargs["body_stream_hands"] = False
+        if config.get("face_encoder"):
+            model_kwargs["face_encoder"] = config["face_encoder"]
+            if config.get("face_region_dilations"):
+                model_kwargs["face_region_dilations"] = {str(k): int(v)
+                                                         for k, v in config["face_region_dilations"].items()}
         # Idea B: stream-specific auxiliary heads; Idea A3: FiLM on video-level cues.
         # Both are absent from older configs, so their checkpoints rebuild unchanged.
         if config.get("aux_heads"):
@@ -290,6 +299,12 @@ def build_model_kwargs(config, detected_hamer_dim=None, detected_dinov2_dim=None
                 model_kwargs["hamer_encoder"] = config["hamer_encoder"]
                 model_kwargs["hamer_tree_channels"] = int(config.get("hamer_tree_channels", 64))
                 model_kwargs["hamer_tree_layers"] = int(config.get("hamer_tree_layers", 2))
+                # TAILORED_ENCODER_STUDY: prototype handshapes (and the Linear control)
+                if config["hamer_encoder"] in ("proto", "proto_linear"):
+                    model_kwargs["hamer_proto_k"] = int(config.get("hamer_proto_k", 32))
+                    if config["hamer_encoder"] == "proto":
+                        model_kwargs["hamer_proto_init"] = config.get(
+                            "hamer_proto_init", f"processed_data/hamer_prototypes_k{model_kwargs['hamer_proto_k']}.npz")
             if int(config.get("hamer_temporal_layers", 1)) > 1:
                 model_kwargs["hamer_temporal_layers"] = int(config["hamer_temporal_layers"])
             if config.get("hamer_temporal_dilations"):

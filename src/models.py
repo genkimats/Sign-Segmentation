@@ -7,6 +7,7 @@ from src.graph import SkeletonGraph
 from src.stgcn import STGCNBlock
 from src.stgcn import DecoupledSTGCNBlock
 from src.frontend import HandTreeEncoder, HaMeRFrontEnd, TemporalResidual, VertexPooling, BODY_PARTS, face_parts, ChangePointLayer
+from src.frontend import HandShapePrototypeEncoder, FaceRegionEncoder
 from src.face_subsets import face_subset_for_vertex_count
 from src.skeleton_encoders import build_stream_encoder, SKATE_BODY_PARTS, STREAM_ENCODERS
 from src.skeleton_angles import skeleton_angle_features, ANGLE_FEATURE_DIM
@@ -2419,6 +2420,19 @@ class MultiStreamSegmenter(nn.Module):
                           gamma / beta from a 2-layer MLP whose last layer starts at zero
                           (identity). The cues are read at the window's first frame (they are
                           constant per video; padding sits at the end). None = off.
+
+    Modality-specific encoders (TAILORED_ENCODER_STUDY; defaults = the original model):
+      body_stream_hands   False: the body_hands stream keeps only the 23 pose vertices (head, arms,
+                          wrists; graph = the pose sub-graph), the 42 MediaPipe hand keypoints are not
+                          read -> body = location / movement, hand shape is left to HaMeR.
+                          stream_encoder stgcn / tcn and vertex_pooling flatten only.
+      hamer_encoder       + "proto": HandShapePrototypeEncoder, soft assignment of each hand's finger
+                          rotations to hamer_proto_k prototype handshapes (k-means init from
+                          hamer_proto_init) -> per-hand temporal blocks; "proto_linear": the same with
+                          the prototype layer replaced by Linear(90 -> k) (control)
+      face_encoder        "regions": FaceRegionEncoder, separate ST-GCN blocks per articulator (eyes /
+                          brows / mouth), each with its own temporal dilation (face_region_dilations,
+                          default eyes 1, mouth 2, brows 4). None = the stream_encoder.
     """
     STREAM_ORDER = ("body_hands", "face", "hamer", "cues")
 
@@ -2439,7 +2453,9 @@ class MultiStreamSegmenter(nn.Module):
                  sign_head=False, sign_cascade=None, sign_cascade_detach=False, sign_cascade_dim=32,
                  sign_level=False, sign_level_pred_p=0.0, sign_level_tol=4, sign_level_min_dist=3,
                  sign_level_pos_weight=3.0, attn_ff_mult=2, attn_dropout=0.1, unet_stage=True,
-                 hamer_encoder="mlp", hamer_tree_channels=64, hamer_tree_layers=2):
+                 hamer_encoder="mlp", hamer_tree_channels=64, hamer_tree_layers=2,
+                 body_stream_hands=True, hamer_proto_k=32, hamer_proto_init=None,
+                 face_encoder=None, face_region_dilations=None):
         super().__init__()
         if stream_encoder not in STREAM_ENCODERS:
             raise ValueError(f"stream_encoder must be one of {STREAM_ENCODERS}, got '{stream_encoder}'.")
@@ -2490,13 +2506,21 @@ class MultiStreamSegmenter(nn.Module):
 
         self.branches = nn.ModuleDict()
 
+        # body_stream_hands=False (TAILORED_ENCODER_STUDY): the body stream reads only the 23 pose vertices
+        self.n_body_vertices = 65 if body_stream_hands else 23
         if "body_hands" in self.streams:
             if num_vertices < 65:
                 raise ValueError(f"body_hands stream needs the 65 body+hand vertices (num_vertices={num_vertices}).")
-            A_bh = SkeletonGraph(num_vertices=65).A
+            if body_stream_hands:
+                A_bh = SkeletonGraph(num_vertices=65).A
+            else:
+                if stream_encoder not in ("stgcn", "tcn") or vertex_pooling != "flatten":
+                    raise ValueError("body_stream_hands=False is implemented for stream_encoder 'stgcn' / 'tcn' "
+                                     "with vertex_pooling 'flatten' only.")
+                A_bh = SkeletonGraph(num_vertices=65).A_body                  # pose sub-graph, 23 vertices
             self.body_hands_stgcn = graph_encoder(in_channels, A_bh, SKATE_BODY_PARTS)
             if vertex_pooling == "flatten":
-                bh_in = 65 * stgcn_channels
+                bh_in = self.n_body_vertices * stgcn_channels
             else:
                 self.body_hands_pool = VertexPooling(stgcn_channels, BODY_PARTS, vertex_pooling)
                 bh_in = self.body_hands_pool.out_dim
@@ -2512,10 +2536,21 @@ class MultiStreamSegmenter(nn.Module):
             # None = all channels (legacy 3D face runs).
             self.face_channels = list(face_channels) if face_channels is not None else None
             face_in = len(self.face_channels) if self.face_channels is not None else in_channels
-            self.face_stgcn = graph_encoder(
-                face_in, A_face,
-                [idx for _, idx in face_parts(face_subset_for_vertex_count(self.num_face))]
-                if stream_encoder == "skateformer" else None)
+            if face_encoder not in (None, "regions"):
+                raise ValueError(f"face_encoder must be None (= stream_encoder) or 'regions', got '{face_encoder}'.")
+            if face_encoder == "regions":
+                if stgcn_temporal_dilations:
+                    raise ValueError("face_encoder 'regions' sets its own dilations (face_region_dilations); "
+                                     "leave stgcn_temporal_dilations unset.")
+                self.face_stgcn = FaceRegionEncoder(face_in, stgcn_channels, self.num_face,
+                                                    dilations=face_region_dilations)
+            else:
+                if face_region_dilations:
+                    raise ValueError("face_region_dilations needs face_encoder='regions'.")
+                self.face_stgcn = graph_encoder(
+                    face_in, A_face,
+                    [idx for _, idx in face_parts(face_subset_for_vertex_count(self.num_face))]
+                    if stream_encoder == "skateformer" else None)
             if vertex_pooling == "flatten":
                 face_in_dim = self.num_face * stgcn_channels
             else:
@@ -2531,13 +2566,22 @@ class MultiStreamSegmenter(nn.Module):
             hamer_in = hamer_dim
             # hamer_encoder (HAMER_ENCODER_STUDY): "mlp" = the original per-frame branch on the flat vector;
             # "tree" / "joint" = HandTreeEncoder (ST-GCN per hand over the MANO tree / per joint only) before it
-            if hamer_encoder not in ("mlp", "tree", "joint"):
-                raise ValueError(f"hamer_encoder must be 'mlp', 'tree' or 'joint', got '{hamer_encoder}'.")
+            if hamer_encoder not in ("mlp", "tree", "joint", "proto", "proto_linear"):
+                raise ValueError(f"hamer_encoder must be 'mlp', 'tree', 'joint', 'proto' or 'proto_linear', "
+                                 f"got '{hamer_encoder}'.")
             if hamer_encoder != "mlp":
                 if hamer_rep != "matrix" or hamer_mask or hamer_motion or int(hamer_temporal_kernel) > 1:
-                    raise ValueError("hamer_encoder 'tree' / 'joint' has its own rotation / mask / temporal "
+                    raise ValueError(f"hamer_encoder '{hamer_encoder}' has its own rotation / mask / temporal "
                                      "processing; leave hamer_rep / hamer_mask / hamer_motion / "
                                      "hamer_temporal_kernel at their defaults.")
+            if hamer_encoder in ("proto", "proto_linear"):
+                # TAILORED_ENCODER_STUDY: prototype handshapes (or the Linear control) + per-hand temporal blocks
+                self.hamer_shape = HandShapePrototypeEncoder(
+                    "proto" if hamer_encoder == "proto" else "linear", int(hamer_proto_k),
+                    int(hamer_tree_channels), int(hamer_tree_layers),
+                    init_path=hamer_proto_init if hamer_encoder == "proto" else None)
+                hamer_in = self.hamer_shape.out_dim
+            elif hamer_encoder != "mlp":
                 self.hamer_tree = HandTreeEncoder(hamer_encoder, int(hamer_tree_channels), int(hamer_tree_layers))
                 hamer_in = self.hamer_tree.out_dim
             elif hamer_rep != "matrix" or hamer_mask or hamer_motion:
@@ -2730,7 +2774,7 @@ class MultiStreamSegmenter(nn.Module):
         z = {}
         if "body_hands" in self.streams:
             z["body_hands"] = self.branches["body_hands"](self._graph_stream(
-                self.body_hands_stgcn, x[..., :65], getattr(self, "body_hands_pool", None)))
+                self.body_hands_stgcn, x[..., :self.n_body_vertices], getattr(self, "body_hands_pool", None)))
         if "face" in self.streams:
             xf = x[..., 65:]
             if self.face_channels is not None:
@@ -2740,7 +2784,9 @@ class MultiStreamSegmenter(nn.Module):
         if "hamer" in self.streams:
             if hamer is None:
                 raise ValueError("hamer stream is on but forward() got no `hamer` tensor.")
-            if hasattr(self, "hamer_tree"):
+            if hasattr(self, "hamer_shape"):
+                z["hamer"] = self.branches["hamer"](self.hamer_shape(hamer))      # (B, T, dim)
+            elif hasattr(self, "hamer_tree"):
                 z["hamer"] = self.branches["hamer"](self.hamer_tree(hamer))       # (B, T, dim)
             elif hasattr(self, "hamer_frontend"):
                 z["hamer"] = self.branches["hamer"](self.hamer_frontend(hamer))   # (B, T, dim)
