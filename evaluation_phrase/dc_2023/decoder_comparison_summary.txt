@@ -1,0 +1,15 @@
+Decoder comparison (test; every decoder tuned on val); runs: bilstm_2023-244, bilstm_2023-245, bilstm_2023-246
+Boundary F1 pooled over videos; IoU / % / Segment F1@0.5 (one-to-one phrase matches with IoU >= 0.5) =
+per-video means (2023 style). Mean +- SD over runs.
+
+decoder                      bF1@2         bF1@5        bF1@10    P@5    R@5    IoU      %      SegF1@.5   vs peak picking [95% CI]: bF1@5 | SegF1@.5
+threshold (IoU+%)     0.261+-0.035  0.432+-0.019  0.496+-0.010  0.425  0.447  0.818   1.12  0.481+-0.012   -0.019 [-0.030, -0.007] | +0.002 [-0.015, +0.020]
+threshold (bF1)       0.261+-0.035  0.433+-0.018  0.496+-0.010  0.425  0.448  0.314   1.12  0.189+-0.044   -0.019 [-0.030, -0.007] | -0.290 [-0.315, -0.267]
+peak picking          0.322+-0.007  0.451+-0.001  0.514+-0.003  0.390  0.535  0.828   1.42  0.479+-0.005   (reference)
+hybrid (bF1)          0.321+-0.010  0.441+-0.004  0.501+-0.009  0.385  0.522  0.400   1.41  0.205+-0.049   -0.010 [-0.014, -0.005] | -0.274 [-0.296, -0.253]
+hybrid (IoU+%)        0.331+-0.003  0.449+-0.007  0.507+-0.002  0.425  0.477  0.810   1.16  0.502+-0.013   -0.002 [-0.008, +0.004] | +0.023 [+0.010, +0.035]
+
+Settings tuned on val (per run): see decoder_comparison_runs.csv
+  bilstm_2023-244: threshold (IoU+%): b=0.2 o=0.6 | threshold (bF1): b=0.2 o=0.1 | peak picking: min_dist=10 sigma=2 thr=0.15 | hybrid (bF1): b=0.2 o=0.1 sigma=2 min_dist=50 | hybrid (IoU+%): b=0.2 o=0.6 sigma=0 min_dist=50
+  bilstm_2023-245: threshold (IoU+%): b=0.3 o=0.7 | threshold (bF1): b=0.3 o=0.1 | peak picking: min_dist=25 sigma=5 thr=0.1 | hybrid (bF1): b=0.2 o=0.1 sigma=5 min_dist=10 | hybrid (IoU+%): b=0.2 o=0.7 sigma=5 min_dist=50
+  bilstm_2023-246: threshold (IoU+%): b=0.3 o=0.7 | threshold (bF1): b=0.3 o=0.1 | peak picking: min_dist=25 sigma=5 thr=0.1 | hybrid (bF1): b=0.2 o=0.1 sigma=5 min_dist=25 | hybrid (IoU+%): b=0.3 o=0.7 sigma=5 min_dist=0

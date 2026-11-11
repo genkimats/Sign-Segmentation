@@ -11,14 +11,8 @@
     0.5
   ],
   "swept_thresholds": null,
-  "tuned_thresholds": [
-    0.3,
-    0.3
-  ],
-  "tuned_on": "val",
-  "sweep_metric": "bnd5",
-  "merge_starts": {
-    "argmax_merge": 5,
-    "tuned_merge": 3
-  }
+  "tuned_thresholds": null,
+  "tuned_on": null,
+  "sweep_metric": "iou_pct",
+  "merge_starts": {}
 }

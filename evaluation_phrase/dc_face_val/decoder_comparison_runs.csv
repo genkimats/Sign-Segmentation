@@ -1,0 +1,16 @@
+run,decoder,settings_tuned_on_val,bnd_f1_2,bnd_f1_5,bnd_f1_10,bnd_p_5,bnd_r_5,iou,pct,seg_f1_05,iou_pct_score
+multistream_bilstm-115,threshold (IoU+%),b=0.3 o=0.7,0.3159,0.4758,0.5221,0.4374,0.5215,0.8281,1.1507,0.5101,1.6774
+multistream_bilstm-115,threshold (bF1),b=0.3 o=0.1,0.3159,0.4758,0.5221,0.4374,0.5215,0.3823,1.1507,0.2397,1.2316
+multistream_bilstm-115,peak picking,min_dist=10 sigma=2 thr=0.2,0.3816,0.4947,0.541,0.4352,0.5729,0.8316,1.2631,0.5137,1.5685
+multistream_bilstm-115,hybrid (bF1),b=0.3 o=0.1 sigma=2 min_dist=10,0.3826,0.4848,0.5254,0.4478,0.5286,0.3773,1.1408,0.2408,1.2365
+multistream_bilstm-115,hybrid (IoU+%),b=0.3 o=0.7 sigma=2 min_dist=50,0.378,0.4839,0.5242,0.4722,0.4962,0.82,1.0208,0.5338,1.7992
+multistream_bilstm-116,threshold (IoU+%),b=0.3 o=0.6,0.3356,0.481,0.5201,0.4572,0.5074,0.8276,1.066,0.5217,1.7616
+multistream_bilstm-116,threshold (bF1),b=0.3 o=0.1,0.3356,0.481,0.5201,0.4572,0.5074,0.3896,1.066,0.2708,1.3236
+multistream_bilstm-116,peak picking,min_dist=25 sigma=5 thr=0.1,0.3722,0.4911,0.5439,0.4284,0.5752,0.8362,1.2832,0.5215,1.5529
+multistream_bilstm-116,hybrid (bF1),b=0.3 o=0.1 sigma=5 min_dist=0,0.3814,0.4827,0.5213,0.4588,0.5091,0.3857,1.066,0.2682,1.3197
+multistream_bilstm-116,hybrid (IoU+%),b=0.3 o=0.6 sigma=0 min_dist=25,0.3762,0.4758,0.5191,0.4596,0.4932,0.8242,1.0304,0.5287,1.7939
+multistream_bilstm-117,threshold (IoU+%),b=0.3 o=0.6,0.331,0.4714,0.5111,0.4277,0.5251,0.8232,1.1572,0.4971,1.666
+multistream_bilstm-117,threshold (bF1),b=0.3 o=0.1,0.331,0.4714,0.5111,0.4277,0.5251,0.3928,1.1572,0.2433,1.2355
+multistream_bilstm-117,peak picking,min_dist=10 sigma=5 thr=0.15,0.3631,0.4848,0.5333,0.5058,0.4655,0.8194,0.8845,0.5007,1.7039
+multistream_bilstm-117,hybrid (bF1),b=0.2 o=0.1 sigma=5 min_dist=50,0.3574,0.4718,0.5202,0.4118,0.5522,0.5335,1.284,0.3107,1.2495
+multistream_bilstm-117,hybrid (IoU+%),b=0.3 o=0.6 sigma=2 min_dist=50,0.3716,0.47,0.5075,0.4538,0.4873,0.8111,1.0171,0.5159,1.794
