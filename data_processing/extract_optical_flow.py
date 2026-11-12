@@ -19,7 +19,7 @@ file is cut / zero-padded at the end (reported); one that differs by more than -
 skipped (reported) -- the dataset loader skips a video whose cue length differs from its labels.
          processed_data/flow_features/_names.json  channel names (src/cue_sets.py reads this)
 
-Videos: raw_data/videos/<video id>.<mp4|avi|mov> for every id in dataset_splits.json (all splits).
+Videos: raw_data/videos/<transcript>_1a1 / _1b1.<mp4|avi|mov> (= <transcript>_A / _B) for every id in dataset_splits.json (all splits).
 Existing outputs are skipped (resume). Run from the repo root:
     python data_processing/extract_optical_flow.py --workers 6
     python data_processing/extract_optical_flow.py --only 1176340_A    # one video, for a quick check
@@ -34,6 +34,16 @@ import numpy as np
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VIDEO_EXTS = (".mp4", ".avi", ".mov")
+# The corpus videos use the DGS naming (<transcript>_1a1 / _1b1); everything else in the pipeline uses the
+# participant letter (<transcript>_A / _B) -- same rule as rename_face_keypoints.py / rename_dinov2_features.py
+VIDEO_SUFFIXES = {"_1a1": "_A", "_1b1": "_B"}
+
+
+def video_id(stem):
+    for old, new in VIDEO_SUFFIXES.items():
+        if stem.endswith(old):
+            return stem[: -len(old)] + new
+    return stem
 
 
 def channel_names(grid):
@@ -137,7 +147,7 @@ def main():
     with open(args.splits) as f:
         splits = json.load(f)
     ids = args.only or sorted({v.replace(".npy", "").replace(".pt", "") for s in splits.values() for v in s})
-    videos = {os.path.splitext(f)[0]: os.path.join(args.video_dir, f)
+    videos = {video_id(os.path.splitext(f)[0]): os.path.join(args.video_dir, f)
               for f in os.listdir(args.video_dir) if f.lower().endswith(VIDEO_EXTS)}
     jobs, no_video, no_label, done = [], [], [], 0
     for vid in ids:
