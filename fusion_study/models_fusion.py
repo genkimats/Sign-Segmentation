@@ -68,6 +68,9 @@ class MultiStream_Fusion(MultiStreamSegmenter):
             raise ValueError(f"unknown fusion options {sorted(unknown)}")
         if kwargs.get("aux_heads") or kwargs.get("film_cue_idx"):
             raise ValueError("aux_heads / film_cue_idx are not combined with multistream_fusion -- use multistream_bilstm.")
+        if kwargs.get("body_split") or kwargs.get("hamer_encoder", "mlp") != "mlp":
+            raise ValueError("body_split / hamer_encoder are implemented in multistream_bilstm's forward only, "
+                             "not in multistream_fusion (its _stream_features would silently skip them).")
         kwargs.pop("encoder", None)
         kwargs.pop("fusion", None)
         # frame_gate projects every branch to d_model (like gated_sum); the others keep concat widths

@@ -173,6 +173,12 @@ def build_model_kwargs(config, detected_hamer_dim=None, detected_dinov2_dim=None
         if int(config.get("joint_temporal_layers", 0) or 0) > 0:
             model_kwargs["joint_temporal_layers"] = int(config["joint_temporal_layers"])
             model_kwargs["joint_temporal_channels"] = int(config.get("joint_temporal_channels", 64))
+        # STRUCTURE_STUDY (EF-joint vs multi-stream gap): only passed when on
+        if config.get("joint_temporal_per_modality"):
+            model_kwargs["joint_temporal_per_modality"] = True
+        if config.get("hamer_branch"):
+            model_kwargs["hamer_branch"] = True
+            model_kwargs["hamer_branch_dim"] = int(config.get("hamer_branch_dim", 256))
 
     if config.get("use_hamer_features", False):
         if model_name not in HAMER_SUPPORTED_MODELS:
@@ -264,6 +270,19 @@ def build_model_kwargs(config, detected_hamer_dim=None, detected_dinov2_dim=None
         # configs / checkpoints rebuild unchanged
         if config.get("body_stream_hands", True) is False:
             model_kwargs["body_stream_hands"] = False
+        # STRUCTURE_STUDY: split body stream, deeper branches / fusion (only passed when not the default)
+        if config.get("body_split"):
+            model_kwargs["body_split"] = config["body_split"]
+            model_kwargs["hand_proj_dim"] = int(config.get("hand_proj_dim", 64))
+            if config["body_split"] == "hands_shared":
+                coords = list(config.get("base_features", ["x-cord", "y-cord", "z-cord"]))
+                if config.get("kinematic_features") or "x-cord" not in coords:
+                    raise ValueError("body_split 'hands_shared' mirrors the x coordinate; it needs base_features "
+                                     "with 'x-cord' and no kinematic_features.")
+                model_kwargs["hand_mirror_channels"] = [coords.index("x-cord")]
+        for key in ("branch_layers", "fusion_layers"):
+            if int(config.get(key, 1) or 1) > 1:
+                model_kwargs[key] = int(config[key])
         if config.get("face_encoder"):
             model_kwargs["face_encoder"] = config["face_encoder"]
             if config.get("face_region_dilations"):

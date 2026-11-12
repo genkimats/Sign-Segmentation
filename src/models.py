@@ -2282,7 +2282,8 @@ class Moryossef2023_BiLSTM(nn.Module):
     def __init__(self, in_channels, num_vertices, num_classes=3, d_model=256, n_layers=4,
                  hamer_dim=None, use_pose_input=True, temporal_kernel=1, temporal_layers=2,
                  temporal_dropout=0.0, modality_norm=False, joint_temporal_layers=0,
-                 joint_temporal_channels=64, body_vertices=65, **unused):
+                 joint_temporal_channels=64, body_vertices=65, joint_temporal_per_modality=False,
+                 hamer_branch=False, hamer_branch_dim=256, hamer_branch_dropout=0.2, **unused):
         super().__init__()
         if d_model % 2:
             raise ValueError("d_model (their hidden_dim) must be even.")
@@ -2296,16 +2297,40 @@ class Moryossef2023_BiLSTM(nn.Module):
         #                          "tcn" encoder: per-joint temporal conv k=9, joint_temporal_channels
         #                          channels) on the keypoints BEFORE flattening; fusion stays early (one
         #                          Linear over all modalities, no per-stream branches)
+        # What separates EF-joint from multi-stream (STRUCTURE_STUDY, 2026-11-13; both off = unchanged):
+        #   joint_temporal_per_modality  the per-joint temporal blocks get SEPARATE weights (and BatchNorm)
+        #                          for the body+hands vertices and the face vertices, instead of one set
+        #                          shared by every joint
+        #   hamer_branch           HaMeR goes through the multi-stream HaMeR branch (Linear -> LayerNorm ->
+        #                          GELU -> Dropout, to hamer_branch_dim) before the concatenation, instead
+        #                          of entering raw
         self.modality_norm = bool(modality_norm)
         self.body_vertices = int(body_vertices)
         self.joint_tcn = None
+        self.joint_tcn_body = self.joint_tcn_face = None
         c_pose = in_channels
+        n_body0 = min(self.body_vertices, num_vertices)
+        if joint_temporal_per_modality and not (int(joint_temporal_layers) > 0 and num_vertices > n_body0):
+            raise ValueError("joint_temporal_per_modality needs joint_temporal_layers > 0 and face vertices.")
         if int(joint_temporal_layers) > 0 and self.use_pose_input:
-            A_id = np.eye(num_vertices)
             ch = int(joint_temporal_channels)
-            self.joint_tcn = nn.Sequential(*[STGCNBlock(in_channels if i == 0 else ch, ch, A_id)
-                                             for i in range(int(joint_temporal_layers))])
+
+            def tcn(n_v):
+                return nn.Sequential(*[STGCNBlock(in_channels if i == 0 else ch, ch, np.eye(n_v))
+                                       for i in range(int(joint_temporal_layers))])
+            if joint_temporal_per_modality:
+                self.joint_tcn_body = tcn(n_body0)
+                self.joint_tcn_face = tcn(num_vertices - n_body0)
+            else:
+                self.joint_tcn = tcn(num_vertices)
             c_pose = ch
+        self.hamer_proj = None
+        if hamer_branch:
+            if not self.hamer_dim:
+                raise ValueError("hamer_branch needs HaMeR input (use_hamer_features=True).")
+            self.hamer_proj = nn.Sequential(nn.Linear(self.hamer_dim, int(hamer_branch_dim)),
+                                            nn.LayerNorm(int(hamer_branch_dim)), nn.GELU(),
+                                            nn.Dropout(float(hamer_branch_dropout)))
         self.parts_dims = []
         if self.use_pose_input:
             n_body = min(self.body_vertices, num_vertices)
@@ -2313,7 +2338,7 @@ class Moryossef2023_BiLSTM(nn.Module):
             if num_vertices > n_body:
                 self.parts_dims.append(c_pose * (num_vertices - n_body))
         if self.hamer_dim:
-            self.parts_dims.append(self.hamer_dim)
+            self.parts_dims.append(int(hamer_branch_dim) if self.hamer_proj is not None else self.hamer_dim)
         if self.modality_norm:
             self.part_norms = nn.ModuleList([nn.LayerNorm(d) for d in self.parts_dims])
         in_dim = sum(self.parts_dims)
@@ -2332,16 +2357,20 @@ class Moryossef2023_BiLSTM(nn.Module):
         B, C, T, V = x.shape
         parts = []
         if self.use_pose_input:
-            xp = self.joint_tcn(x) if self.joint_tcn is not None else x          # (B, C', T, V)
-            Cp = xp.shape[1]
             nb = min(self.body_vertices, V)
+            if self.joint_tcn_body is not None:                                 # separate filters
+                xp = torch.cat([self.joint_tcn_body(x[..., :nb]), self.joint_tcn_face(x[..., nb:])], dim=-1)
+            else:
+                xp = self.joint_tcn(x) if self.joint_tcn is not None else x      # (B, C', T, V)
+            Cp = xp.shape[1]
             parts.append(xp[..., :nb].permute(0, 2, 1, 3).reshape(B, T, Cp * nb))
             if V > nb:
                 parts.append(xp[..., nb:].permute(0, 2, 1, 3).reshape(B, T, Cp * (V - nb)))
         if self.hamer_dim:
             if hamer is None:
                 raise ValueError("bilstm_2023 was built with HaMeR input but got hamer=None.")
-            parts.append(hamer.permute(0, 2, 1)[:, :T])               # (B, D, T) -> (B, T, D)
+            h_in = hamer.permute(0, 2, 1)[:, :T]                       # (B, D, T) -> (B, T, D)
+            parts.append(self.hamer_proj(h_in) if self.hamer_proj is not None else h_in)
         if self.modality_norm:
             parts = [n(p_) for n, p_ in zip(self.part_norms, parts)]
         h = self.pose_projection(torch.cat(parts, dim=-1) if len(parts) > 1 else parts[0])
@@ -2433,6 +2462,17 @@ class MultiStreamSegmenter(nn.Module):
       face_encoder        "regions": FaceRegionEncoder, separate ST-GCN blocks per articulator (eyes /
                           brows / mouth), each with its own temporal dilation (face_region_dilations,
                           default eyes 1, mouth 2, brows 4). None = the stream_encoder.
+
+    Stream-structure options (STRUCTURE_STUDY, 2026-11-13; defaults = the original model):
+      body_split          "hands": the body_hands stream becomes three encoders -- pose (23 vertices, pose
+                          sub-graph), left hand (21) and right hand (21), each with its own ST-GCN blocks
+                          and branch (pose -> body_hands_proj_dim, each hand -> hand_proj_dim), outputs
+                          concatenated as the body_hands stream; "hands_shared": the same, but ONE hand
+                          encoder + branch for both hands (left hand mirrored on hand_mirror_channels, the
+                          x coordinate, so both look like a right hand). stgcn / tcn, flatten, concat only.
+      branch_layers       layers of every stream branch: 1 = Linear-LN-GELU-Dropout (original); 3 = that
+                          followed by two more Linear(out, out)-LN-GELU-Dropout layers (a 3-layer MLP)
+      fusion_layers       layers of the concat fusion projection: 1 (original) or more, the same way
     """
     STREAM_ORDER = ("body_hands", "face", "hamer", "cues")
 
@@ -2455,7 +2495,9 @@ class MultiStreamSegmenter(nn.Module):
                  sign_level_pos_weight=3.0, attn_ff_mult=2, attn_dropout=0.1, unet_stage=True,
                  hamer_encoder="mlp", hamer_tree_channels=64, hamer_tree_layers=2,
                  body_stream_hands=True, hamer_proto_k=32, hamer_proto_init=None,
-                 face_encoder=None, face_region_dilations=None):
+                 face_encoder=None, face_region_dilations=None,
+                 body_split=None, hand_proj_dim=64, hand_mirror_channels=(0,),
+                 branch_layers=1, fusion_layers=1):
         super().__init__()
         if stream_encoder not in STREAM_ENCODERS:
             raise ValueError(f"stream_encoder must be one of {STREAM_ENCODERS}, got '{stream_encoder}'.")
@@ -2496,8 +2538,15 @@ class MultiStreamSegmenter(nn.Module):
             raise ValueError(f"vertex_pooling must be 'flatten', 'part_mean' or 'part_attn', got '{vertex_pooling}'.")
         self.stream_dropout = float(stream_dropout)
 
+        if int(branch_layers) < 1 or int(fusion_layers) < 1:
+            raise ValueError("branch_layers and fusion_layers must be >= 1.")
+
         def branch(in_dim, out_dim):
-            return nn.Sequential(nn.Linear(in_dim, out_dim), nn.LayerNorm(out_dim), nn.GELU(), nn.Dropout(dropout))
+            # branch_layers = 1: the original single layer (same module layout, old checkpoints load)
+            layers = [nn.Linear(in_dim, out_dim), nn.LayerNorm(out_dim), nn.GELU(), nn.Dropout(dropout)]
+            for _ in range(int(branch_layers) - 1):
+                layers += [nn.Linear(out_dim, out_dim), nn.LayerNorm(out_dim), nn.GELU(), nn.Dropout(dropout)]
+            return nn.Sequential(*layers)
 
         out_dims = {
             "body_hands": body_hands_proj_dim, "face": face_proj_dim, "hamer": hamer_proj_dim,
@@ -2507,11 +2556,23 @@ class MultiStreamSegmenter(nn.Module):
         self.branches = nn.ModuleDict()
 
         # body_stream_hands=False (TAILORED_ENCODER_STUDY): the body stream reads only the 23 pose vertices
-        self.n_body_vertices = 65 if body_stream_hands else 23
+        # body_split (STRUCTURE_STUDY): pose + separate hand encoders inside the body_hands stream
+        if body_split not in (None, "hands", "hands_shared"):
+            raise ValueError(f"body_split must be None, 'hands' or 'hands_shared', got '{body_split}'.")
+        if body_split:
+            if not body_stream_hands:
+                raise ValueError("body_split splits the hand keypoints off; it cannot be combined with "
+                                 "body_stream_hands=False.")
+            if stream_encoder not in ("stgcn", "tcn") or vertex_pooling != "flatten" or fusion != "concat":
+                raise ValueError("body_split is implemented for stream_encoder 'stgcn' / 'tcn', vertex_pooling "
+                                 "'flatten' and fusion 'concat' only.")
+        self.body_split = body_split
+        self.hand_mirror_channels = [int(c) for c in hand_mirror_channels]
+        self.n_body_vertices = 65 if (body_stream_hands and not body_split) else 23
         if "body_hands" in self.streams:
             if num_vertices < 65:
                 raise ValueError(f"body_hands stream needs the 65 body+hand vertices (num_vertices={num_vertices}).")
-            if body_stream_hands:
+            if self.n_body_vertices == 65:
                 A_bh = SkeletonGraph(num_vertices=65).A
             else:
                 if stream_encoder not in ("stgcn", "tcn") or vertex_pooling != "flatten":
@@ -2525,6 +2586,17 @@ class MultiStreamSegmenter(nn.Module):
                 self.body_hands_pool = VertexPooling(stgcn_channels, BODY_PARTS, vertex_pooling)
                 bh_in = self.body_hands_pool.out_dim
             self.branches["body_hands"] = branch(bh_in, out_dims["body_hands"])
+            if body_split:
+                g65 = SkeletonGraph(num_vertices=65)
+                if body_split == "hands":
+                    self.lhand_stgcn = graph_encoder(in_channels, g65.A_lh, None)
+                    self.rhand_stgcn = graph_encoder(in_channels, g65.A_rh, None)
+                    self.hand_branches = nn.ModuleDict({side: branch(21 * stgcn_channels, int(hand_proj_dim))
+                                                        for side in ("left", "right")})
+                else:
+                    self.hand_stgcn = graph_encoder(in_channels, g65.A_rh, None)   # same tree as A_lh
+                    self.hand_branch = branch(21 * stgcn_channels, int(hand_proj_dim))
+                out_dims["body_hands"] = out_dims["body_hands"] + 2 * int(hand_proj_dim)
 
         if "face" in self.streams:
             self.num_face = num_vertices - 65
@@ -2616,9 +2688,10 @@ class MultiStreamSegmenter(nn.Module):
         if fusion == "concat":
             self.stream_dims = {name: out_dims[name] for name in self.streams}
             self.concat_dim = sum(self.stream_dims.values())
-            self.fusion_proj = nn.Sequential(
-                nn.Linear(self.concat_dim, d_model), nn.LayerNorm(d_model), nn.ReLU(), nn.Dropout(dropout)
-            )
+            fl = [nn.Linear(self.concat_dim, d_model), nn.LayerNorm(d_model), nn.ReLU(), nn.Dropout(dropout)]
+            for _ in range(int(fusion_layers) - 1):     # fusion_layers = 1: the original projection
+                fl += [nn.Linear(d_model, d_model), nn.LayerNorm(d_model), nn.ReLU(), nn.Dropout(dropout)]
+            self.fusion_proj = nn.Sequential(*fl)
         else:
             self.stream_dims = {name: d_model for name in self.streams}
             self.gates = nn.Parameter(torch.ones(len(self.streams)))
@@ -2775,6 +2848,17 @@ class MultiStreamSegmenter(nn.Module):
         if "body_hands" in self.streams:
             z["body_hands"] = self.branches["body_hands"](self._graph_stream(
                 self.body_hands_stgcn, x[..., :self.n_body_vertices], getattr(self, "body_hands_pool", None)))
+            if self.body_split:                                   # pose | left hand | right hand
+                xl, xr = x[..., 23:44], x[..., 44:65]
+                if self.body_split == "hands":
+                    zl = self.hand_branches["left"](self._graph_stream(self.lhand_stgcn, xl))
+                    zr = self.hand_branches["right"](self._graph_stream(self.rhand_stgcn, xr))
+                else:                                             # one encoder, left hand mirrored
+                    xl = xl.clone()
+                    xl[:, self.hand_mirror_channels] = -xl[:, self.hand_mirror_channels]
+                    zl = self.hand_branch(self._graph_stream(self.hand_stgcn, xl))
+                    zr = self.hand_branch(self._graph_stream(self.hand_stgcn, xr))
+                z["body_hands"] = torch.cat([z["body_hands"], zl, zr], dim=-1)
         if "face" in self.streams:
             xf = x[..., 65:]
             if self.face_channels is not None:

@@ -14,6 +14,9 @@ Subsets (point counts):
   "eyes_brows" 22  -- compact without the mouth (blinks + brows only)
   "minimal"    18  -- eyes (corners + upper/lower lid centre), eyebrows (3 each),
                       mouth (corners + inner-lip centres)
+  "mouth"      11  -- the compact mouth (9) + the 2 inner eye corners (anchors)
+  "mouth_full" 33  -- every saved lip point (31) + the 2 inner eye corners
+  "mouth_eyes" 21  -- compact eyes (12) + compact mouth (9), no brows
 
 Every subset keeps the inner eye corners (raw 133 / 362), which anchor the face to
 the nose in the skeleton graph. Each subset has a DIFFERENT size: graph.py infers
@@ -70,6 +73,12 @@ FACE_SUBSETS = {
                 70, 105, 107,                      # left eyebrow
                 300, 334, 336,                     # right eyebrow
                 61, 291, 13, 14],                  # mouth corners, inner lip centres
+    # Mouth / eye subsets (FACE_SUBSET_STUDY, 2026-11-13). Every subset keeps the two inner eye corners
+    # (the rule in _validate), so the "mouth" subsets are the mouth + those 2 anchor points; the corners
+    # barely move in a blink, so they carry little eye information.
+    "mouth": _COMPACT_MOUTH + [ANCHOR_LEFT_EYE_INNER, ANCHOR_RIGHT_EYE_INNER],                 # 9 + 2 = 11
+    "mouth_full": sorted(set(LIPS_INDICES)) + [ANCHOR_LEFT_EYE_INNER, ANCHOR_RIGHT_EYE_INNER],  # 31 + 2 = 33
+    "mouth_eyes": _COMPACT_EYES + _COMPACT_MOUTH,                                            # 12 + 9 = 21
 }
 
 

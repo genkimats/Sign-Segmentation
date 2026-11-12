@@ -789,6 +789,60 @@ TAILORED_ENCODER_STUDY = [
     {**_MS_BEST, "face_encoder": "regions", "face_region_dilations": {"eyes": 1, "mouth": 1, "brows": 1},
      "description": "TE-face-regions: B+H+Fc, face per articulator, all 0.34 s (control)"},
 ]
+# ------------------------------------------------------------------------------
+# STRUCTURE STUDY (2026-11-13). Everything on B+H+Fc unless stated; compare with 373-375 (same machine).
+#   BS-split         body_hands stream = pose (23) | left hand (21) | right hand (21), each its own 2 ST-GCN
+#                    blocks + branch (pose 128 + 64 + 64 = the reference's 256, so the fusion input size is
+#                    unchanged)
+#   BS-shared        the same, ONE hand encoder + branch for both hands (left hand x-mirrored)
+#   EFG-*            what separates EF-joint (B+F+H, per-joint temporal conv, one shared set of filters, raw
+#                    HaMeR) from multi-stream; compare with the EF-joint B+F+H runs of the same machine
+#     EFG-filters    separate per-joint temporal filters (+ BatchNorm) for body+hands and for face
+#     EFG-hamer      HaMeR through the multi-stream HaMeR branch (Linear-LN-GELU-Dropout -> 256) first
+#     EFG-both       both; then EF-joint differs from multi-stream only in the graph and the fusion layer
+#   FS-*             face subsets (src/face_subsets.py; reference compact = eyes + brows + mouth, 31)
+#     FS-mouth       compact mouth (9) + the 2 inner eye corners every subset keeps = 11
+#     FS-mouth-full  all 31 saved lip points + the 2 corners = 33  (vs FS-mouth: point density)
+#     FS-mouth-eyes  compact eyes + mouth, no brows = 21           (vs compact: what the brows add)
+#   MLP-*            3-layer MLP branches (Linear-LN-GELU-Dropout x 3) for every stream, without / with a
+#                    3-layer fusion projection
+#   FLOW             + dense optical flow from the video as a 4th stream (data_processing/
+#                    extract_optical_flow.py: 6x6 grid of mean dx / dy / magnitude + 2 global = 110 channels),
+#                    through the generic cue stream (branch 256, depthwise temporal conv k9)
+# ------------------------------------------------------------------------------
+_EF_JOINT_BFH = EARLY_FUSION_MECHANISM_STUDY[1]
+_FLOW_DIR = "processed_data/flow_features"
+BODY_SPLIT_STUDY = [
+    {**_MS_BEST, "body_split": "hands", "body_hands_proj_dim": 128, "hand_proj_dim": 64,
+     "description": "BS-split: B+H+Fc, body stream split into pose | left hand | right hand encoders"},
+    {**_MS_BEST, "body_split": "hands_shared", "body_hands_proj_dim": 128, "hand_proj_dim": 64,
+     "description": "BS-shared: B+H+Fc, body stream split into pose | one shared hand encoder (left mirrored)"},
+]
+EF_GAP_STUDY = [
+    {**_EF_JOINT_BFH, "joint_temporal_per_modality": True,
+     "description": f"EFG-filters: EF-joint B+F+H ({_FS}), separate temporal filters for body+hands and face"},
+    {**_EF_JOINT_BFH, "hamer_branch": True,
+     "description": f"EFG-hamer: EF-joint B+F+H ({_FS}), HaMeR through the multi-stream branch"},
+    {**_EF_JOINT_BFH, "joint_temporal_per_modality": True, "hamer_branch": True,
+     "description": f"EFG-both: EF-joint B+F+H ({_FS}), separate filters + HaMeR branch"},
+]
+FACE_SUBSET_STUDY = [
+    {**_MS_BEST, "face_subset": "mouth", "description": "FS-mouth: B+H+F(mouth, 9 + 2 eye corners)"},
+    {**_MS_BEST, "face_subset": "mouth_full", "description": "FS-mouth-full: B+H+F(all 31 lip points + 2 eye corners)"},
+    {**_MS_BEST, "face_subset": "mouth_eyes", "description": "FS-mouth-eyes: B+H+F(compact eyes + mouth, no brows)"},
+]
+MLP_STUDY = [
+    {**_MS_BEST, "branch_layers": 3, "description": "MLP-stream: B+H+Fc, 3-layer MLP branch per stream"},
+    {**_MS_BEST, "branch_layers": 3, "fusion_layers": 3,
+     "description": "MLP-stream+fusion: B+H+Fc, 3-layer MLP branches + 3-layer fusion projection"},
+]
+FLOW_STUDY = [
+    {**_MS_BEST, "use_stream_cues": True, "use_cue_features": True, "cue_dir": _FLOW_DIR, "cue_set": "file",
+     "cue_proj_dim": 256, "cue_temporal_kernel": 9,
+     "description": "FLOW: B+H+Fc + video optical-flow stream (6x6 grid, 110 channels)"},
+]
+STRUCTURE_STUDY = BODY_SPLIT_STUDY + EF_GAP_STUDY + FACE_SUBSET_STUDY + MLP_STUDY + FLOW_STUDY
+
 # After choosing on validation: the winning change of each modality together (3 seeds), e.g.
 # TAILORED_COMBINED = [{**_MS_BEST, "body_stream_hands": False, "hamer_encoder": "proto", "hamer_proto_k": 32,
 #                       "hamer_proto_init": _HAMER_PROTOTYPES, "face_encoder": "regions",
@@ -1169,7 +1223,10 @@ FUSION_OPTIONAL = [{**a, "force_selection_metric": None} for a in fusion_optiona
 # EXPERIMENTS_TO_RUN = GOLD_SIGN_MAIN_STUDY
 # Sixteenth batch (2026-11-11): tailored encoders, 5 arms x 3 seeds = 15 runs (enter "all").
 # First, once: python data_processing/fit_hamer_prototypes.py
-EXPERIMENTS_TO_RUN = TAILORED_ENCODER_STUDY
+# EXPERIMENTS_TO_RUN = TAILORED_ENCODER_STUDY
+# Seventeenth batch (2026-11-13): structure study, 11 arms x 3 seeds = 33 runs (enter "all"). The FLOW arm is
+# left out automatically until data_processing/extract_optical_flow.py has written processed_data/flow_features.
+EXPERIMENTS_TO_RUN = STRUCTURE_STUDY
 # EXPERIMENTS_TO_RUN = [{**_MS_BEST, "force_selection_metric": None,
 #                        "description": "MS best: Body + HaMeR + Face(compact), no count loss"}]   # metric asked at training
 # then, after extracting the clean features: EXPERIMENTS_TO_RUN = TEMPO_STUDY_A2_CLEAN  (3 seeds: "all")
@@ -1220,6 +1277,15 @@ if __name__ == "__main__":
             if not os.path.exists(p):
                 raise SystemExit(f"'{exp['description']}' needs {p}. Run once, from the repo root:\n"
                                  f"    python data_processing/fit_hamer_prototypes.py --k {exp.get('hamer_proto_k', 32)}")
+    # The optical-flow arm needs its features; without them it is left out of this queue (the rest runs)
+    kept = []
+    for exp in experiments_to_run:
+        if exp.get("cue_dir") == _FLOW_DIR and not os.path.exists(os.path.join(_FLOW_DIR, "_names.json")):
+            print(f"⚠️  Left out '{exp['description']}': {_FLOW_DIR} not found. Run "
+                  f"`python data_processing/extract_optical_flow.py` and queue FLOW_STUDY afterwards.")
+            continue
+        kept.append(exp)
+    experiments_to_run = kept
 
     # --- SEED SELECTION PHASE ---
     # Choose which experiments run with 3 seeds vs 1, THEN expand the list --
