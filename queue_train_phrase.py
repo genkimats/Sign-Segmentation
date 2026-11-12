@@ -827,9 +827,9 @@ EF_GAP_STUDY = [
      "description": f"EFG-both: EF-joint B+F+H ({_FS}), separate filters + HaMeR branch"},
 ]
 FACE_SUBSET_STUDY = [
-    {**_MS_BEST, "face_subset": "mouth", "description": "FS-mouth: B+H+F(mouth, 9 + 2 eye corners)"},
-    # {**_MS_BEST, "face_subset": "mouth_full", "description": "FS-mouth-full: B+H+F(all 31 lip points + 2 eye corners)"},
-    # {**_MS_BEST, "face_subset": "mouth_eyes", "description": "FS-mouth-eyes: B+H+F(compact eyes + mouth, no brows)"},
+    # {**_MS_BEST, "face_subset": "mouth", "description": "FS-mouth: B+H+F(mouth, 9 + 2 eye corners)"},
+    {**_MS_BEST, "face_subset": "mouth_full", "description": "FS-mouth-full: B+H+F(all 31 lip points + 2 eye corners)"},
+    {**_MS_BEST, "face_subset": "mouth_eyes", "description": "FS-mouth-eyes: B+H+F(compact eyes + mouth, no brows)"},
 ]
 MLP_STUDY = [
     {**_MS_BEST, "branch_layers": 3, "description": "MLP-stream: B+H+Fc, 3-layer MLP branch per stream"},
@@ -842,7 +842,7 @@ FLOW_STUDY = [
      "description": "FLOW: B+H+Fc + video optical-flow stream (6x6 grid, 110 channels)"},
 ]
 # STRUCTURE_STUDY = BODY_SPLIT_STUDY + EF_GAP_STUDY + FACE_SUBSET_STUDY + MLP_STUDY + FLOW_STUDY
-STRUCTURE_STUDY = BODY_SPLIT_STUDY + EF_GAP_STUDY + FACE_SUBSET_STUDY
+STRUCTURE_STUDY = FACE_SUBSET_STUDY + MLP_STUDY + FLOW_STUDY
 
 # After choosing on validation: the winning change of each modality together (3 seeds), e.g.
 # TAILORED_COMBINED = [{**_MS_BEST, "body_stream_hands": False, "hamer_encoder": "proto", "hamer_proto_k": 32,
