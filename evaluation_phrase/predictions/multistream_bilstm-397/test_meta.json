@@ -1,0 +1,18 @@
+{
+  "run": "multistream_bilstm-397",
+  "model": "multistream_bilstm",
+  "prefix": "397",
+  "split": "test",
+  "labels_dir": "processed_data/BIO_tags_phrase_v2",
+  "description": "GS-full: B+H+Fc + gold sign stream, all 17 channels [seed=123]",
+  "seed": 123,
+  "fixed_thresholds": [
+    0.5,
+    0.5
+  ],
+  "swept_thresholds": null,
+  "tuned_thresholds": null,
+  "tuned_on": null,
+  "sweep_metric": "iou_pct",
+  "merge_starts": {}
+}
