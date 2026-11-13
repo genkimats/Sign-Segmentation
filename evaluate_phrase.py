@@ -247,7 +247,7 @@ def diagnose(video_probs, video_gold, b_threshold, o_threshold):
 
 def evaluate_run(run_name, split, device, b_threshold, o_threshold, do_sweep, batch_size_override,
                  sweep_step=0.1, do_diagnose=False, swap_ib=False, sweep_score="iou_pct", tune_on=None,
-                 merge_grid=None):
+                 merge_grid=None, infer_overrides=None):
     cfg_path = os.path.join(EXP_DIR, run_name, "hyperparameters.json")
     ckpt_path = os.path.join(MODEL_DIR, f"{run_name}.pth")
     with open(cfg_path) as f:
@@ -266,8 +266,14 @@ def evaluate_run(run_name, split, device, b_threshold, o_threshold, do_sweep, ba
     model.eval()
 
     batch_size = batch_size_override or config.get("batch_size", 16)
+    # Inference-only window settings (--infer-overlap / --full-video): the model, the dataset and the
+    # training config are unchanged; only how the video is cut for prediction differs.
+    infer_config = {**config, **(infer_overrides or {})}
+    if infer_overrides:
+        print(f"  [inference] {infer_overrides} (trained with window_size={config['window_size']}, "
+              f"overlap={config.get('overlap', 0)})")
     t0 = time.time()
-    video_probs, video_gold = predict_split(model, config, dataset, device, batch_size=batch_size)
+    video_probs, video_gold = predict_split(model, infer_config, dataset, device, batch_size=batch_size)
     if device.type == "cuda":
         torch.cuda.synchronize()
     print(f"  [time] model inference: {time.time() - t0:.1f}s "
@@ -304,7 +310,7 @@ def evaluate_run(run_name, split, device, b_threshold, o_threshold, do_sweep, ba
         # Honest tuning: thresholds chosen on another split (e.g. val), applied here (e.g. test).
         t0 = time.time()
         tune_ds = get_dataset(config, tune_on)
-        tp, tg = predict_split(model, config, tune_ds, device, batch_size=batch_size)
+        tp, tg = predict_split(model, infer_config, tune_ds, device, batch_size=batch_size)
         _, b_t, o_t, _ = sweep_thresholds(tp, tg, grid, sweep_score)
         results["tuned"] = evaluate_videos(video_probs, video_gold, decoder="threshold",
                                            b_threshold=b_t, o_threshold=o_t)
@@ -321,7 +327,7 @@ def evaluate_run(run_name, split, device, b_threshold, o_threshold, do_sweep, ba
         if tune_on and tune_on != split:
             if tp is None:
                 tune_ds = get_dataset(config, tune_on)
-                tp, tg = predict_split(model, config, tune_ds, device, batch_size=batch_size)
+                tp, tg = predict_split(model, infer_config, tune_ds, device, batch_size=batch_size)
             sel_p, sel_g = tp, tg
         else:
             sel_p, sel_g = video_probs, video_gold
@@ -483,12 +489,31 @@ def main():
                              "evaluation_phrase/predictions/<run>/<split>.npz (+ <split>_meta.json with "
                              "labels dir and thresholds) -- input for boundary_error_analysis.py and "
                              "phrase_oracle_analysis.py --predictions.")
+    parser.add_argument("--infer-overlap", type=int, default=None,
+                        help="Inference only: overlap between windows (frames), e.g. 256 = stride window/2; "
+                             "overlapping probabilities are averaged. Training config unchanged.")
+    parser.add_argument("--full-video", action="store_true",
+                        help="Inference only: predict every video in ONE pass (no windows).")
+    parser.add_argument("--infer-tag", default=None,
+                        help="Name for the inference variant (default: 'ov<N>' or 'full'). Its predictions go to "
+                             "evaluation_phrase/predictions_<tag>/, its metrics to <model>_<split>_metrics_<tag>.csv, "
+                             "so the default windowed outputs are never overwritten.")
     parser.add_argument("--sweep-step", type=float, default=0.1,
                         help="Threshold grid step for --sweep over 0.3..0.9 (default 0.1 = 7x7 pairs). "
                              "Smaller = finer tuning but slower (0.05 = 13x13).")
     args = parser.parse_args()
     global LABELS_OVERRIDE
     LABELS_OVERRIDE = args.labels_dir
+    if args.full_video and args.infer_overlap is not None:
+        parser.error("--full-video and --infer-overlap are alternatives")
+    infer_overrides, infer_tag = None, None
+    if args.full_video:
+        infer_overrides = {"window_size": 10 ** 8, "overlap": 0, "use_full_length": True}
+        infer_tag = args.infer_tag or "full"
+    elif args.infer_overlap is not None:
+        infer_overrides = {"overlap": int(args.infer_overlap)}
+        infer_tag = args.infer_tag or f"ov{int(args.infer_overlap)}"
+    tag_sfx = f"_{infer_tag}" if infer_tag else ""
 
     runs = discover_runs(EXP_DIR, MODEL_DIR)
     if not runs:
@@ -521,7 +546,7 @@ def main():
             config, results, (best_thr, tuned_thr, merge_info), dataset, video_probs, video_gold = evaluate_run(
                 run_name, args.split, device, args.b_threshold, args.o_threshold,
                 args.sweep, args.batch_size, args.sweep_step, args.diagnose, args.swap_ib,
-                args.sweep_metric, args.tune_on, args.merge_starts)
+                args.sweep_metric, args.tune_on, args.merge_starts, infer_overrides)
         except Exception as e:
             print(f"⚠️  Skipped {run_name}: {type(e).__name__}: {e}")
             continue
@@ -605,7 +630,7 @@ def main():
             })
 
         if args.save_predictions:
-            pred_dir = os.path.join(OUT_DIR, "predictions", run_name)
+            pred_dir = os.path.join(OUT_DIR, f"predictions{tag_sfx}", run_name)
             os.makedirs(pred_dir, exist_ok=True)
             np.savez_compressed(os.path.join(pred_dir, f"{args.split}.npz"),
                                 **{vid: np.asarray(p, dtype=np.float16) for vid, p in video_probs.items()})
@@ -613,6 +638,7 @@ def main():
                 json.dump({"run": run_name, "model": model_name, "prefix": prefix, "split": args.split,
                            "labels_dir": labels_dir_for(config),
                            "description": config.get("description", ""), "seed": config.get("seed", ""),
+                           "inference": infer_overrides or "training windows",
                            "fixed_thresholds": [args.b_threshold, args.o_threshold],
                            "swept_thresholds": list(best_thr) if best_thr else None,
                            "tuned_thresholds": list(tuned_thr) if tuned_thr else None,
@@ -620,7 +646,7 @@ def main():
                            "merge_starts": {k: v[0] for k, v in merge_info.items()}}, f, indent=2)
             print(f"  predictions saved to {pred_dir}/{args.split}.npz")
 
-        per_video_path = os.path.join(OUT_DIR, f"{run_name}_{args.split}_per_video.json")
+        per_video_path = os.path.join(OUT_DIR, f"{run_name}_{args.split}{tag_sfx}_per_video.json")
         with open(per_video_path, "w") as f:
             json.dump({
                 "decoders": {k: v["per_video"] for k, v in results.items()},
@@ -633,7 +659,7 @@ def main():
         print("\nNothing was evaluated.")
         return
 
-    csv_path = os.path.join(OUT_DIR, f"{model_name}_{args.split}_metrics.csv")
+    csv_path = os.path.join(OUT_DIR, f"{model_name}_{args.split}_metrics{tag_sfx}.csv")
     rows = merge_csv_rows(csv_path, rows, ("run", "decoder"), args.overwrite_csv)
     with open(csv_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=csv_fields(rows))
