@@ -827,7 +827,7 @@ EF_GAP_STUDY = [
      "description": f"EFG-both: EF-joint B+F+H ({_FS}), separate filters + HaMeR branch"},
 ]
 FACE_SUBSET_STUDY = [
-    # {**_MS_BEST, "face_subset": "mouth", "description": "FS-mouth: B+H+F(mouth, 9 + 2 eye corners)"},
+    {**_MS_BEST, "face_subset": "mouth", "description": "FS-mouth: B+H+F(mouth, 9 + 2 eye corners)"},
     {**_MS_BEST, "face_subset": "mouth_full", "description": "FS-mouth-full: B+H+F(all 31 lip points + 2 eye corners)"},
     {**_MS_BEST, "face_subset": "mouth_eyes", "description": "FS-mouth-eyes: B+H+F(compact eyes + mouth, no brows)"},
 ]
