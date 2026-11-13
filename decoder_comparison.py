@@ -301,6 +301,10 @@ def main():
     ap.add_argument("--labels", nargs=2, default=["A", "B"], help="names of --runs and --compare")
     ap.add_argument("--split", default="test")
     ap.add_argument("--pred-root", default=PRED_ROOT)
+    ap.add_argument("--compare-pred-root", default=None,
+                    help="prediction folder of the --compare runs (default: --pred-root). Lets the SAME runs be "
+                         "compared under two inference settings, e.g. evaluation_phrase/predictions_ov256 vs "
+                         "evaluation_phrase/predictions")
     ap.add_argument("--out-dir", default=os.path.join("evaluation_phrase", "decoder_comparison"))
     ap.add_argument("--n-boot", type=int, default=2000)
     ap.add_argument("--selftest", action="store_true")
@@ -311,7 +315,7 @@ def main():
         ap.error("--runs is required (or --selftest)")
     res_a = run(a.runs, a.split, a.pred_root, a.out_dir, a.n_boot)
     if a.compare:
-        res_b = run(a.compare, a.split, a.pred_root, os.path.join(a.out_dir, "compare"), a.n_boot)
+        res_b = run(a.compare, a.split, a.compare_pred_root or a.pred_root, os.path.join(a.out_dir, "compare"), a.n_boot)
         compare_groups(res_a, res_b, a.labels[0], a.labels[1], a.out_dir, a.n_boot)
 
 
