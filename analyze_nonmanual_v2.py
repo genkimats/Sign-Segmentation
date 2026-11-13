@@ -45,8 +45,8 @@ DESIGN (many variants, kept honest)
     python analyze_nonmanual_v2.py --with-face 373-375 --without-face <B+H on that machine>
     python analyze_nonmanual_v2.py --selftest
 Outputs (--out-dir, default evaluation_phrase/nonmanual_v2):
-    summary.txt, marker_enrichment.csv, spec_results.csv, starts_test.csv,
-    enrichment.png, primary.png, spec_curve.png
+    summary.txt, marker_enrichment.csv, spec_results.csv, starts_test.csv, auc_primary.csv,
+    enrichment.png, primary.png, spec_curve.png (all specs, face vs head), spec_curve_enriched.png
 """
 import argparse
 import csv
@@ -436,25 +436,42 @@ def spec_effects(D, specs, boot, short_only=False):
     return rows
 
 
-def auc_effect(D, j, boot_vids, n_boot=500, seed=0):
-    """AUC (marked starts vs all in-phrase moments), face minus no face, bootstrap over videos."""
+def auc_effect(D, j, boot_vids, n_boot=1000, seed=0):
+    """
+    AUC of start vs in-phrase moment (rank scores) for marked and for unmarked starts, per model.
+    Returns a dict: AUC per model at marked / unmarked starts, the face gain at marked starts
+    (AUC face - AUC no face) with its CI, and the AUC INTERACTION
+      (gain at marked starts) - (gain at unmarked starts)
+    with CI and two-sided p; videos resampled with replacement (the same draw for every term).
+    """
     m = D["M_s"][j]
     rng = np.random.default_rng(seed)
     vids = list(boot_vids)
-    idx_s = {v: np.flatnonzero((D["vid_s"] == v) & m) for v in vids}
+    idx_m = {v: np.flatnonzero((D["vid_s"] == v) & m) for v in vids}
+    idx_u = {v: np.flatnonzero((D["vid_s"] == v) & ~m) for v in vids}
     idx_n = {v: np.flatnonzero(D["vid_n"] == v) for v in vids}
 
     def stat(sample):
-        ps = np.concatenate([idx_s[v] for v in sample])
+        pm = np.concatenate([idx_m[v] for v in sample])
+        pu = np.concatenate([idx_u[v] for v in sample])
         pn = np.concatenate([idx_n[v] for v in sample])
-        return (auc(D["face_rank_s"][ps], D["face_rank_n"][pn]), auc(D["noface_rank_s"][ps], D["noface_rank_n"][pn]))
+        out = {}
+        for g in ("face", "noface"):
+            neg = D[f"{g}_rank_n"][pn]
+            out[f"{g}_m"] = auc(D[f"{g}_rank_s"][pm], neg)
+            out[f"{g}_u"] = auc(D[f"{g}_rank_s"][pu], neg)
+        out["gain_m"] = out["face_m"] - out["noface_m"]
+        out["gain_u"] = out["face_u"] - out["noface_u"]
+        out["inter"] = out["gain_m"] - out["gain_u"]
+        return out
 
-    a_f, a_g = stat(vids)
-    draws = []
-    for _ in range(n_boot):
-        f, g = stat([vids[i] for i in rng.integers(0, len(vids), len(vids))])
-        draws.append(f - g)
-    return a_f, a_g, a_f - a_g, ci(np.array(draws))
+    obs = stat(vids)
+    draws = [stat([vids[i] for i in rng.integers(0, len(vids), len(vids))]) for _ in range(n_boot)]
+    for key in ("gain_m", "gain_u", "inter"):
+        arr = np.array([d[key] for d in draws])
+        obs[f"{key}_ci"] = ci(arr)
+        obs[f"{key}_p"] = pval(arr)
+    return obs
 
 
 def regression(D, cols, names, boot):
@@ -525,22 +542,39 @@ def fig_primary(prim, path):
     fig.savefig(path)
 
 
-def fig_curve(rows, path, key="rank_inter"):
+def fig_curve(rows, path, key="rank_inter", title=None):
+    """Specification curve: every spec sorted by its interaction, 95% CI, coloured by family; face
+    families and the head control side by side, with the share of specs above / below zero per side."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    rows = sorted([r for r in rows if np.isfinite(r[key])], key=lambda r: r[key])
-    fig, ax = plt.subplots(figsize=(9, 3.6), dpi=200)
-    x = np.arange(len(rows))
-    ax.vlines(x, [r[f"{key}_lo"] * 100 for r in rows], [r[f"{key}_hi"] * 100 for r in rows], color="#CCCCCC", lw=1)
-    ax.scatter(x, [r[key] * 100 for r in rows], c=[FAM_COLORS[r["family"]] for r in rows], s=8, zorder=3)
-    ax.axhline(0, color="#444444", lw=0.8)
-    ax.set_xlabel(f"Marker specifications (sorted), n = {len(rows)}", fontsize=8)
-    ax.set_ylabel("Interaction (percentile points)\nface effect at marked - unmarked starts", fontsize=8)
+    rows = [r for r in rows if np.isfinite(r[key])]
+    sides = [("Face families (eyes, brows, mouth, face)", [r for r in rows if r["family"] in FACE_FAMILIES]),
+             ("Head (control: head is in the body stream)", [r for r in rows if r["family"] == "head"])]
+    sides = [(t, sorted(rr, key=lambda r: r[key])) for t, rr in sides if rr]
+    widths = [max(len(rr), 8) for _, rr in sides]
+    fig, axes = plt.subplots(1, len(sides), figsize=(10, 3.9), dpi=200, sharey=True,
+                             gridspec_kw={"width_ratios": widths}, squeeze=False)
+    for ax, (t, rr) in zip(axes[0], sides):
+        x = np.arange(len(rr))
+        lo = np.array([r[f"{key}_lo"] for r in rr]) * 100
+        hi = np.array([r[f"{key}_hi"] for r in rr]) * 100
+        ax.vlines(x, lo, hi, color="#D5D5D5", lw=1, zorder=1)
+        ax.scatter(x, [r[key] * 100 for r in rr], c=[FAM_COLORS[r["family"]] for r in rr], s=9, zorder=3)
+        ax.axhline(0, color="#444444", lw=0.8)
+        pos = sum(r[key] > 0 for r in rr)
+        above = int((lo > 0).sum())
+        below = int((hi < 0).sum())
+        ax.set_title(f"{t}\n{pos}/{len(rr)} above 0; CI above 0: {above}, CI below 0: {below}", fontsize=8)
+        ax.set_xlabel("Marker specifications, sorted", fontsize=8)
+        ax.set_xticks([])
+        for s_ in ("top", "right"):
+            ax.spines[s_].set_visible(False)
+    axes[0][0].set_ylabel("Interaction (percentile points)\nface effect at marked - unmarked starts", fontsize=8)
     handles = [plt.Line2D([], [], marker="o", ls="", color=c, label=f) for f, c in FAM_COLORS.items()]
-    ax.legend(handles=handles, fontsize=7, frameon=False, loc="upper left")
-    for s in ("top", "right"):
-        ax.spines[s].set_visible(False)
+    axes[0][0].legend(handles=handles, fontsize=7, frameon=False, loc="upper left")
+    if title:
+        fig.suptitle(title, fontsize=9)
     fig.tight_layout()
     fig.savefig(path)
 
@@ -612,6 +646,7 @@ def run(args):
               "rank metric; Holm over families)"]
     prim_rows = [res["test"][j] for j in primary]
     adj = holm(np.array([r["rank_inter_p"] for r in prim_rows])) if prim_rows else []
+    auc_rows = []
     for r, pa in zip(prim_rows, adj):
         L += [f"  [{r['family']}] {r['id']}  (n marked {r['n_marked']}, unmarked {r['n_unmarked']})",
               f"     face effect at marked starts   {fmt(r['rank_marked'], (r['rank_marked_lo'], r['rank_marked_hi']))}",
@@ -621,11 +656,21 @@ def run(args):
               f"     count-matched recall interaction {fmt(r['matched_inter'], (r['matched_inter_lo'], r['matched_inter_hi']))}",
               f"     false-start side (in-phrase moments, marked - unmarked; < 0 = fewer false starts at facial events) "
               f"{fmt(r['fa_inter'], (r['fa_inter_lo'], r['fa_inter_hi']))}"]
-        a_f, a_g, da, dci = auc_effect(T, specs.index(next(s for s in specs if s["id"] == r["id"])), T["vids"])
-        L.append(f"     AUC at marked starts: with face {a_f:.3f}, without {a_g:.3f}, difference {fmt(da, dci)}")
+        A = auc_effect(T, specs.index(next(s for s in specs if s["id"] == r["id"])), T["vids"])
+        auc_rows.append({"family": r["family"], "id": r["id"], **{k: v for k, v in A.items()}})
+        L += [f"     AUC marked starts:   with face {A['face_m']:.3f}, without {A['noface_m']:.3f}, "
+              f"gain {fmt(A['gain_m'], A['gain_m_ci'])}",
+              f"     AUC unmarked starts: with face {A['face_u']:.3f}, without {A['noface_u']:.3f}, "
+              f"gain {fmt(A['gain_u'], A['gain_u_ci'])}",
+              f"     AUC interaction (gain marked - gain unmarked) {fmt(A['inter'], A['inter_ci'], A['inter_p'])}"]
         rs = next(x for x in res_short if x["id"] == r["id"])
         L.append(f"     short pauses only (<= 0.24 s): interaction {fmt(rs['rank_inter'], (rs['rank_inter_lo'], rs['rank_inter_hi']))}, "
                  f"n marked {rs['n_marked']}")
+
+    if len(auc_rows) > 1:
+        adj_a = holm(np.array([a["inter_p"] for a in auc_rows]))
+        L.append("  AUC interaction, Holm over families: " + ", ".join(
+            f"{a['family']} p = {pa:.3f}" for a, pa in zip(auc_rows, adj_a)))
 
     L += ["", "3. VALIDATION-SELECTED (enriched spec with the largest validation interaction, rank metric) -> test"]
     if enriched:
@@ -679,9 +724,17 @@ def run(args):
     fig_enrichment(enr, os.path.join(args.out_dir, "enrichment.png"))
     if prim_rows:
         fig_primary(prim_rows, os.path.join(args.out_dir, "primary.png"))
-    fig_curve([res["test"][j] for j in enriched] or res["test"], os.path.join(args.out_dir, "spec_curve.png"))
+    fig_curve(res["test"], os.path.join(args.out_dir, "spec_curve.png"))
+    if enriched:
+        fig_curve([res["test"][j] for j in enriched], os.path.join(args.out_dir, "spec_curve_enriched.png"),
+                  title="Enriched marker specifications only (training enrichment >= threshold)")
+    if auc_rows:
+        with open(os.path.join(args.out_dir, "auc_primary.csv"), "w", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=list(auc_rows[0]))
+            w.writeheader()
+            w.writerows(auc_rows)
     print(f"\nwrote {args.out_dir}/ summary.txt, marker_enrichment.csv, spec_results.csv, starts_test.csv, "
-          f"enrichment.png, primary.png, spec_curve.png")
+          f"auc_primary.csv, enrichment.png, primary.png, spec_curve.png, spec_curve_enriched.png")
 
 
 # ============================================================================= selftest
