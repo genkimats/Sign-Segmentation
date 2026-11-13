@@ -1,0 +1,18 @@
+{
+  "run": "multistream_bilstm-407",
+  "model": "multistream_bilstm",
+  "prefix": "407",
+  "split": "val",
+  "labels_dir": "processed_data/BIO_tags_phrase_v2",
+  "description": "TE-hand-linear: B+H+Fc, HaMeR control (Linear 90->32 in place of the prototypes) [seed=2024]",
+  "seed": 2024,
+  "fixed_thresholds": [
+    0.5,
+    0.5
+  ],
+  "swept_thresholds": null,
+  "tuned_thresholds": null,
+  "tuned_on": null,
+  "sweep_metric": "iou_pct",
+  "merge_starts": {}
+}
