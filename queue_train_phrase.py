@@ -842,7 +842,7 @@ FLOW_STUDY = [
      "description": "FLOW: B+H+Fc + video optical-flow stream (6x6 grid, 110 channels)"},
 ]
 # STRUCTURE_STUDY = BODY_SPLIT_STUDY + EF_GAP_STUDY + FACE_SUBSET_STUDY + MLP_STUDY + FLOW_STUDY
-STRUCTURE_STUDY = FACE_SUBSET_STUDY + MLP_STUDY + FLOW_STUDY
+STRUCTURE_STUDY = [EF_GAP_STUDY[2], FACE_SUBSET_STUDY[0], FACE_SUBSET_STUDY[2]]
 
 # After choosing on validation: the winning change of each modality together (3 seeds), e.g.
 # TAILORED_COMBINED = [{**_MS_BEST, "body_stream_hands": False, "hamer_encoder": "proto", "hamer_proto_k": 32,
