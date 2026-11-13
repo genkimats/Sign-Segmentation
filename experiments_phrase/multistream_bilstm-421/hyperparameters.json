@@ -92,6 +92,6 @@
     "scheduler": "CosineAnnealingLR",
     "use_cue_features": true,
     "description": "FLOW: B+H+Fc + video optical-flow stream (6x6 grid, 110 channels)",
-    "prefix": "420",
+    "prefix": "421",
     "selection_metric": "frame_f1"
 }

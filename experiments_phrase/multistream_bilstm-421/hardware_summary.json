@@ -3,13 +3,13 @@
     "description": "FLOW: B+H+Fc + video optical-flow stream (6x6 grid, 110 channels)",
     "machine_hostname": "z790",
     "gpu_name": "NVIDIA GeForce RTX 5060 Ti",
-    "total_training_time": "91m 56s",
-    "total_training_seconds": 5516.22,
+    "total_training_time": "91m 48s",
+    "total_training_seconds": 5508.98,
     "total_epochs_ran": 21,
     "early_stopping_triggered": true,
     "average_time_per_epoch": "4m 22s",
-    "max_gpu_memory_used_gb": 2.679,
-    "average_gpu_utilization_percent": 98.02,
+    "max_gpu_memory_used_gb": 2.6806,
+    "average_gpu_utilization_percent": 98.09,
     "total_nan_loss_count_latest_run": 0,
     "total_training_restarts": 0,
     "config": {
@@ -106,7 +106,7 @@
         "scheduler": "CosineAnnealingLR",
         "use_cue_features": true,
         "description": "FLOW: B+H+Fc + video optical-flow stream (6x6 grid, 110 channels)",
-        "prefix": "420",
+        "prefix": "421",
         "selection_metric": "frame_f1"
     }
 }
