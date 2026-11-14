@@ -64,6 +64,45 @@ def _prepare_window(tensor_tv, start, end, k, target_T, is_graph):
     return x
 
 
+def _call_model_safe(model, config, feats, hamer, dinov2, cues):
+    """
+    call_model, with fallbacks for very long inputs (full-video inference, tens of thousands of frames):
+      1. as usual (cuDNN)
+      2. cuDNN error (e.g. CUDNN_STATUS_NOT_SUPPORTED for a very long sequence): the same on the GPU with
+         cuDNN switched off for this call (PyTorch's native CUDA kernels, slower, same result)
+      3. still failing or out of GPU memory: this one call on the CPU (model moved there and back)
+    Ordinary windows never leave step 1, so training-time validation is unchanged.
+    """
+    try:
+        return call_model(model, config, feats, hamer, dinov2, cues)
+    except RuntimeError as e:
+        msg = str(e).lower()
+        if "cudnn" not in msg and "out of memory" not in msg:
+            raise
+        first = e
+    if feats.is_cuda:
+        torch.cuda.empty_cache()
+        if "cudnn" in str(first).lower():
+            try:
+                with torch.backends.cudnn.flags(enabled=False):
+                    return call_model(model, config, feats, hamer, dinov2, cues)
+            except RuntimeError as e:
+                if "out of memory" not in str(e).lower() and "cudnn" not in str(e).lower():
+                    raise
+                torch.cuda.empty_cache()
+    device = feats.device
+    print(f"    [inference] {feats.shape[2]} frames: GPU failed ({str(first).splitlines()[0][:80]}); running on the CPU")
+    to_cpu = lambda t: t.cpu() if t is not None else None                  # noqa: E731
+    model.to("cpu")
+    try:
+        out = call_model(model, config, to_cpu(feats), to_cpu(hamer), to_cpu(dinov2), to_cpu(cues))
+    finally:
+        model.to(device)
+    if getattr(model, "_sign_logits", None) is not None:
+        model._sign_logits = model._sign_logits.to(device)
+    return out.to(device)
+
+
 @torch.no_grad()
 def predict_video_probs(model, config, cached, device, batch_size=16, with_sign=False):
     """
@@ -110,7 +149,7 @@ def predict_video_probs(model, config, cached, device, batch_size=16, with_sign=
             cues = torch.nan_to_num(cues.to(device), nan=0.0, posinf=0.0, neginf=0.0)
         feats = torch.nan_to_num(feats.to(device), nan=0.0, posinf=0.0, neginf=0.0)
 
-        logits = call_model(model, config, feats, hamer, dinov2, cues)        # (B, 3, T_model)
+        logits = _call_model_safe(model, config, feats, hamer, dinov2, cues)   # (B, 3, T_model)
         probs = F.softmax(logits.float(), dim=1).cpu().numpy()
         sprobs = (F.softmax(model._sign_logits.float(), dim=1).cpu().numpy() if with_sign
                   else [None] * len(probs))
