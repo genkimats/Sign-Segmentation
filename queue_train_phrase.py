@@ -844,6 +844,18 @@ FLOW_STUDY = [
 # STRUCTURE_STUDY = BODY_SPLIT_STUDY + EF_GAP_STUDY + FACE_SUBSET_STUDY + MLP_STUDY + FLOW_STUDY
 STRUCTURE_STUDY = [EF_GAP_STUDY[2], FACE_SUBSET_STUDY[0], FACE_SUBSET_STUDY[2]]
 
+# ------------------------------------------------------------------------------
+# CONFIRM-FACE STUDY (2026-11-14): confirmatory test of the face-cue hypothesis (claude/preregistration_
+# face_cues.md in the project). Hypothesis, stated BEFORE these runs: in architectures that give the face
+# its own processing, the face stream's benefit is larger at phrase starts marked by the eyes / brows
+# (analyze_nonmanual_pooled.py rank interaction > 0, markers fixed from training). The no-face partner of
+# 373-375 (B+H+Fc) and of TE-face-regions 411-413 does not exist on that machine yet: train it here, on
+# the SAME machine as 373-375, 3 seeds.
+# ------------------------------------------------------------------------------
+CONFIRM_FACE_STUDY = [
+    {**_MS_CUE_STUDY, "description": "CF: B+H (no face), same recipe as 373-375 -- confirmatory face-cue pair"},
+]
+
 # After choosing on validation: the winning change of each modality together (3 seeds), e.g.
 # TAILORED_COMBINED = [{**_MS_BEST, "body_stream_hands": False, "hamer_encoder": "proto", "hamer_proto_k": 32,
 #                       "hamer_proto_init": _HAMER_PROTOTYPES, "face_encoder": "regions",
@@ -1227,7 +1239,9 @@ FUSION_OPTIONAL = [{**a, "force_selection_metric": None} for a in fusion_optiona
 # EXPERIMENTS_TO_RUN = TAILORED_ENCODER_STUDY
 # Seventeenth batch (2026-11-13): structure study, 11 arms x 3 seeds = 33 runs (enter "all"). The FLOW arm is
 # left out automatically until data_processing/extract_optical_flow.py has written processed_data/flow_features.
-EXPERIMENTS_TO_RUN = STRUCTURE_STUDY
+# EXPERIMENTS_TO_RUN = STRUCTURE_STUDY
+# Eighteenth batch (2026-11-14): no-face partner of 373-375, 3 seeds (enter "all"), SAME machine as 373-375.
+EXPERIMENTS_TO_RUN = CONFIRM_FACE_STUDY
 # EXPERIMENTS_TO_RUN = [{**_MS_BEST, "force_selection_metric": None,
 #                        "description": "MS best: Body + HaMeR + Face(compact), no count loss"}]   # metric asked at training
 # then, after extracting the clean features: EXPERIMENTS_TO_RUN = TEMPO_STUDY_A2_CLEAN  (3 seeds: "all")
