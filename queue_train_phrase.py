@@ -856,6 +856,25 @@ CONFIRM_FACE_STUDY = [
     {**_MS_CUE_STUDY, "description": "CF: B+H (no face), same recipe as 373-375 -- confirmatory face-cue pair"},
 ]
 
+# ------------------------------------------------------------------------------
+# BLENDSHAPE STREAM STUDY (2026-11-16). MediaPipe's 52 face blendshape scores (browInnerUp, eyeSquint,
+# eyeBlink, jawOpen, ...) as their own stream. Tried before in FACE_FULL_STUDY (232-234 instead of the
+# face stream, 235-237 next to it) through the cue branch WITHOUT temporal context (cue_temporal_kernel 1):
+# no gain there (235-237 vs control 214-216: test Frame F1 .678 vs .681). New here: the blendshape branch
+# gets the same short temporal context as the other streams (depthwise temporal conv, kernel 9 = the
+# ST-GCN's), and the reference is the current machine: B+H+Fc 373-375, B+H 428-430. 3 seeds each.
+# Needs once (already done for 232-237): python data_processing/extract_face_keypoints_full.py --blendshapes
+# ------------------------------------------------------------------------------
+_BLENDSHAPE_DIR = "processed_data/face_keypoints_full/_blendshapes"
+_BLEND_STREAM = {"use_stream_cues": True, "use_cue_features": True, "cue_dir": _BLENDSHAPE_DIR,
+                 "cue_set": "file", "cue_proj_dim": 128, "cue_temporal_kernel": 9}
+BLENDSHAPE_STUDY = [
+    {**_MS_BEST, **_BLEND_STREAM,
+     "description": "BS: B+H+Fc + blendshape stream (52, temporal conv 9)"},
+    {**_MS_CUE_STUDY, **_BLEND_STREAM,
+     "description": "BS: B+H + blendshape stream (52, temporal conv 9) instead of face keypoints"},
+]
+
 # After choosing on validation: the winning change of each modality together (3 seeds), e.g.
 # TAILORED_COMBINED = [{**_MS_BEST, "body_stream_hands": False, "hamer_encoder": "proto", "hamer_proto_k": 32,
 #                       "hamer_proto_init": _HAMER_PROTOTYPES, "face_encoder": "regions",
@@ -1241,7 +1260,10 @@ FUSION_OPTIONAL = [{**a, "force_selection_metric": None} for a in fusion_optiona
 # left out automatically until data_processing/extract_optical_flow.py has written processed_data/flow_features.
 # EXPERIMENTS_TO_RUN = STRUCTURE_STUDY
 # Eighteenth batch (2026-11-14): no-face partner of 373-375, 3 seeds (enter "all"), SAME machine as 373-375.
-EXPERIMENTS_TO_RUN = CONFIRM_FACE_STUDY
+# EXPERIMENTS_TO_RUN = CONFIRM_FACE_STUDY
+# Nineteenth batch (2026-11-16): blendshape stream with temporal context, 2 arms x 3 seeds = 6 runs (enter "all"),
+# SAME machine as 373-375 / 428-430.
+EXPERIMENTS_TO_RUN = BLENDSHAPE_STUDY
 # EXPERIMENTS_TO_RUN = [{**_MS_BEST, "force_selection_metric": None,
 #                        "description": "MS best: Body + HaMeR + Face(compact), no count loss"}]   # metric asked at training
 # then, after extracting the clean features: EXPERIMENTS_TO_RUN = TEMPO_STUDY_A2_CLEAN  (3 seeds: "all")
@@ -1292,6 +1314,11 @@ if __name__ == "__main__":
             if not os.path.exists(p):
                 raise SystemExit(f"'{exp['description']}' needs {p}. Run once, from the repo root:\n"
                                  f"    python data_processing/fit_hamer_prototypes.py --k {exp.get('hamer_proto_k', 32)}")
+    # The blendshape arms need the blendshape files (extract_face_keypoints_full.py --blendshapes)
+    for exp in experiments_to_run:
+        if exp.get("cue_dir") == _BLENDSHAPE_DIR and not os.path.isdir(_BLENDSHAPE_DIR):
+            raise SystemExit(f"'{exp['description']}' needs {_BLENDSHAPE_DIR}. Run once, from the repo root:\n"
+                             "    python data_processing/extract_face_keypoints_full.py --blendshapes --workers 4")
     # The optical-flow arm needs its features; without them it is left out of this queue (the rest runs)
     kept = []
     for exp in experiments_to_run:
