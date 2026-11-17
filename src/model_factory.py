@@ -294,6 +294,15 @@ def build_model_kwargs(config, detected_hamer_dim=None, detected_dinov2_dim=None
             model_kwargs["aux_heads"] = {t: {"stream": spec["stream"], "classes": int(spec["classes"])}
                                          for t, spec in config["aux_heads"].items()}
             model_kwargs["aux_temporal_kernel"] = int(config.get("aux_temporal_kernel", 9))
+        # balance_study: training-only per-stream BIO heads (modality-imbalance methods). Only passed when
+        # set, so older configs rebuild unchanged; evaluation rebuilds them so the checkpoint loads strictly.
+        if config.get("balance_heads"):
+            if model_name != "multistream_bilstm" or config.get("fusion", "concat") != "concat":
+                raise ValueError("balance_heads are implemented for multistream_bilstm with fusion 'concat'.")
+            model_kwargs["balance_heads"] = list(config["balance_heads"])
+            model_kwargs["balance_head_hidden"] = int(config.get("balance_head_hidden") or config["d_model"])
+            model_kwargs["balance_head_layers"] = int(config.get("balance_head_layers", 1))
+            model_kwargs["balance_head_detach"] = bool(config.get("balance_head_detach", False))
         # Sign head (SIGN_HEAD_STUDY): only passed when on, so older configs rebuild unchanged
         if config.get("sign_head"):
             model_kwargs["sign_head"] = True

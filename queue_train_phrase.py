@@ -875,6 +875,17 @@ BLENDSHAPE_STUDY = [
      "description": "BS: B+H + blendshape stream (52, temporal conv 9) instead of face keypoints"},
 ]
 
+# ------------------------------------------------------------------------------
+# MODALITY-IMBALANCE STUDY (2026-11-18; balance_study/README.md, claude/modality_imbalance_review.md in the
+# project). Claim to test: "the model exploits whichever stream reduces the training loss fastest". Each arm is
+# the B+H+Fc CE recipe of 373-375 (_MS_BEST, best epoch by val Frame F1) + ONE imbalance method; reference
+# = 373 (seed 42), seed spread from 374/375. First pass: press Enter at the seed prompt (1 seed each); re-queue
+# the arms that move with "all". The single-stream reruns (SS-*) give the learning-speed curves on this machine.
+# UMT arms need their teacher runs (82 / 133 / 136) here; arms with missing teachers are left out.
+# ------------------------------------------------------------------------------
+from balance_study.experiments import imbalance_arms, missing_teachers, single_stream_arms  # noqa: E402
+IMBALANCE_STUDY = imbalance_arms(_MS_BEST) + single_stream_arms(_MS_CUE_STUDY)
+
 # After choosing on validation: the winning change of each modality together (3 seeds), e.g.
 # TAILORED_COMBINED = [{**_MS_BEST, "body_stream_hands": False, "hamer_encoder": "proto", "hamer_proto_k": 32,
 #                       "hamer_proto_init": _HAMER_PROTOTYPES, "face_encoder": "regions",
@@ -1263,7 +1274,10 @@ FUSION_OPTIONAL = [{**a, "force_selection_metric": None} for a in fusion_optiona
 # EXPERIMENTS_TO_RUN = CONFIRM_FACE_STUDY
 # Nineteenth batch (2026-11-16): blendshape stream with temporal context, 2 arms x 3 seeds = 6 runs (enter "all"),
 # SAME machine as 373-375 / 428-430.
-EXPERIMENTS_TO_RUN = BLENDSHAPE_STUDY
+# EXPERIMENTS_TO_RUN = BLENDSHAPE_STUDY
+# Twentieth batch (2026-11-18): modality-imbalance methods, 12 arms + 3 single-stream reruns at 1 seed (press Enter
+# at the seed prompt), SAME machine as 373-375. First, once: python balance_study/smoke_test.py
+EXPERIMENTS_TO_RUN = IMBALANCE_STUDY
 # EXPERIMENTS_TO_RUN = [{**_MS_BEST, "force_selection_metric": None,
 #                        "description": "MS best: Body + HaMeR + Face(compact), no count loss"}]   # metric asked at training
 # then, after extracting the clean features: EXPERIMENTS_TO_RUN = TEMPO_STUDY_A2_CLEAN  (3 seeds: "all")
@@ -1319,6 +1333,16 @@ if __name__ == "__main__":
         if exp.get("cue_dir") == _BLENDSHAPE_DIR and not os.path.isdir(_BLENDSHAPE_DIR):
             raise SystemExit(f"'{exp['description']}' needs {_BLENDSHAPE_DIR}. Run once, from the repo root:\n"
                              "    python data_processing/extract_face_keypoints_full.py --blendshapes --workers 4")
+    # UMT arms (balance_study) need their single-stream teacher runs on this machine; otherwise left out
+    kept = []
+    for exp in experiments_to_run:
+        missing = missing_teachers(exp)
+        if missing:
+            print(f"⚠️  Left out '{exp['description']}': teacher run(s) {missing} not found in "
+                  f"experiments_phrase/ + saved_models_phrase/.")
+            continue
+        kept.append(exp)
+    experiments_to_run = kept
     # The optical-flow arm needs its features; without them it is left out of this queue (the rest runs)
     kept = []
     for exp in experiments_to_run:

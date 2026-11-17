@@ -327,6 +327,13 @@ def train_model(config, selection_metric="combined"):
                  if config.get("sign_cascade") else "")
               + (f", sign-level decoder (lambda={SIGN_LEVEL_LAMBDA}, predicted signs in training with "
                  f"p={config.get('sign_level_pred_p', 0.0)})" if USE_SIGN_LEVEL else ""))
+    # balance_study (modality-imbalance methods, balance_study/README.md): config["balance"] = {"method": ...}.
+    # The balancer runs each training step itself; validation, selection and saving are unchanged.
+    BALANCE = config.get("balance")
+    if BALANCE:
+        from balance_study.balancer import Balancer, validate_balance_config
+        validate_balance_config(config)
+        print(f"⚖️  Modality-imbalance method: {json.dumps(BALANCE)}")
     D_MODEL = config["d_model"]
     N_LAYERS = config["n_layers"]
     FOCAL_LOSS_GAMMA = config.get("focal_loss_gamma", 2.0)
@@ -517,10 +524,18 @@ def train_model(config, selection_metric="combined"):
         else:
             raise ValueError(f"Unknown loss function '{LOSS_FUNCTION}'")
 
+        BALANCER = None
+        if BALANCE:
+            BALANCER = Balancer(config, model, device, CLASS_WEIGHTS, exp_dir,
+                                detected={"hamer": train_dataset.detected_hamer_dim,
+                                          "dinov2": train_dataset.detected_dinov2_dim,
+                                          "cue": train_dataset.detected_cue_dim})
+        # balance runs: one parameter group per stream encoder (same lr / weight decay as one group)
+        opt_params = BALANCER.optimizer_param_groups() if BALANCER is not None else model.parameters()
         if OPTIMIZER_NAME == "AdamW":
-            optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=0.01)
+            optimizer = optim.AdamW(opt_params, lr=LEARNING_RATE, weight_decay=0.01)
         else:
-            optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+            optimizer = optim.Adam(opt_params, lr=LEARNING_RATE)
             
         # warmup_epochs > 0 (attention encoders): LR rises linearly from 10% over that many epochs,
         # then follows the usual schedule. 0 / missing = exactly the original schedule.
@@ -565,6 +580,8 @@ def train_model(config, selection_metric="combined"):
             actual_epochs_ran = epoch
             epoch_start_time = time.time()
             model.train()
+            if BALANCER is not None:
+                BALANCER.start_epoch(epoch)
             train_loss = 0.0
             epoch_nan_count = 0
             valid_batches = 0
@@ -625,8 +642,26 @@ def train_model(config, selection_metric="combined"):
 
                 features = features.to(device)
                 labels = labels.to(device)
-                
+
                 features = torch.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0)
+
+                if BALANCER is not None:
+                    # modality-imbalance method: forward, backward and optimizer step happen inside
+                    batch_loss = BALANCER.step(features, labels, hamer, cues, optimizer, GRAD_CLIP)
+                    if batch_loss is None:
+                        epoch_nan_count += 1
+                        total_nan_this_run += 1
+                        loop.set_postfix(loss="NaN", nans=epoch_nan_count)
+                        if epoch_nan_count > 50 and redo_count < MAX_REDOS:
+                            print(f"\n⚠️ CRITICAL: Epoch {epoch} encountered >50 NaN losses ({epoch_nan_count}). Aborting run.")
+                            needs_restart = True
+                            break
+                        continue
+                    train_loss += batch_loss
+                    valid_batches += 1
+                    loop.set_postfix(loss=batch_loss, nans=epoch_nan_count)
+                    continue
+
                 optimizer.zero_grad()
 
                 if LOSS_FUNCTION == "bcl":
@@ -892,6 +927,8 @@ def train_model(config, selection_metric="combined"):
                 writer.writerow([epoch, avg_train_loss, avg_val_loss, epoch_f1, epoch_iou, epoch_pct,
                                  epoch_seg_f1, combined_score, epoch_duration, epoch_nan_count,
                                  round(val_metrics["BndF1_5"], 4)] + aux_cols)
+            if BALANCER is not None:
+                BALANCER.end_epoch(epoch, val_metrics)   # experiments_phrase/<run>/balance_log.csv
 
             if EARLY_STOPPING and epochs_without_improvement >= PATIENCE and epoch >= MIN_EPOCHS:
                 print(f"\n🛑 Early stopping triggered! No improvement in combined score for {PATIENCE} epochs (Minimum {MIN_EPOCHS} epochs met).")

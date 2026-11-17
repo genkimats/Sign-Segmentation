@@ -2497,7 +2497,9 @@ class MultiStreamSegmenter(nn.Module):
                  body_stream_hands=True, hamer_proto_k=32, hamer_proto_init=None,
                  face_encoder=None, face_region_dilations=None,
                  body_split=None, hand_proj_dim=64, hand_mirror_channels=(0,),
-                 branch_layers=1, fusion_layers=1):
+                 branch_layers=1, fusion_layers=1,
+                 balance_heads=None, balance_head_hidden=None, balance_head_layers=1,
+                 balance_head_detach=False):
         super().__init__()
         if stream_encoder not in STREAM_ENCODERS:
             raise ValueError(f"stream_encoder must be one of {STREAM_ENCODERS}, got '{stream_encoder}'.")
@@ -2815,7 +2817,28 @@ class MultiStreamSegmenter(nn.Module):
         self._targets = None
 
         self._capture = None   # callable(stream_inputs, stream_contributions) for diagnostics
-        self._ablation = None  # (stream_name, constant vector) for diagnostics
+        self._ablation = None  # (stream_name, constant vector) or a list of them, for diagnostics
+        # balance_study: callable(z dict) -> z dict applied to the stream features right before the
+        # fusion (training-time masking / mean replacement / detaching). None = the original model.
+        self._stream_override = None
+
+        # balance_study (modality-imbalance methods): one small BIO head per listed stream on its branch
+        # output. Training only -- never part of the prediction. Created LAST, so every other module gets
+        # exactly the initialisation it gets without them, and only when requested, so older checkpoints
+        # load unchanged. balance_head_detach=True: the heads only monitor (no gradient into the streams).
+        self.bal_head_streams = []
+        self.bal_head_detach = bool(balance_head_detach)
+        self._bal_logits = {}
+        if balance_heads:
+            from balance_study.heads import StreamBIOHead
+            self.bal_heads = nn.ModuleDict()
+            for s in balance_heads:
+                if s not in self.streams:
+                    raise ValueError(f"balance head on stream '{s}', which is off (streams: {self.streams}).")
+                self.bal_heads[s] = StreamBIOHead(self.stream_dims[s], int(balance_head_hidden or d_model),
+                                                  int(balance_head_layers), dropout=dropout,
+                                                  num_classes=num_classes)
+            self.bal_head_streams = list(balance_heads)
 
     def set_targets(self, phrase=None, sign=None):
         """Training only (sign_level): hard phrase / sign BIO targets (B, T) of the NEXT forward pass."""
@@ -2827,6 +2850,10 @@ class MultiStreamSegmenter(nn.Module):
 
     def set_ablation(self, stream_name=None, value=None):
         self._ablation = None if stream_name is None else (stream_name, value)
+
+    def set_ablations(self, pairs=None):
+        """Several streams at once: [(stream_name, constant vector), ...]; None / [] = off."""
+        self._ablation = list(pairs) if pairs else None
 
     def stream_gates(self):
         """Gated-sum only: {stream: gate value}."""
@@ -2843,6 +2870,13 @@ class MultiStreamSegmenter(nn.Module):
         return h.permute(0, 2, 3, 1).reshape(B, T, -1)  # (B, T, V * stgcn_channels)
 
     def forward(self, x, hamer=None, dinov2=None, cues=None):
+        # Two halves (balance_study calls them separately, e.g. to decode one set of stream features
+        # several times with different streams masked); together they are the original forward.
+        z, cues_in, aux_logits = self._encode_streams(x, hamer=hamer, dinov2=dinov2, cues=cues)
+        return self._decode_streams(z, cues_in, aux_logits)
+
+    def _encode_streams(self, x, hamer=None, dinov2=None, cues=None):
+        """Stream encoders + branches (+ per-stream auxiliary / balance heads). Returns (z, cues_in, aux_logits)."""
         B, C, T, V = x.shape
         z = {}
         if "body_hands" in self.streams:
@@ -2893,18 +2927,35 @@ class MultiStreamSegmenter(nn.Module):
             if stream not in ("fused", "sequence"):
                 aux_logits[task] = self.aux_heads[task](z[stream].transpose(1, 2))   # (B, C, T)
 
+        # balance_study heads: training only, on the unmasked stream features
+        self._bal_logits = {}
+        if self.bal_head_streams and self.training:
+            for s in self.bal_head_streams:
+                self._bal_logits[s] = self.bal_heads[s](z[s].detach() if self.bal_head_detach else z[s])
+        return z, cues_in, aux_logits
+
+    def _decode_streams(self, z, cues_in, aux_logits):
+        """Stream dropout / ablation / override, fusion, temporal encoder, heads. Returns (logits, emb).
+        Never modifies the caller's dicts, so the same z can be decoded several times."""
+        z = dict(z)
+        aux_logits = dict(aux_logits)
+        first = next(iter(z.values()))
+        B = first.shape[0]
         if self.training and self.stream_dropout > 0 and len(self.streams) > 1:
-            keep = (torch.rand(B, len(self.streams), device=x.device) >= self.stream_dropout)
+            keep = (torch.rand(B, len(self.streams), device=first.device) >= self.stream_dropout)
             none_kept = ~keep.any(dim=1)
             if none_kept.any():   # never drop every stream of a sample: keep one at random
-                pick = torch.randint(len(self.streams), (int(none_kept.sum()),), device=x.device)
+                pick = torch.randint(len(self.streams), (int(none_kept.sum()),), device=first.device)
                 keep[none_kept.nonzero(as_tuple=True)[0], pick] = True
             for j, name in enumerate(self.streams):
                 z[name] = z[name] * keep[:, j].to(z[name].dtype)[:, None, None]
 
         if self._ablation is not None:
-            name, value = self._ablation
-            z[name] = value.to(z[name].dtype).expand_as(z[name])
+            for name, value in (self._ablation if isinstance(self._ablation, list) else [self._ablation]):
+                z[name] = value.to(z[name].dtype).expand_as(z[name])
+
+        if self._stream_override is not None:
+            z = self._stream_override(z)
 
         if self.fusion == "concat":
             cat = torch.cat([z[name] for name in self.streams], dim=-1)
