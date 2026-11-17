@@ -56,13 +56,13 @@ def single_stream_arms(cue_study_base):
     speed curves; later also UMT teachers)."""
     b = {**cue_study_base, "force_selection_metric": "frame_f1"}
     return [
-        {**b, "use_stream_hamer": False,
-         "description": "SS-body: Body (+MediaPipe hands) only, same recipe as 373-375"},
-        {**b, "use_stream_body_hands": False,
-         "description": "SS-hamer: HaMeR only, same recipe as 373-375"},
-        {**b, "use_stream_body_hands": False, "use_stream_hamer": False, "use_stream_face": True,
-         "face_subset": "compact",
-         "description": "SS-face: Face (compact) only, same recipe as 373-375"},
+        # {**b, "use_stream_hamer": False,
+        #  "description": "SS-body: Body (+MediaPipe hands) only, same recipe as 373-375"},
+        # {**b, "use_stream_body_hands": False,
+        #  "description": "SS-hamer: HaMeR only, same recipe as 373-375"},
+        # {**b, "use_stream_body_hands": False, "use_stream_hamer": False, "use_stream_face": True,
+        #  "face_subset": "compact",
+        #  "description": "SS-face: Face (compact) only, same recipe as 373-375"},
     ]
 
 
