@@ -135,6 +135,8 @@ class Balancer:
         # parameter groups: one per stream encoder, the heads, the rest (fusion, BiLSTM, classifier)
         self.groups = {k: [] for k in self.streams + ["heads", "rest"]}
         for name, p in model.named_parameters():
+            if not p.requires_grad:      # frozen (e.g. the ST-GCN adjacency matrices): never updated, no gradient
+                continue
             g = "rest"
             if name.startswith("bal_heads."):
                 g = "heads"
