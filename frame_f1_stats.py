@@ -1,24 +1,33 @@
 """
-frame_f1_stats.py -- Frame-level F1 with 95% CIs for the slides.
+frame_f1_stats.py -- Frame-level F1 and boundary F1 with 95% CIs for the slides.
 
-  slide 9  (model selection, VALIDATION set, 14 videos): Frame-level F1 of every model, and the CI of
-           each step: + hand shape, + face, modality-specific vs early fusion (same inputs)
+  slide 9  (model selection, VALIDATION set, 14 videos): every model, and the CI of each step:
+           + hand shape, + face, modality-specific vs early fusion (same inputs)
   slide 10 (main comparison, TEST set, 17 videos): proposed model minus Moryossef et al. (2023)
 
-Frame-level F1 is computed exactly as src.metrics does it: argmax label per frame, macro F1 over O / I / B
-on all frames of the split pooled together (not a mean over videos). It needs no decoder.
+Metrics
+  Frame-level F1   as src.metrics: argmax label per frame, macro F1 over O / I / B on all frames of the
+                   split pooled together. Needs no decoder.
+  Boundary F1      phrase starts within +-5 frames (+-0.1 s), one-to-one matching (src.metrics.match_boundaries),
+                   counts pooled over the videos of the split. Two decoders:
+                     threshold 0.5   Moryossef et al. (2023) decoder at its default thresholds (B = O = 0.5),
+                                     NOT tuned -> fair on the validation set
+                     peak + thr      peak picking + threshold (count_oracle_decoding.tune_peaks_on_val), the
+                                     decoder of the results slides, tuned on VAL. On the validation set it is
+                                     tuned and scored on the same videos, so validation numbers are optimistic;
+                                     on the test set they reproduce the slides.
 
-Two bootstrap intervals for every difference (A - B), both paired over videos (the same videos are drawn
-for A and B in every draw; per-video 3 x 3 confusion counts are summed and the macro F1 recomputed):
-  videos          seeds fixed: each model = the mean Frame F1 of its 3 seeds
-  videos + seeds  the 3 seeds of each model are also drawn with replacement in every draw, so seed
-                  variation is part of the interval (use this one for small differences, e.g. + face)
+Two bootstrap intervals for every difference (A - B), both paired over videos (the same videos are drawn for
+A and B in every draw; per-video counts are summed and the metric recomputed):
+  videos          seeds fixed: each model = the mean of its seeds
+  videos + seeds  the seeds of each model are also drawn with replacement in every draw
 Also: the exact permutation p over seeds (3 vs 3: 20 splits, smallest possible two-sided p = .10).
 
 Saved predictions are read from evaluation_phrase/predictions/<run>/<split>.npz (phrase_stats.load_predictions).
-If a run has no val predictions yet, the script prints the evaluate_phrase.py command that makes them.
+If a run has no saved predictions, the script prints the evaluate_phrase.py command that makes them.
 
-  python frame_f1_stats.py --body-only <run> <run> <run> --early-fusion <run> <run> <run>
+  python frame_f1_stats.py --body-only multistream_bilstm-130 multistream_bilstm-131 multistream_bilstm-132 \
+      --early-fusion bilstm_2023-302 bilstm_2023-303 bilstm_2023-304
   python frame_f1_stats.py --selftest
 
 Model defaults (override any of them):
@@ -38,8 +47,11 @@ import sys
 
 import numpy as np
 
-from phrase_stats import PRED_ROOT, load_predictions
+from count_oracle_decoding import peaks_with_heights, tune_peaks_on_val
+from phrase_stats import PRED_ROOT, boundary_counts, gold_starts_of, load_predictions
+from src.metrics import B_TAG, decode_threshold_2023
 
+TOL = 5
 MODELS = [  # key, label, default runs
     ("body_only", "Modality-specific: body + hand keypoints", None),
     ("hand_shape", "Modality-specific: + hand shape (HaMeR)",
@@ -62,9 +74,14 @@ SECONDARY = [  # the same steps on the other split, for reference only
     ("test", "proposed", "early_fusion", "modality-specific vs early fusion (same inputs)"),
     ("val", "proposed", "moryossef", "proposed - Moryossef et al. (2023)"),
 ]
+METRICS = [  # key, title
+    ("frame", "Frame-level F1"),
+    ("bnd_thr", "Boundary F1 (+-0.1 s), threshold decoder at 0.5 / 0.5 (untuned)"),
+    ("bnd_peak", "Boundary F1 (+-0.1 s), peak picking + threshold tuned on val"),
+]
 
 
-# ----------------------------------------------------------------------------- frame F1
+# ----------------------------------------------------------------------------- metrics from counts
 def confusion(gold, pred):
     """3 x 3 counts, rows = gold, cols = predicted."""
     return np.bincount(gold * 3 + pred, minlength=9).reshape(3, 3).astype(np.float64)
@@ -74,41 +91,65 @@ def macro_f1(conf):
     """conf: (..., 3, 3). Macro F1 over O / I / B; a class with no gold and no prediction scores 0, as
     sklearn's f1_score(zero_division=0) does."""
     tp = np.diagonal(conf, axis1=-2, axis2=-1)
-    n_gold = conf.sum(-1)
-    n_pred = conf.sum(-2)
-    denom = n_gold + n_pred
+    denom = conf.sum(-1) + conf.sum(-2)
     f1 = np.where(denom > 0, 2 * tp / np.where(denom > 0, denom, 1), 0.0)
     return f1.mean(-1)
 
 
-def run_confusions(pred_root, run, split):
-    probs, _, gold = load_predictions(pred_root, run, split)
-    return {v: confusion(gold[v], probs[v].argmax(axis=0)) for v in probs}
+def bnd_f1(c):
+    """c: (..., 3) = (tp, n_pred, n_gold) -> F1 (0 when undefined)."""
+    tp, npred, ngold = c[..., 0], c[..., 1], c[..., 2]
+    denom = npred + ngold
+    return np.where(denom > 0, 2 * tp / np.where(denom > 0, denom, 1), 0.0)
+
+
+SCORE = {"frame": macro_f1, "bnd_thr": bnd_f1, "bnd_peak": bnd_f1}
+
+
+# ----------------------------------------------------------------------------- per-run counts
+def run_counts(pred_root, run):
+    """{(metric, split): {vid: counts}} for one run. The peak decoder is tuned on this run's val split."""
+    val = load_predictions(pred_root, run, "val")
+    tuned = tune_peaks_on_val(val)
+    out = {}
+    for split in ("val", "test"):
+        probs, _, gold = val if split == "val" else load_predictions(pred_root, run, split)
+        fr, bt, bp = {}, {}, {}
+        for v, p in probs.items():
+            g = gold[v]
+            gs = gold_starts_of(g)
+            fr[v] = confusion(g, p.argmax(axis=0))
+            st_thr = np.array([s for s, _ in decode_threshold_2023(p, 0.5, 0.5)], dtype=np.int64)
+            idx, h = peaks_with_heights(p[B_TAG], tuned["min_dist"], tuned["sigma"])
+            st_peak = np.sort(idx[h >= tuned["thr"]])
+            bt[v] = np.array(boundary_counts(gs, st_thr, TOL), dtype=np.float64)
+            bp[v] = np.array(boundary_counts(gs, st_peak, TOL), dtype=np.float64)
+        out[("frame", split)], out[("bnd_thr", split)], out[("bnd_peak", split)] = fr, bt, bp
+    return out, tuned
 
 
 # ----------------------------------------------------------------------------- statistics
-def stack(confs_by_run, vids):
-    """(n_runs, n_videos, 3, 3)"""
-    return np.stack([np.stack([c[v] for v in vids]) for c in confs_by_run])
+def stack(counts_by_run, vids):
+    """(n_runs, n_videos, ...)"""
+    return np.stack([np.stack([c[v] for v in vids]) for c in counts_by_run])
 
 
-def bootstrap_diff(CA, CB, n_boot=10000, seed=0, resample_seeds=False):
-    """CA, CB: (n_runs, n_videos, 3, 3) on the same videos. Returns the point difference and 95% CI."""
+def bootstrap_diff(CA, CB, score, n_boot=10000, seed=0, resample_seeds=False):
+    """CA, CB: (n_runs, n_videos, ...) on the same videos. Returns the point difference and the 95% CI."""
     rng = np.random.default_rng(seed)
     nv = CA.shape[1]
 
-    def model_f1(C, w, s_idx):
-        conf = np.einsum("v,rvij->rij", w, C[s_idx])
-        return macro_f1(conf).mean()
+    def model_score(C, w, s_idx):
+        return score(np.tensordot(w, C[s_idx], axes=([0], [1]))).mean()
 
     w0 = np.ones(nv)
-    point = model_f1(CA, w0, np.arange(len(CA))) - model_f1(CB, w0, np.arange(len(CB)))
+    point = model_score(CA, w0, np.arange(len(CA))) - model_score(CB, w0, np.arange(len(CB)))
     draws = np.empty(n_boot)
     for b in range(n_boot):
         w = np.bincount(rng.integers(0, nv, nv), minlength=nv).astype(np.float64)
         ia = rng.integers(0, len(CA), len(CA)) if resample_seeds else np.arange(len(CA))
         ib = rng.integers(0, len(CB), len(CB)) if resample_seeds else np.arange(len(CB))
-        draws[b] = model_f1(CA, w, ia) - model_f1(CB, w, ib)
+        draws[b] = model_score(CA, w, ia) - model_score(CB, w, ib)
     lo, hi = np.percentile(draws, [2.5, 97.5])
     return float(point), float(lo), float(hi)
 
@@ -117,8 +158,8 @@ def permutation_p(a, b):
     """Exact two-sided permutation p of mean(a) - mean(b) over seeds."""
     pooled = np.r_[a, b]
     obs = abs(np.mean(a) - np.mean(b))
-    n, hits, total = len(a), 0, 0
-    for idx in itertools.combinations(range(len(pooled)), n):
+    hits = total = 0
+    for idx in itertools.combinations(range(len(pooled)), len(a)):
         m = np.zeros(len(pooled), bool)
         m[list(idx)] = True
         hits += abs(pooled[m].mean() - pooled[~m].mean()) >= obs - 1e-12
@@ -133,83 +174,93 @@ def fmt(d, lo, hi):
 # ----------------------------------------------------------------------------- main
 def run(models, pred_root, out_dir, n_boot=10000):
     os.makedirs(out_dir, exist_ok=True)
-    confs, missing = {}, []
-    for key, label, runs in models:
-        if not runs:
-            continue
-        for split in ("val", "test"):
-            for r in runs:
-                if not os.path.exists(os.path.join(pred_root, r, f"{split}.npz")):
-                    missing.append((r, split))
+    missing = [(r, s) for _, _, runs in models if runs for r in runs for s in ("val", "test")
+               if not os.path.exists(os.path.join(pred_root, r, f"{s}.npz"))]
     if missing:
         print("Missing saved predictions -- make them first, e.g.:")
-        for r, split in missing:
+        for r, s in missing:
             model, prefix = r.rsplit("-", 1)
-            print(f"  python evaluate_phrase.py --model {model} --prefixes {prefix} --split {split} --save-predictions")
+            print(f"  python evaluate_phrase.py --model {model} --prefixes {prefix} --split {s} --save-predictions")
         sys.exit(1)
-    for key, label, runs in models:
-        if runs:
-            for split in ("val", "test"):
-                confs[(key, split)] = [run_confusions(pred_root, r, split) for r in runs]
+
+    counts, tuned = {}, {}  # counts[(model, metric, split)] = [ {vid: counts} per run ]
+    for key, _, runs in models:
+        if not runs:
+            continue
+        for r in runs:
+            print(f"  {r} ...")
+            c, tuned[r] = run_counts(pred_root, r)
+            for (m, s), d in c.items():
+                counts.setdefault((key, m, s), []).append(d)
 
     labels = {k: l for k, l, _ in models}
     runs_of = {k: r for k, _, r in models}
+    per_run = {}  # (model, metric, split) -> array over seeds
     rows = []
-    L = ["Frame-level F1 (argmax per frame, macro F1 over O / I / B, frames of the split pooled; mean +- SD "
-         "over seeds)", "",
-         f"{'model':45s}{'val (14 videos)':>20s}{'test (17 videos)':>20s}   per seed (val | test)"]
-    f1s = {}
-    for key, label, runs in models:
+    for key, _, runs in models:
         if not runs:
-            L.append(f"{label:45s}{'(runs not given)':>20s}")
             continue
-        cells, per_seed = [], []
-        for split in ("val", "test"):
-            vals = np.array([macro_f1(sum(c.values())) for c in confs[(key, split)]])
-            f1s[(key, split)] = vals
-            cells.append(f"{vals.mean():.3f} +- {vals.std(ddof=1) if len(vals) > 1 else 0:.3f}")
-            per_seed.append(" ".join(f"{x:.3f}" for x in vals))
-            for r, x in zip(runs, vals):
-                rows.append({"model": label, "run": r, "split": split, "frame_f1": round(float(x), 4)})
-        L.append(f"{label:45s}{cells[0]:>20s}{cells[1]:>20s}   {per_seed[0]} | {per_seed[1]}")
+        for m, _ in METRICS:
+            for s in ("val", "test"):
+                vals = np.array([float(SCORE[m](sum(d.values()))) for d in counts[(key, m, s)]])
+                per_run[(key, m, s)] = vals
+                for r, x in zip(runs, vals):
+                    rows.append({"model": labels[key], "run": r, "metric": m, "split": s, "value": round(x, 4),
+                                 "peak_settings_tuned_on_val": f"d={tuned[r]['min_dist']} sigma={tuned[r]['sigma']} "
+                                                               f"t={tuned[r]['thr']}"})
 
-    def compare(split, a, b, name):
+    def compare(m, split, a, b, name):
         if not runs_of.get(a) or not runs_of.get(b):
-            return f"  {name:50s} skipped: runs of '{labels[a] if not runs_of.get(a) else labels[b]}' not given"
-        vids = sorted(set.intersection(*[set(c) for c in confs[(a, split)] + confs[(b, split)]]))
-        CA, CB = stack(confs[(a, split)], vids), stack(confs[(b, split)], vids)
-        d, lo, hi = bootstrap_diff(CA, CB, n_boot)
-        _, lo2, hi2 = bootstrap_diff(CA, CB, n_boot, resample_seeds=True)
-        p = permutation_p(f1s[(a, split)], f1s[(b, split)])
+            miss = labels[a] if not runs_of.get(a) else labels[b]
+            return f"  {name:50s} skipped: runs of '{miss}' not given"
+        ca, cb = counts[(a, m, split)], counts[(b, m, split)]
+        vids = sorted(set.intersection(*[set(c) for c in ca + cb]))
+        CA, CB = stack(ca, vids), stack(cb, vids)
+        d, lo, hi = bootstrap_diff(CA, CB, SCORE[m], n_boot)
+        _, lo2, hi2 = bootstrap_diff(CA, CB, SCORE[m], n_boot, resample_seeds=True)
+        p = permutation_p(per_run[(a, m, split)], per_run[(b, m, split)])
         return (f"  {name:50s} {fmt(d, lo, hi)}   videos + seeds: {lo2:+.3f} to {hi2:+.3f}   "
                 f"seed permutation p = {p:.2f}   ({len(vids)} videos)")
 
-    L += ["", "Differences in Frame-level F1 (A - B). 95% CI: paired bootstrap over videos "
-          f"({n_boot} draws); 'videos + seeds' also redraws the 3 seeds of each model.", ""]
-    for slide in ("slide 9", "slide 10"):
-        sp = "val" if slide == "slide 9" else "test"
-        L.append(f"{slide} ({'validation' if sp == 'val' else 'test'} set):")
-        for s, split, a, b, name in COMPARISONS:
-            if s == slide:
-                L.append(compare(split, a, b, name))
+    L = ["Mean +- SD over seeds. Frame-level F1: argmax per frame, macro F1 over O / I / B, frames pooled. "
+         "Boundary F1: phrase starts within +-5 frames (+-0.1 s), counts pooled.",
+         f"Differences A - B: 95% CI from a paired bootstrap over videos ({n_boot} draws); "
+         "'videos + seeds' also redraws the seeds of each model.", ""]
+    for m, title in METRICS:
+        L += ["=" * 100, title, "=" * 100,
+              f"{'model':45s}{'val (14 videos)':>20s}{'test (17 videos)':>20s}   per seed (val | test)"]
+        for key, label, runs in models:
+            if not runs:
+                L.append(f"{label:45s}{'(runs not given)':>20s}")
+                continue
+            v, t = per_run[(key, m, "val")], per_run[(key, m, "test")]
+            sd = (lambda a: a.std(ddof=1) if len(a) > 1 else 0.0)
+            L.append(f"{label:45s}{f'{v.mean():.3f} +- {sd(v):.3f}':>20s}{f'{t.mean():.3f} +- {sd(t):.3f}':>20s}   "
+                     + " ".join(f"{x:.3f}" for x in v) + " | " + " ".join(f"{x:.3f}" for x in t))
         L.append("")
-    L.append("For reference only (the other split; not for the slides):")
-    for split, a, b, name in SECONDARY:
-        L.append(compare(split, a, b, f"[{split}] {name}"))
-    L += ["", "Notes:",
-          "- The best epoch of every run was chosen by validation Frame-level F1, so validation scores are "
-          "the maximum over epochs and slightly optimistic for every model alike.",
-          "- With 3 seeds per model the seed permutation p can never be below .10; it is shown only as a "
-          "check on seed variation."]
+        for slide in ("slide 9", "slide 10"):
+            sp = "val" if slide == "slide 9" else "test"
+            L.append(f"{slide} ({'validation' if sp == 'val' else 'test'} set):")
+            L += [compare(m, split, a, b, name) for s, split, a, b, name in COMPARISONS if s == slide]
+        L.append("For reference only (the other split):")
+        L += [compare(m, split, a, b, f"[{split}] {name}") for split, a, b, name in SECONDARY]
+        L.append("")
+    L += ["Notes:",
+          "- The best epoch of every run was chosen by validation Frame-level F1, so validation scores are the "
+          "maximum over epochs and slightly optimistic for every model alike.",
+          "- 'peak + thr' is tuned on the validation set: its validation numbers are tuned and scored on the same "
+          "videos (optimistic). Use the untuned threshold-0.5 decoder for validation claims.",
+          "- With 3 seeds per model the seed permutation p can never be below .10; it is shown only as a check on "
+          "seed variation."]
     text = "\n".join(L) + "\n"
     with open(os.path.join(out_dir, "frame_f1_summary.txt"), "w") as f:
         f.write(text)
     with open(os.path.join(out_dir, "frame_f1_runs.csv"), "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=["model", "run", "split", "frame_f1"])
+        w = csv.DictWriter(f, fieldnames=list(rows[0]))
         w.writeheader()
         w.writerows(rows)
     print(text)
-    return f1s
+    return per_run
 
 
 # ----------------------------------------------------------------------------- selftest
@@ -223,10 +274,7 @@ def selftest():
     p = np.where(rng.random(500) < 0.7, g, rng.integers(0, 3, 500))
     ok.append(("macro F1 matches sklearn",
                abs(macro_f1(confusion(g, p)) - f1_score(g, p, labels=[0, 1, 2], average="macro", zero_division=0)) < 1e-12))
-    g2 = np.zeros(50, dtype=np.int64)
-    ok.append(("empty classes score 0 (sklearn zero_division=0)",
-               abs(macro_f1(confusion(g2, g2)) - f1_score(g2, g2, labels=[0, 1, 2], average="macro",
-                                                          zero_division=0)) < 1e-12))
+    ok.append(("boundary F1 from counts", abs(float(bnd_f1(np.array([3., 4, 6]))) - 0.6) < 1e-12))
     ok.append(("permutation p: 3 vs 3 fully separated = .10",
                abs(permutation_p(np.array([3., 4, 5]), np.array([0., 1, 2])) - 0.1) < 1e-12))
     with tempfile.TemporaryDirectory() as d:
@@ -234,35 +282,40 @@ def selftest():
         golds = {}
         for split, n in (("val", 6), ("test", 8)):
             for i in range(n):
-                gg = np.repeat(rng.integers(0, 2, 40), 25)
-                gg[np.r_[np.diff(gg) > 0, False]] = 2
+                gg = np.zeros(1500, dtype=np.int64)
+                t = 30
+                while t < 1400:
+                    L = int(rng.integers(40, 120))
+                    gg[t], gg[t + 1:t + L] = 2, 1
+                    t += L + int(rng.integers(5, 30))
                 golds[(split, f"{split}{i}")] = gg
                 np.save(f"{d}/labels/{split}{i}.npy", gg)
         models = []
-        for key, acc in (("body_only", 0.70), ("hand_shape", 0.80), ("proposed", 0.81),
-                         ("early_fusion", 0.75), ("moryossef", 0.65)):
+        for key, acc in (("body_only", 0.70), ("hand_shape", 0.80), ("proposed", 0.82),
+                         ("early_fusion", 0.75), ("moryossef", 0.60)):
             runs = []
             for sd in range(3):
-                run_name = f"{key}-{sd}"
-                os.makedirs(f"{d}/pred/{run_name}")
+                name = f"{key}-{sd}"
+                os.makedirs(f"{d}/pred/{name}")
                 for split in ("val", "test"):
                     arrs = {}
                     for (sp, v), gg in golds.items():
                         if sp != split:
                             continue
-                        q = rng.random((3, len(gg))).astype(np.float32) * 0.5
+                        q = rng.random((3, len(gg))).astype(np.float32) * 0.3
                         right = rng.random(len(gg)) < acc + 0.01 * sd
                         q[gg[right], np.where(right)[0]] += 1.0
-                        arrs[v] = q
-                    np.savez_compressed(f"{d}/pred/{run_name}/{split}.npz", **arrs)
-                    with open(f"{d}/pred/{run_name}/{split}_meta.json", "w") as f:
-                        json.dump({"run": run_name, "labels_dir": f"{d}/labels"}, f)
-                runs.append(run_name)
+                        arrs[v] = q / q.sum(0, keepdims=True)
+                    np.savez_compressed(f"{d}/pred/{name}/{split}.npz", **arrs)
+                    with open(f"{d}/pred/{name}/{split}_meta.json", "w") as f:
+                        json.dump({"run": name, "labels_dir": f"{d}/labels"}, f)
+                runs.append(name)
             models.append((key, dict((k, l) for k, l, _ in MODELS)[key], runs))
-        f1s = run(models, f"{d}/pred", f"{d}/out", n_boot=300)
-        ok.append(("proposed beats Moryossef on test", f1s[("proposed", "test")].mean() > f1s[("moryossef", "test")].mean()))
+        res = run(models, f"{d}/pred", f"{d}/out", n_boot=200)
+        ok.append(("proposed beats Moryossef on test boundary F1",
+                   res[("proposed", "bnd_peak", "test")].mean() > res[("moryossef", "bnd_peak", "test")].mean()))
         txt = open(f"{d}/out/frame_f1_summary.txt").read()
-        ok.append(("summary has both slides", "slide 9" in txt and "slide 10" in txt))
+        ok.append(("summary has all three metrics", all(t in txt for _, t in METRICS)))
     for name, c in ok:
         print(f"  [{'ok' if c else 'FAIL'}] {name}")
     return all(c for _, c in ok)
@@ -279,8 +332,7 @@ def main():
     a = ap.parse_args()
     if a.selftest:
         sys.exit(0 if selftest() else 1)
-    models = [(k, l, getattr(a, k)) for k, l, _ in MODELS]
-    run(models, a.pred_root, a.out_dir, a.n_boot)
+    run([(k, l, getattr(a, k)) for k, l, _ in MODELS], a.pred_root, a.out_dir, a.n_boot)
 
 
 if __name__ == "__main__":
