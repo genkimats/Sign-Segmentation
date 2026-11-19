@@ -61,21 +61,26 @@ def main():
     fig, axes = plt.subplots(1, 2, figsize=(11, 3.8), sharey=True)
     for ax, (key, title) in zip(axes, (("all", "All phrase starts"),
                                         ("short", f"Only after a short pause (≤ {a.max_pause:g} s)"))):
+        ns = []
         for g, c, lab in (("found", GREEN, "found by all 3 seeds"), ("missed", RED, "missed by all 3 seeds")):
             arr = np.array(traces[(key, g)])
             if len(arr) == 0:
                 continue
             med = np.nanmedian(arr, 0)
             q1, q3 = np.nanpercentile(arr, 25, 0), np.nanpercentile(arr, 75, 0)
-            ax.plot(t, med, color=c, lw=2.4, label=f"{lab} (n = {len(arr)})")
+            ax.plot(t, med, color=c, lw=2.4, label=lab)
+            ns.append(f"{g} n = {len(arr)}")
             ax.fill_between(t, q1, q3, color=c, alpha=0.12)
         ax.axvline(0, color=INK, lw=1, ls="--")
+        ax.text(0.02, 0.03, ", ".join(ns), transform=ax.transAxes, fontsize=9, color="#5F6B78")
         ax.set_title(title, fontsize=12); ax.set_xlabel("time from the phrase start (s)")
         for sp in ("top", "right"):
             ax.spines[sp].set_visible(False)
-        ax.legend(frameon=False, fontsize=10, loc="lower right")
+        pass
     axes[0].set_ylabel("dominant wrist height\n(higher = hand raised)")
-    fig.text(0.5, -0.09, "Median and interquartile range; wrist height relative to the shoulders, per-video robust z-score",
+    h, l = axes[0].get_legend_handles_labels()
+    fig.legend(h, l, loc="upper center", ncol=2, frameon=False, fontsize=11, bbox_to_anchor=(0.5, 1.08))
+    fig.text(0.5, -0.1, "Median and interquartile range; wrist height relative to the shoulders, per-video robust z-score",
              ha="center", fontsize=10, color="#5F6B78")
     os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
     fig.savefig(a.out, dpi=200, bbox_inches="tight", facecolor="white")

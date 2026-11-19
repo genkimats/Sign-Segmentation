@@ -18,10 +18,37 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from count_oracle_decoding import tune_peaks_on_val
-from decoder_ablation import thr_peaks, tune_threshold
+from count_oracle_decoding import peaks_with_heights, tune_peaks_on_val
 from phrase_stats import PRED_ROOT, gold_starts_of, load_predictions
-from src.metrics import B_TAG, decode_threshold_2023, extract_segments
+from src.metrics import (B_TAG, decode_threshold_2023, extract_segments, pct_score, segment_iou,
+                         segment_percentage)
+
+THR_GRID = [round(x, 1) for x in np.arange(0.1, 0.91, 0.1)]
+
+
+def thr_peaks(p_b, tuned):
+    """Peak picking + threshold: smoothed P(B) peaks >= tuned threshold, >= d frames apart."""
+    idx, h = peaks_with_heights(p_b, tuned["min_dist"], tuned["sigma"])
+    return np.sort(idx[h >= tuned["thr"]])
+
+
+def tune_threshold(val):
+    """Moryossef et al. (2023) decoder: B / O thresholds by IoU + %-score on val (the 2023 criterion)."""
+    probs, _, gold = val
+    best = None
+    for b in THR_GRID:
+        for o in THR_GRID:
+            ious, pcts = [], []
+            for v, p in probs.items():
+                segs, gsegs = decode_threshold_2023(p, b, o), extract_segments(gold[v])
+                ious.append(segment_iou(segs, gsegs, len(gold[v])))
+                pc = segment_percentage(segs, gsegs)
+                if not np.isnan(pc):
+                    pcts.append(pc)
+            crit = np.mean(ious) + pct_score(np.mean(pcts) if pcts else float("nan"))
+            if best is None or crit > best[0]:
+                best = (crit, b, o)
+    return {"b": best[1], "o": best[2]}
 
 FPS = 50
 INK, GREEN, RED, ORANGE, BLUE, GREY = "#1F2933", "#2E8B57", "#C0392B", "#E07B39", "#2F6DB5", "#9AA3AD"
