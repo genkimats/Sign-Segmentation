@@ -1,0 +1,11 @@
+run,decoder,settings_tuned_on_val,bnd_f1_2,bnd_f1_5,bnd_f1_10,bnd_p_5,bnd_r_5,iou,pct,seg_f1_05,iou_pct_score
+multistream_bilstm-387,threshold (IoU+%),b=0.3 o=0.6,0.3354,0.492,0.5424,0.4671,0.5197,0.8208,1.1431,0.5391,1.6777
+multistream_bilstm-387,threshold (bF1),b=0.3 o=0.1,0.3354,0.492,0.5424,0.4671,0.5197,0.3881,1.1431,0.2502,1.245
+multistream_bilstm-387,peak picking,min_dist=10 sigma=5 thr=0.1,0.368,0.4969,0.5563,0.4273,0.5936,0.8418,1.4213,0.5168,1.4204
+multistream_bilstm-387,hybrid (bF1),b=0.3 o=0.1 sigma=5 min_dist=25,0.3865,0.4994,0.5509,0.4836,0.5163,0.3862,1.0966,0.2558,1.2896
+multistream_bilstm-387,hybrid (IoU+%),b=0.3 o=0.6 sigma=2 min_dist=25,0.3876,0.495,0.5443,0.4794,0.5117,0.8191,1.0966,0.5471,1.7225
+multistream_bilstm-388,threshold (IoU+%),b=0.3 o=0.6,0.3351,0.4945,0.5517,0.4498,0.5489,0.825,1.2449,0.5197,1.5801
+multistream_bilstm-388,threshold (bF1),b=0.3 o=0.1,0.3352,0.4946,0.5518,0.45,0.5489,0.3708,1.2445,0.2401,1.1263
+multistream_bilstm-388,peak picking,min_dist=25 sigma=5 thr=0.15,0.3868,0.5088,0.5733,0.5071,0.5106,0.8368,1.0291,0.5507,1.8077
+multistream_bilstm-388,hybrid (bF1),b=0.3 o=0.1 sigma=2 min_dist=0,0.3966,0.5028,0.5498,0.4575,0.5581,0.3658,1.2445,0.2373,1.1213
+multistream_bilstm-388,hybrid (IoU+%),b=0.3 o=0.6 sigma=0 min_dist=50,0.3904,0.495,0.5487,0.4794,0.5117,0.8141,1.0857,0.5554,1.7284

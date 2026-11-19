@@ -1,0 +1,32 @@
+Face effect at non-manually marked phrase starts -- replication over model pairs (test)
+Markers fixed in advance (training enrichment, analyze_nonmanual_v2.py): eyes = eyes-narrowed onset w=5, brows = inner-brow step k=3.0 w=5; 'eyes or brows' is exploratory.
+Interaction = face effect at marked starts - at unmarked starts (rank metric: percentile points / 100).
+Pooled = mean over pairs; 95% CI from one joint bootstrap over the 17 test videos.
+
+[eyes]
+  pair                         n marked  rank interaction                           matched recall  AUC interaction
+  MS B+H(+Fc) z790                  119  +0.0043 (95% CI: -0.0022 to +0.0145)              +0.0396          +0.0181
+  MS face-regions z790              119  +0.0075 (95% CI: -0.0008 to +0.0200)              +0.0550          +0.0276
+  POOLED                                 +0.0059 (95% CI: -0.0013 to +0.0170), p = 0.130
+                                         matched recall +0.0473 (95% CI: +0.0191 to +0.0702), p = 0.000
+                                         AUC            +0.0229 (95% CI: +0.0054 to +0.0495), p = 0.000
+  pairs with a positive rank interaction: 2/2 (sign test p = 0.250); AUC: 2/2; matched recall: 2/2
+
+[brows]
+  pair                         n marked  rank interaction                           matched recall  AUC interaction
+  MS B+H(+Fc) z790                  631  +0.0066 (95% CI: +0.0004 to +0.0128)              +0.0358          +0.0257
+  MS face-regions z790              631  +0.0089 (95% CI: +0.0019 to +0.0155)              +0.0526          +0.0329
+  POOLED                                 +0.0077 (95% CI: +0.0014 to +0.0141), p = 0.017
+                                         matched recall +0.0442 (95% CI: +0.0210 to +0.0665), p = 0.000
+                                         AUC            +0.0293 (95% CI: +0.0188 to +0.0402), p = 0.000
+  pairs with a positive rank interaction: 2/2 (sign test p = 0.250); AUC: 2/2; matched recall: 2/2
+
+[eyes or brows]
+  pair                         n marked  rank interaction                           matched recall  AUC interaction
+  MS B+H(+Fc) z790                  670  +0.0068 (95% CI: +0.0011 to +0.0125)              +0.0358          +0.0272
+  MS face-regions z790              670  +0.0089 (95% CI: +0.0022 to +0.0151)              +0.0544          +0.0338
+  POOLED                                 +0.0078 (95% CI: +0.0017 to +0.0138), p = 0.011
+                                         matched recall +0.0451 (95% CI: +0.0246 to +0.0653), p = 0.000
+                                         AUC            +0.0305 (95% CI: +0.0214 to +0.0405), p = 0.000
+  pairs with a positive rank interaction: 2/2 (sign test p = 0.250); AUC: 2/2; matched recall: 2/2
+

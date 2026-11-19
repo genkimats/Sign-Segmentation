@@ -1,0 +1,47 @@
+Face effect at non-manually marked phrase starts -- replication over model pairs (test)
+Markers fixed in advance (training enrichment, analyze_nonmanual_v2.py): eyes = eyes-narrowed onset w=5, brows = inner-brow step k=3.0 w=5; 'eyes or brows' is exploratory.
+Interaction = face effect at marked starts - at unmarked starts (rank metric: percentile points / 100).
+Pooled = mean over pairs; 95% CI from one joint bootstrap over the 17 test videos.
+
+[eyes]
+  pair                         n marked  rank interaction                           matched recall  AUC interaction
+  Multi-stream B+H(+Fc)             119  +0.0069 (95% CI: +0.0009 to +0.0136)              +0.0231          +0.0267
+  EF-joint B+H(+F)                  119  -0.0032 (95% CI: -0.0100 to +0.0052)              +0.0151          -0.0069
+  EF-norm B+H(+F)                   119  +0.0036 (95% CI: -0.0046 to +0.0089)              -0.0188          +0.0184
+  Early fusion B+H(+F)              119  -0.0032 (95% CI: -0.0336 to +0.0347)              -0.0465          -0.0161
+  Early fusion + TC B+H(+F)         119  -0.0025 (95% CI: -0.0296 to +0.0303)              -0.0342          -0.0186
+  Early fusion B(+F)                119  +0.0068 (95% CI: -0.0394 to +0.0583)              -0.0351          +0.0049
+  Early fusion + TC B(+F)           119  -0.0167 (95% CI: -0.0714 to +0.0377)              -0.0443          -0.0427
+  POOLED                                 -0.0012 (95% CI: -0.0174 to +0.0184), p = 0.949
+                                         matched recall -0.0201 (95% CI: -0.0560 to +0.0355), p = 0.387
+                                         AUC            -0.0049 (95% CI: -0.0302 to +0.0374), p = 0.804
+  pairs with a positive rank interaction: 3/7 (sign test p = 0.773); AUC: 3/7; matched recall: 2/7
+
+[brows]
+  pair                         n marked  rank interaction                           matched recall  AUC interaction
+  Multi-stream B+H(+Fc)             631  +0.0062 (95% CI: -0.0002 to +0.0118)              +0.0490          +0.0252
+  EF-joint B+H(+F)                  631  +0.0049 (95% CI: -0.0012 to +0.0106)              +0.0137          +0.0178
+  EF-norm B+H(+F)                   631  +0.0025 (95% CI: -0.0011 to +0.0065)              +0.0269          +0.0107
+  Early fusion B+H(+F)              631  -0.0015 (95% CI: -0.0239 to +0.0251)              -0.0121          +0.0008
+  Early fusion + TC B+H(+F)         631  -0.0037 (95% CI: -0.0299 to +0.0245)              +0.0106          -0.0055
+  Early fusion B(+F)                631  +0.0141 (95% CI: -0.0030 to +0.0368)              -0.0300          +0.0166
+  Early fusion + TC B(+F)           631  -0.0059 (95% CI: -0.0308 to +0.0258)              -0.0390          -0.0183
+  POOLED                                 +0.0024 (95% CI: -0.0092 to +0.0157), p = 0.709
+                                         matched recall +0.0027 (95% CI: -0.0207 to +0.0274), p = 0.782
+                                         AUC            +0.0067 (95% CI: -0.0126 to +0.0328), p = 0.512
+  pairs with a positive rank interaction: 4/7 (sign test p = 0.500); AUC: 5/7; matched recall: 4/7
+
+[eyes or brows]
+  pair                         n marked  rank interaction                           matched recall  AUC interaction
+  Multi-stream B+H(+Fc)             670  +0.0063 (95% CI: +0.0002 to +0.0118)              +0.0483          +0.0264
+  EF-joint B+H(+F)                  670  +0.0043 (95% CI: -0.0019 to +0.0101)              +0.0100          +0.0162
+  EF-norm B+H(+F)                   670  +0.0026 (95% CI: -0.0011 to +0.0064)              +0.0244          +0.0112
+  Early fusion B+H(+F)              670  -0.0002 (95% CI: -0.0218 to +0.0260)              -0.0192          -0.0005
+  Early fusion + TC B+H(+F)         670  -0.0031 (95% CI: -0.0282 to +0.0238)              +0.0035          -0.0086
+  Early fusion B(+F)                670  +0.0143 (95% CI: -0.0035 to +0.0377)              -0.0419          +0.0153
+  Early fusion + TC B(+F)           670  -0.0081 (95% CI: -0.0328 to +0.0235)              -0.0529          -0.0256
+  POOLED                                 +0.0023 (95% CI: -0.0085 to +0.0151), p = 0.724
+                                         matched recall -0.0040 (95% CI: -0.0250 to +0.0202), p = 0.777
+                                         AUC            +0.0049 (95% CI: -0.0115 to +0.0307), p = 0.600
+  pairs with a positive rank interaction: 4/7 (sign test p = 0.500); AUC: 4/7; matched recall: 4/7
+

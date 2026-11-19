@@ -1,0 +1,31 @@
+Face stream and non-manually marked phrase starts (test; peak picking tuned on val; found = predicted start within +-5 frames; mean over runs)
+with face: multistream_bilstm-115, multistream_bilstm-116, multistream_bilstm-117 | without face: multistream_bilstm-112, multistream_bilstm-113, multistream_bilstm-114
+markers: +-10 frames around the gold start; brow / head threshold |z| >= 2.0; 1747 starts with face data (0 left out: face not detected)
+
+Marker rates: at phrase starts vs. at random moments inside phrases (>= 0.5 s from a start)
+  blink        19.7%  vs   17.6%
+  brow         66.4%  vs   65.4%
+  head         94.3%  vs   93.1%
+  eyes/brows   66.8%  vs   66.4%
+
+All starts
+  category         n  without face  with face   face effect
+  eyes/brows    1167         62.1%      58.9%   -0.031 (95% CI: -0.051 to -0.015)
+  head only      541         65.8%      60.3%   -0.055 (95% CI: -0.087 to -0.026)
+  none            39         59.8%      51.3%   -0.085 (95% CI: -0.149 to -0.014)
+  interaction (eyes/brows effect - unmarked effect): +0.054 (95% CI: -0.013 to +0.108)
+
+Starts after gold pauses <= 12 frames (0.24 s)
+  category         n  without face  with face   face effect
+  eyes/brows     428         47.8%      46.5%   -0.013 (95% CI: -0.038 to +0.007)
+  head only      143         47.1%      42.2%   -0.049 (95% CI: -0.077 to -0.022)
+  none             7         42.9%      42.9%   +0.000 (95% CI: +0.000 to +0.000)
+  interaction (eyes/brows effect - unmarked effect): -0.013 (95% CI: -0.038 to +0.007)
+
+Peak-picking settings tuned on val:
+  multistream_bilstm-115: min_dist=10 sigma=2 thr=0.2
+  multistream_bilstm-116: min_dist=25 sigma=5 thr=0.1
+  multistream_bilstm-117: min_dist=10 sigma=5 thr=0.15
+  multistream_bilstm-112: min_dist=10 sigma=5 thr=0.1
+  multistream_bilstm-113: min_dist=10 sigma=5 thr=0.1
+  multistream_bilstm-114: min_dist=10 sigma=5 thr=0.1

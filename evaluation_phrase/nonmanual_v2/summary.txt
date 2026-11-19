@@ -1,0 +1,70 @@
+Face stream and non-manually marked phrase starts -- v2 (threshold-free scores, train-validated markers)
+with face: multistream_bilstm-115, multistream_bilstm-116, multistream_bilstm-117 | without face: multistream_bilstm-112, multistream_bilstm-113, multistream_bilstm-114
+tol +-5 frames; score = max smoothed P(start) within tol; rank = its percentile in the video
+test: 1739 starts with face data, 17 videos
+
+OVERALL (all test starts)
+  mean rank score: with face 96.5, without 96.0
+  count-matched recall (K = gold count): with face 53.8%, without 52.6%
+  AUC start vs in-phrase moment: with face 0.872, without 0.859
+
+1. MARKER ENRICHMENT (training: 497 videos, 53948 starts); enriched = ratio >= 1.2, >= 5% of starts, lower CI > 1: 29 of 249 specs
+  eyes   eyes-narrowed onset w=5              starts   5.8%  inside   3.8%  ratio 1.52 (95% CI: 1.41 to 1.63)
+  eyes   blink anywhere w=5                   starts  14.3%  inside  10.6%  ratio 1.34 (95% CI: 1.26 to 1.43)
+  brows  inner-brow step k=3.0 w=5            starts  26.8%  inside  20.8%  ratio 1.29 (95% CI: 1.23 to 1.36)
+  brows  brow-height step k=3.0 w=5           starts  27.5%  inside  21.4%  ratio 1.29 (95% CI: 1.22 to 1.35)
+  eyes   blink onset w=5                      starts   8.5%  inside   6.6%  ratio 1.28 (95% CI: 1.20 to 1.36)
+  brows  brow raise k=3.0 w=5                 starts  28.9%  inside  23.4%  ratio 1.24 (95% CI: 1.17 to 1.30)
+  eyes   eye-openness step k=3.0 w=5          starts  26.4%  inside  21.9%  ratio 1.21 (95% CI: 1.15 to 1.27)
+  brows  brow movement k=3.0 w=5              starts  41.8%  inside  36.7%  ratio 1.14 (95% CI: 1.09 to 1.19)
+  head   head-pitch step k=2.0 w=5            starts  41.2%  inside  36.9%  ratio 1.12 (95% CI: 1.08 to 1.15)
+  brows  brow-furrow step k=3.0 w=5           starts  23.4%  inside  21.2%  ratio 1.11 (95% CI: 1.06 to 1.16)
+  head   head rotation speed k=2.5 w=5        starts  50.0%  inside  45.9%  ratio 1.09 (95% CI: 1.06 to 1.12)
+  head   head-pitch velocity k=3.0 w=5        starts  59.0%  inside  54.2%  ratio 1.09 (95% CI: 1.06 to 1.12)
+  head   head-yaw step k=2.0 w=5              starts  44.1%  inside  41.2%  ratio 1.07 (95% CI: 1.04 to 1.11)
+  head   head vertical velocity k=3.0 w=5     starts  58.3%  inside  54.4%  ratio 1.07 (95% CI: 1.04 to 1.10)
+  eyes   eye-openness dip k=1.5 w=10          starts  23.1%  inside  21.7%  ratio 1.07 (95% CI: 1.00 to 1.14)
+  brows  brow lower k=2.5 w=5                 starts  31.8%  inside  30.2%  ratio 1.05 (95% CI: 1.01 to 1.10)
+  face   face deformation k=1.5 w=10          starts  53.1%  inside  51.1%  ratio 1.04 (95% CI: 1.00 to 1.08)
+  head   head-roll step k=1.5 w=5             starts  51.7%  inside  50.6%  ratio 1.02 (95% CI: 1.00 to 1.05)
+  mouth  mouth-opening velocity k=1.5 w=10    starts  60.8%  inside  59.7%  ratio 1.02 (95% CI: 0.98 to 1.05)
+  face   face-deformation step k=1.5 w=10     starts  48.9%  inside  48.3%  ratio 1.01 (95% CI: 0.97 to 1.05)
+  mouth  mouth-opening step k=1.5 w=5         starts  50.4%  inside  50.2%  ratio 1.00 (95% CI: 0.97 to 1.04)
+  mouth  mouthing-activity step k=1.5 w=10    starts  50.9%  inside  50.9%  ratio 1.00 (95% CI: 0.96 to 1.04)
+
+2. PRIMARY (per family: the most enriched spec on TRAINING, chosen before any model result; test; rank metric; Holm over families)
+  [eyes] eyes-narrowed onset w=5  (n marked 119, unmarked 1620)
+     face effect at marked starts   +0.0106 (95% CI: +0.0048 to +0.0176)
+     face effect at unmarked starts +0.0038
+     interaction                    +0.0069 (95% CI: +0.0009 to +0.0136), p = 0.030, Holm p = 0.060
+     count-matched recall interaction +0.0231 (95% CI: -0.0252 to +0.0555)
+     false-start side (in-phrase moments, marked - unmarked; < 0 = fewer false starts at facial events) -0.0002 (95% CI: -0.0115 to +0.0124)
+     AUC marked starts:   with face 0.898, without 0.860, gain +0.0377 (95% CI: +0.0183 to +0.0583)
+     AUC unmarked starts: with face 0.870, without 0.859, gain +0.0110 (95% CI: +0.0033 to +0.0183)
+     AUC interaction (gain marked - gain unmarked) +0.0267 (95% CI: +0.0097 to +0.0461), p = 0.002
+     short pauses only (<= 0.24 s): interaction +0.0114 (95% CI: +0.0016 to +0.0206), n marked 49
+  [brows] inner-brow step k=3.0 w=5  (n marked 631, unmarked 1108)
+     face effect at marked starts   +0.0082 (95% CI: +0.0043 to +0.0125)
+     face effect at unmarked starts +0.0020
+     interaction                    +0.0062 (95% CI: -0.0002 to +0.0118), p = 0.057, Holm p = 0.060
+     count-matched recall interaction +0.0490 (95% CI: +0.0279 to +0.0713)
+     false-start side (in-phrase moments, marked - unmarked; < 0 = fewer false starts at facial events) +0.0008 (95% CI: -0.0026 to +0.0046)
+     AUC marked starts:   with face 0.891, without 0.862, gain +0.0288 (95% CI: +0.0172 to +0.0409)
+     AUC unmarked starts: with face 0.862, without 0.858, gain +0.0037 (95% CI: -0.0037 to +0.0123)
+     AUC interaction (gain marked - gain unmarked) +0.0252 (95% CI: +0.0141 to +0.0361), p = 0.000
+     short pauses only (<= 0.24 s): interaction +0.0081 (95% CI: +0.0023 to +0.0131), n marked 205
+  AUC interaction, Holm over families: eyes p = 0.002, brows p = 0.000
+
+3. VALIDATION-SELECTED (enriched spec with the largest validation interaction, rank metric) -> test
+  eyes-narrowed onset w=5 [eyes]: validation +0.0203 -> test +0.0069 (95% CI: +0.0009 to +0.0136), p = 0.030
+
+4. SPECIFICATION CURVE (test, rank-metric interaction)
+  enriched specs  face families   n =  29: interaction > 0 in 29 (100%); CI above 0 in 17; CI below 0 in 0; median +0.52 pp
+  all specs       face families   n = 165: interaction > 0 in 158 (96%); CI above 0 in 85; CI below 0 in 0; median +0.47 pp
+  all specs       head (control)  n =  72: interaction > 0 in 10 (14%); CI above 0 in 0; CI below 0 in 8; median -0.20 pp
+
+5. REGRESSION (test): rank(face) - rank(no face) per start ~ primary markers + short pause; cluster bootstrap over videos
+  intercept                                        +0.0017 (95% CI: -0.0022 to +0.0079), p = 0.536
+  eyes: eyes-narrowed onset w=5                    +0.0050 (95% CI: +0.0004 to +0.0110), p = 0.040
+  brows: inner-brow step k=3.0 w=5                 +0.0057 (95% CI: -0.0005 to +0.0111), p = 0.076
+  short pause                                      +0.0003 (95% CI: -0.0050 to +0.0052), p = 0.932

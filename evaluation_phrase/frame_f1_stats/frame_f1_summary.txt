@@ -1,0 +1,73 @@
+Mean +- SD over seeds. Frame-level F1: argmax per frame, macro F1 over O / I / B, frames pooled. Boundary F1: phrase starts within +-5 frames (+-0.1 s), counts pooled.
+Differences A - B: 95% CI from a paired bootstrap over videos (10000 draws); 'videos + seeds' also redraws the seeds of each model.
+
+====================================================================================================
+Frame-level F1
+====================================================================================================
+model                                             val (14 videos)    test (17 videos)   per seed (val | test)
+Modality-specific: body + hand keypoints           0.668 +- 0.001      0.676 +- 0.002   0.667 0.668 0.669 | 0.674 0.676 0.678
+Modality-specific: + hand shape (HaMeR)            0.674 +- 0.001      0.686 +- 0.003   0.673 0.673 0.675 | 0.688 0.682 0.687
+Modality-specific: + face (proposed)               0.673 +- 0.001      0.689 +- 0.002   0.672 0.674 0.672 | 0.688 0.691 0.690
+Early fusion (same inputs)                         0.670 +- 0.001      0.676 +- 0.001   0.669 0.671 0.669 | 0.676 0.676 0.677
+Moryossef et al. (2023), re-implemented            0.659 +- 0.001      0.667 +- 0.001   0.660 0.660 0.659 | 0.666 0.668 0.667
+
+slide 9 (validation set):
+  + hand shape (HaMeR)                               +0.006 (95% CI: +0.001 to +0.011)   videos + seeds: +0.000 to +0.011   seed permutation p = 0.10   (14 videos)
+  + face                                             -0.001 (95% CI: -0.005 to +0.003)   videos + seeds: -0.006 to +0.003   seed permutation p = 0.30   (14 videos)
+  modality-specific vs early fusion (same inputs)    +0.003 (95% CI: +0.001 to +0.006)   videos + seeds: -0.000 to +0.006   seed permutation p = 0.10   (14 videos)
+slide 10 (test set):
+  proposed - Moryossef et al. (2023)                 +0.022 (95% CI: +0.017 to +0.027)   videos + seeds: +0.017 to +0.028   seed permutation p = 0.10   (17 videos)
+For reference only (the other split):
+  [test] + hand shape (HaMeR)                        +0.010 (95% CI: +0.006 to +0.014)   videos + seeds: +0.004 to +0.016   seed permutation p = 0.10   (17 videos)
+  [test] + face                                      +0.003 (95% CI: +0.000 to +0.007)   videos + seeds: -0.001 to +0.009   seed permutation p = 0.20   (17 videos)
+  [test] modality-specific vs early fusion (same inputs) +0.013 (95% CI: +0.009 to +0.017)   videos + seeds: +0.009 to +0.018   seed permutation p = 0.10   (17 videos)
+  [val] proposed - Moryossef et al. (2023)           +0.013 (95% CI: +0.012 to +0.015)   videos + seeds: +0.011 to +0.016   seed permutation p = 0.10   (14 videos)
+
+====================================================================================================
+Boundary F1 (+-0.1 s), threshold decoder at 0.5 / 0.5 (untuned)
+====================================================================================================
+model                                             val (14 videos)    test (17 videos)   per seed (val | test)
+Modality-specific: body + hand keypoints           0.309 +- 0.008      0.377 +- 0.009   0.300 0.312 0.316 | 0.370 0.374 0.387
+Modality-specific: + hand shape (HaMeR)            0.356 +- 0.022      0.435 +- 0.020   0.381 0.345 0.342 | 0.457 0.420 0.427
+Modality-specific: + face (proposed)               0.368 +- 0.009      0.435 +- 0.023   0.372 0.358 0.373 | 0.425 0.419 0.461
+Early fusion (same inputs)                         0.328 +- 0.007      0.385 +- 0.004   0.334 0.320 0.328 | 0.388 0.381 0.386
+Moryossef et al. (2023), re-implemented            0.245 +- 0.035      0.317 +- 0.025   0.225 0.224 0.286 | 0.299 0.307 0.346
+
+slide 9 (validation set):
+  + hand shape (HaMeR)                               +0.046 (95% CI: +0.022 to +0.062)   videos + seeds: +0.014 to +0.077   seed permutation p = 0.10   (14 videos)
+  + face                                             +0.012 (95% CI: -0.007 to +0.028)   videos + seeds: -0.018 to +0.041   seed permutation p = 0.40   (14 videos)
+  modality-specific vs early fusion (same inputs)    +0.040 (95% CI: +0.020 to +0.061)   videos + seeds: +0.015 to +0.066   seed permutation p = 0.10   (14 videos)
+slide 10 (test set):
+  proposed - Moryossef et al. (2023)                 +0.118 (95% CI: +0.103 to +0.134)   videos + seeds: +0.082 to +0.156   seed permutation p = 0.10   (17 videos)
+For reference only (the other split):
+  [test] + hand shape (HaMeR)                        +0.058 (95% CI: +0.043 to +0.073)   videos + seeds: +0.031 to +0.085   seed permutation p = 0.10   (17 videos)
+  [test] + face                                      +0.000 (95% CI: -0.012 to +0.010)   videos + seeds: -0.032 to +0.033   seed permutation p = 1.00   (17 videos)
+  [test] modality-specific vs early fusion (same inputs) +0.050 (95% CI: +0.035 to +0.064)   videos + seeds: +0.024 to +0.080   seed permutation p = 0.10   (17 videos)
+  [val] proposed - Moryossef et al. (2023)           +0.123 (95% CI: +0.092 to +0.151)   videos + seeds: +0.077 to +0.166   seed permutation p = 0.10   (14 videos)
+
+====================================================================================================
+Boundary F1 (+-0.1 s), peak picking + threshold tuned on val
+====================================================================================================
+model                                             val (14 videos)    test (17 videos)   per seed (val | test)
+Modality-specific: body + hand keypoints           0.459 +- 0.006      0.469 +- 0.004   0.466 0.457 0.455 | 0.465 0.473 0.470
+Modality-specific: + hand shape (HaMeR)            0.483 +- 0.004      0.512 +- 0.007   0.484 0.478 0.485 | 0.515 0.504 0.516
+Modality-specific: + face (proposed)               0.490 +- 0.005      0.529 +- 0.017   0.495 0.491 0.485 | 0.517 0.521 0.549
+Early fusion (same inputs)                         0.467 +- 0.002      0.489 +- 0.009   0.466 0.466 0.470 | 0.480 0.489 0.498
+Moryossef et al. (2023), re-implemented            0.428 +- 0.002      0.451 +- 0.001   0.430 0.427 0.427 | 0.450 0.452 0.451
+
+slide 9 (validation set):
+  + hand shape (HaMeR)                               +0.023 (95% CI: +0.010 to +0.036)   videos + seeds: +0.007 to +0.039   seed permutation p = 0.10   (14 videos)
+  + face                                             +0.008 (95% CI: -0.011 to +0.022)   videos + seeds: -0.013 to +0.024   seed permutation p = 0.20   (14 videos)
+  modality-specific vs early fusion (same inputs)    +0.023 (95% CI: +0.008 to +0.034)   videos + seeds: +0.005 to +0.036   seed permutation p = 0.10   (14 videos)
+slide 10 (test set):
+  proposed - Moryossef et al. (2023)                 +0.078 (95% CI: +0.068 to +0.088)   videos + seeds: +0.059 to +0.101   seed permutation p = 0.10   (17 videos)
+For reference only (the other split):
+  [test] + hand shape (HaMeR)                        +0.043 (95% CI: +0.031 to +0.056)   videos + seeds: +0.028 to +0.059   seed permutation p = 0.10   (17 videos)
+  [test] + face                                      +0.017 (95% CI: +0.007 to +0.027)   videos + seeds: -0.004 to +0.041   seed permutation p = 0.10   (17 videos)
+  [test] modality-specific vs early fusion (same inputs) +0.040 (95% CI: +0.026 to +0.051)   videos + seeds: +0.017 to +0.066   seed permutation p = 0.10   (17 videos)
+  [val] proposed - Moryossef et al. (2023)           +0.062 (95% CI: +0.043 to +0.077)   videos + seeds: +0.041 to +0.078   seed permutation p = 0.10   (14 videos)
+
+Notes:
+- The best epoch of every run was chosen by validation Frame-level F1, so validation scores are the maximum over epochs and slightly optimistic for every model alike.
+- 'peak + thr' is tuned on the validation set: its validation numbers are tuned and scored on the same videos (optimistic). Use the untuned threshold-0.5 decoder for validation claims.
+- With 3 seeds per model the seed permutation p can never be below .10; it is shown only as a check on seed variation.
