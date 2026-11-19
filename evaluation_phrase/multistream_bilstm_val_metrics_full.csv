@@ -1,0 +1,5 @@
+run,prefix,decoder,frame_f1,f1_O,f1_I,f1_B,iou,segment_pct,segment_f1_05,bnd_f1_1,bnd_f1_2,bnd_f1_5,bnd_f1_10,bnd_f1_25,bnd_p_5,bnd_r_5,bnd_n_pred,bnd_n_gold,videos_evaluated,videos_skipped,window_size,seed,description
+multistream_bilstm-387,387,argmax,0.676,0.9445,0.9215,0.1619,0.8431,1.8866,0.2716,0.2034,0.2378,0.2723,0.2962,0.331,0.2073,0.3965,3241,1695,14,0,768,,"WIN: B+H+Fc, window 768"
+multistream_bilstm-387,387,thr b=0.5 o=0.5,0.676,0.9445,0.9215,0.1619,0.6354,0.4012,0.3258,0.2185,0.3047,0.3826,0.4027,0.4311,0.6585,0.2696,694,1695,14,0,768,,"WIN: B+H+Fc, window 768"
+multistream_bilstm-388,388,argmax,0.6739,0.9432,0.9185,0.16,0.8411,2.28,0.2879,0.1977,0.2263,0.2575,0.2861,0.3201,0.1848,0.4242,3890,1695,14,0,1024,,"WIN: B+H+Fc, window 1024"
+multistream_bilstm-388,388,thr b=0.5 o=0.5,0.6739,0.9432,0.9185,0.16,0.6229,0.4661,0.3698,0.2325,0.3296,0.3997,0.4268,0.461,0.6144,0.2962,817,1695,14,0,1024,,"WIN: B+H+Fc, window 1024"

@@ -1,0 +1,7 @@
+run,prefix,decoder,frame_f1,f1_O,f1_I,f1_B,iou,segment_pct,segment_f1_05,bnd_f1_1,bnd_f1_2,bnd_f1_5,bnd_f1_10,bnd_f1_25,bnd_p_5,bnd_r_5,bnd_n_pred,bnd_n_gold,videos_evaluated,videos_skipped,window_size,seed,description
+multistream_bilstm-373,373,argmax,0.6792,0.9587,0.9143,0.1646,0.842,2.3186,0.2965,0.2119,0.2433,0.2814,0.3149,0.3575,0.2024,0.4614,3982,1747,17,0,512,42,"LC: B+H+Fc, 100% of training videos [seed=42]"
+multistream_bilstm-373,373,thr b=0.5 o=0.5,0.6792,0.9587,0.9143,0.1646,0.5646,0.4914,0.4105,0.2414,0.3559,0.4309,0.4518,0.489,0.6647,0.3188,838,1747,17,0,512,42,"LC: B+H+Fc, 100% of training videos [seed=42]"
+multistream_bilstm-374,374,argmax,0.68,0.9597,0.9175,0.1629,0.8472,2.2028,0.2967,0.2183,0.2468,0.286,0.312,0.3581,0.2087,0.4545,3805,1747,17,0,512,123,"LC: B+H+Fc, 100% of training videos [seed=123]"
+multistream_bilstm-374,374,thr b=0.5 o=0.5,0.68,0.9597,0.9175,0.1629,0.5655,0.4347,0.3837,0.2398,0.3309,0.4149,0.4341,0.466,0.6874,0.2971,755,1747,17,0,512,123,"LC: B+H+Fc, 100% of training videos [seed=123]"
+multistream_bilstm-375,375,argmax,0.6807,0.9604,0.9165,0.1651,0.8459,2.2254,0.2863,0.2145,0.2407,0.2777,0.3111,0.3542,0.2024,0.4425,3820,1747,17,0,512,2024,"LC: B+H+Fc, 100% of training videos [seed=2024]"
+multistream_bilstm-375,375,thr b=0.5 o=0.5,0.6807,0.9604,0.9165,0.1651,0.5466,0.4334,0.3922,0.2292,0.3249,0.4069,0.4278,0.468,0.6838,0.2896,740,1747,17,0,512,2024,"LC: B+H+Fc, 100% of training videos [seed=2024]"

@@ -1,0 +1,20 @@
+Decoder comparison (test; every decoder tuned on val); runs: multistream_bilstm-414, multistream_bilstm-415, multistream_bilstm-416, multistream_bilstm-417, multistream_bilstm-418, multistream_bilstm-419, multistream_bilstm-420, multistream_bilstm-421
+Boundary F1 pooled over videos; IoU / % / Segment F1@0.5 (one-to-one phrase matches with IoU >= 0.5) =
+per-video means (2023 style). Mean +- SD over runs.
+
+decoder                      bF1@2         bF1@5        bF1@10    P@5    R@5    IoU      %      SegF1@.5   vs peak picking [95% CI]: bF1@5 | SegF1@.5
+threshold (IoU+%)     0.328+-0.014  0.489+-0.008  0.541+-0.009  0.463  0.520  0.823   1.15  0.522+-0.011   -0.011 [-0.019, -0.003] | -0.013 [-0.026, +0.000]
+threshold (bF1)       0.328+-0.014  0.489+-0.008  0.541+-0.009  0.463  0.520  0.356   1.15  0.230+-0.025   -0.011 [-0.019, -0.003] | -0.305 [-0.333, -0.279]
+peak picking          0.386+-0.011  0.501+-0.010  0.555+-0.007  0.496  0.511  0.823   1.06  0.536+-0.015   (reference)
+hybrid (bF1)          0.380+-0.011  0.493+-0.013  0.546+-0.012  0.456  0.538  0.407   1.21  0.250+-0.038   -0.008 [-0.013, -0.003] | -0.285 [-0.315, -0.257]
+hybrid (IoU+%)        0.386+-0.005  0.496+-0.007  0.547+-0.010  0.482  0.511  0.820   1.08  0.537+-0.016   -0.005 [-0.009, -0.000] | +0.001 [-0.011, +0.014]
+
+Settings tuned on val (per run): see decoder_comparison_runs.csv
+  multistream_bilstm-414: threshold (IoU+%): b=0.3 o=0.7 | threshold (bF1): b=0.3 o=0.1 | peak picking: min_dist=10 sigma=2 thr=0.25 | hybrid (bF1): b=0.3 o=0.1 sigma=5 min_dist=10 | hybrid (IoU+%): b=0.3 o=0.7 sigma=5 min_dist=50
+  multistream_bilstm-415: threshold (IoU+%): b=0.3 o=0.6 | threshold (bF1): b=0.3 o=0.1 | peak picking: min_dist=25 sigma=2 thr=0.25 | hybrid (bF1): b=0.3 o=0.1 sigma=5 min_dist=25 | hybrid (IoU+%): b=0.3 o=0.6 sigma=5 min_dist=25
+  multistream_bilstm-416: threshold (IoU+%): b=0.3 o=0.7 | threshold (bF1): b=0.3 o=0.1 | peak picking: min_dist=25 sigma=2 thr=0.2 | hybrid (bF1): b=0.2 o=0.1 sigma=5 min_dist=50 | hybrid (IoU+%): b=0.3 o=0.7 sigma=0 min_dist=25
+  multistream_bilstm-417: threshold (IoU+%): b=0.3 o=0.7 | threshold (bF1): b=0.3 o=0.1 | peak picking: min_dist=25 sigma=5 thr=0.1 | hybrid (bF1): b=0.2 o=0.1 sigma=2 min_dist=50 | hybrid (IoU+%): b=0.3 o=0.7 sigma=5 min_dist=0
+  multistream_bilstm-418: threshold (IoU+%): b=0.3 o=0.6 | threshold (bF1): b=0.3 o=0.1 | peak picking: min_dist=10 sigma=2 thr=0.25 | hybrid (bF1): b=0.2 o=0.1 sigma=5 min_dist=50 | hybrid (IoU+%): b=0.3 o=0.6 sigma=5 min_dist=50
+  multistream_bilstm-419: threshold (IoU+%): b=0.3 o=0.7 | threshold (bF1): b=0.3 o=0.1 | peak picking: min_dist=25 sigma=5 thr=0.15 | hybrid (bF1): b=0.3 o=0.1 sigma=5 min_dist=10 | hybrid (IoU+%): b=0.3 o=0.7 sigma=5 min_dist=25
+  multistream_bilstm-420: threshold (IoU+%): b=0.3 o=0.7 | threshold (bF1): b=0.3 o=0.1 | peak picking: min_dist=25 sigma=5 thr=0.15 | hybrid (bF1): b=0.3 o=0.1 sigma=5 min_dist=25 | hybrid (IoU+%): b=0.3 o=0.7 sigma=5 min_dist=25
+  multistream_bilstm-421: threshold (IoU+%): b=0.3 o=0.6 | threshold (bF1): b=0.3 o=0.1 | peak picking: min_dist=10 sigma=2 thr=0.2 | hybrid (bF1): b=0.3 o=0.1 sigma=5 min_dist=0 | hybrid (IoU+%): b=0.3 o=0.6 sigma=5 min_dist=25

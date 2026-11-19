@@ -1,0 +1,87 @@
+Phrase starts missed vs found by the proposed model (multistream_bilstm-115, multistream_bilstm-116, multistream_bilstm-117; decoder: peak picking tuned on val; +-5 frames)
+1747 test starts: MISSED by all seeds 524 (30.0%), FOUND by all seeds 832 (47.6%), partly 391
+AUC = P(value at a missed start > value at a found start); 0.5 = no difference. 95% CI: percentile bootstrap over the 17 test videos; p: bootstrap SE (normal approx.); Holm over 60 features.
+strat = the same AUC within pause strata (0 / 1-12 / 13-25 / 26-50 / >50 frames before the start).  169 = AUC for the 169-run pool (<= 10 % vs >= 90 %).
+
+feature                                         family         missed    found          AUC (95% CI)  Holm p      strat AUC (95% CI)  Holm p    169
+dom wrist height change (after - before)        hands          0.0247    0.502    0.32 (0.27 to 0.37)   0.000      0.35 (0.30 to 0.40)   0.000   0.24
+pause before the start (s)                      timing           0.28     0.62    0.33 (0.30 to 0.37)   0.000      0.46 (0.43 to 0.51)   1.000   0.10
+pause / signer's median sign gap                timing           1.44     3.15    0.33 (0.30 to 0.37)   0.000      0.46 (0.42 to 0.52)   1.000   0.10
+pause / largest gap nearby                      timing          0.388    0.667    0.37 (0.34 to 0.40)   0.000      0.43 (0.39 to 0.47)   0.030   0.22
+time since previous phrase start (s)            timing           2.64     3.67    0.37 (0.35 to 0.40)   0.000      0.44 (0.41 to 0.48)   0.036   0.22
+hand distance change (abs)                      hands           0.614     1.02    0.39 (0.35 to 0.42)   0.000      0.42 (0.37 to 0.45)   0.001   0.34
+HaMeR dom articulation speed around             hands            1.92     2.59    0.39 (0.35 to 0.43)   0.000      0.37 (0.32 to 0.43)   0.000   0.44
+signs since last long pause                     tempo               5        0    0.61 (0.58 to 0.63)   0.000      0.48 (0.45 to 0.51)   1.000   0.82
+first sign after: duration / median             lengthening         1    0.778    0.59 (0.56 to 0.63)   0.000      0.61 (0.57 to 0.65)   0.000   0.58
+dom wrist height before                         hands           0.923    0.431    0.59 (0.54 to 0.63)   0.009      0.52 (0.48 to 0.56)   1.000   0.73
+dom handshape change around                     hands            1.27     1.94    0.42 (0.37 to 0.46)   0.008      0.40 (0.36 to 0.43)   0.000   0.42
+min dom wrist height around (hands dropped)     hands           0.528    0.191    0.58 (0.55 to 0.62)   0.000      0.51 (0.48 to 0.54)   1.000   0.73
+signing rate around (signs/s)                   tempo            1.75     1.75    0.57 (0.53 to 0.62)   0.018      0.45 (0.40 to 0.49)   0.757   0.75
+HaMeR dom hand detected around (share)          technical           1     0.98    0.57 (0.52 to 0.61)   0.072      0.56 (0.51 to 0.60)   0.541   0.63
+first sign is another gesture / non-manual      lexical          0.18     0.04    0.57 (0.55 to 0.60)   0.000      0.59 (0.56 to 0.62)   0.000   0.51
+last sign before: duration / median             lengthening      1.38     1.65    0.43 (0.40 to 0.46)   0.003      0.42 (0.38 to 0.46)   0.001   0.37
+signing rate / video median                     tempo           0.889    0.857    0.56 (0.52 to 0.60)   0.162      0.43 (0.39 to 0.48)   0.160   0.73
+signs in new phrase                             tempo               4        5    0.45 (0.40 to 0.49)   1.000      0.42 (0.37 to 0.47)   0.076   0.46
+last sign before is palm-up ($GEST-OFF)         lexical          0.14     0.24    0.45 (0.43 to 0.47)   0.000      0.44 (0.42 to 0.47)   0.000   0.39
+min dom wrist speed around (hold)               hands         -0.0374    0.144    0.45 (0.40 to 0.50)   0.878      0.43 (0.38 to 0.49)   0.541   0.49
+head pitch change (abs)                         head/body       0.661    0.766    0.45 (0.42 to 0.48)   0.017      0.44 (0.40 to 0.48)   0.035   0.47
+dom hold share before                           hands               0        0    0.45 (0.44 to 0.47)   0.000      0.49 (0.47 to 0.51)   1.000   0.37
+video's miss rate without this start            signer          0.305    0.289    0.55 (0.44 to 0.56)   1.000      0.53 (0.43 to 0.54)   1.000   0.59
+first sign is a connective (ABER, WENN, ...)    lexical          0.05     0.14    0.46 (0.44 to 0.47)   0.000      0.45 (0.44 to 0.47)   0.000   0.46
+mouth motion before                             face             1.04    0.743    0.54 (0.50 to 0.59)   1.000      0.52 (0.47 to 0.56)   1.000   0.60
+min whole-body motion around                    hands           0.501    0.625    0.46 (0.42 to 0.50)   1.000      0.44 (0.39 to 0.50)   1.000   0.53
+dom wrist speed after                           hands            3.27     3.74    0.46 (0.42 to 0.51)   1.000      0.46 (0.40 to 0.51)   1.000   0.46
+previous phrase duration (s)                    tempo             1.9     2.16    0.47 (0.43 to 0.51)   1.000      0.43 (0.40 to 0.47)   0.009   0.51
+shoulder width change (abs)                     head/body       0.269    0.306    0.47 (0.44 to 0.49)   0.577      0.47 (0.44 to 0.50)   1.000   0.45
+last sign before is another gesture / non-manua lexical          0.08     0.14    0.47 (0.45 to 0.49)   0.121      0.47 (0.44 to 0.50)   1.000   0.45
+inner brow height change (abs)                  face            0.248    0.307    0.47 (0.43 to 0.52)   1.000      0.45 (0.42 to 0.49)   0.541   0.47
+pause after the first sign (s)                  timing            0.2     0.18    0.53 (0.49 to 0.57)   1.000      0.55 (0.51 to 0.60)   1.000   0.53
+dom wrist speed before                          hands            2.99     3.08    0.47 (0.43 to 0.53)   1.000      0.45 (0.40 to 0.50)   1.000   0.55
+max |brow velocity| around                      face             4.21     5.43    0.47 (0.43 to 0.52)   1.000      0.45 (0.42 to 0.49)   0.541   0.49
+new phrase duration (s)                         tempo            1.98     2.13    0.48 (0.44 to 0.51)   1.000      0.46 (0.42 to 0.50)   1.000   0.48
+max head rotation speed around                  head/body        4.65     4.97    0.48 (0.44 to 0.51)   1.000      0.46 (0.42 to 0.51)   1.000   0.47
+mouthing on the first sign                      face             0.56     0.61    0.48 (0.45 to 0.51)   1.000      0.48 (0.45 to 0.52)   1.000   0.48
+max head speed around                           head/body         4.3     4.55    0.48 (0.45 to 0.51)   1.000      0.47 (0.43 to 0.51)   1.000   0.48
+distance to an inference-window edge (frames)   technical         124      130    0.48 (0.45 to 0.51)   1.000      0.47 (0.43 to 0.50)   1.000   0.48
+dom wrist speed change (after - before)         hands           0.125    0.229    0.48 (0.44 to 0.52)   1.000      0.49 (0.45 to 0.53)   1.000   0.40
+first sign is palm-up ($GEST-OFF)               lexical          0.05     0.01    0.52 (0.51 to 0.53)   0.148      0.52 (0.51 to 0.53)   0.130   0.51
+blink within +-5 frames                         face             0.14     0.17    0.48 (0.46 to 0.51)   1.000      0.48 (0.46 to 0.50)   1.000   0.50
+nondom wrist speed before                       hands            3.21     3.33    0.49 (0.43 to 0.54)   1.000      0.45 (0.39 to 0.50)   1.000   0.59
+last sign before is pointing ($INDEX)           lexical          0.08     0.06    0.51 (0.50 to 0.53)   1.000      0.52 (0.50 to 0.53)   1.000   0.52
+MediaPipe dom hand detected around (share)      technical           1        1    0.49 (0.47 to 0.50)   1.000      0.49 (0.47 to 0.50)   1.000   0.49
+eyes narrowed within +-5 frames                 face             0.30     0.28    0.51 (0.48 to 0.54)   1.000      0.50 (0.48 to 0.53)   1.000   0.53
+position in the video (0-1)                     technical       0.541    0.536    0.51 (0.47 to 0.54)   1.000      0.52 (0.49 to 0.56)   1.000   0.49
+signs in previous phrase                        tempo               5        5    0.49 (0.44 to 0.54)   1.000      0.45 (0.40 to 0.49)   0.757   0.55
+mouthing on the last sign before                face             0.55     0.53    0.51 (0.48 to 0.54)   1.000      0.51 (0.48 to 0.54)   1.000   0.54
+face deformation around                         face             1.03     1.11    0.49 (0.46 to 0.52)   1.000      0.48 (0.44 to 0.51)   1.000   0.52
+mouth motion after                              face             1.34     1.26    0.51 (0.47 to 0.54)   1.000      0.50 (0.46 to 0.53)   1.000   0.51
+first sign is pointing ($INDEX)                 lexical          0.07     0.07    0.50 (0.49 to 0.52)   1.000      0.50 (0.49 to 0.52)   1.000   0.50
+first sign is depicting ($PROD)                 lexical          0.01     0.00    0.50 (0.50 to 0.51)   1.000      0.50 (0.50 to 0.51)   1.000   0.51
+one mouthing spreads over the transition        face             0.01     0.00    0.50 (0.50 to 0.51)   1.000      0.50 (0.50 to 0.51)   1.000   0.50
+last sign before is two-handed                  hands            0.00     0.01    0.50 (0.49 to 0.50)   1.000      0.50 (0.49 to 0.50)   1.000   0.50
+hand switch at the transition                   hands            0.01     0.01    0.50 (0.49 to 0.50)   1.000      0.50 (0.49 to 0.50)   1.000   0.50
+min head vertical velocity around (down)        head/body       -3.37    -3.54    0.50 (0.47 to 0.54)   1.000      0.50 (0.47 to 0.53)   1.000   0.51
+first sign is fingerspelling / number           lexical          0.02     0.02    0.50 (0.49 to 0.51)   1.000      0.50 (0.49 to 0.51)   1.000   0.50
+first sign is two-handed                        hands            0.00     0.00    0.50 (0.50 to 0.50)   1.000      0.50 (0.50 to 0.50)   1.000   0.50
+face detected around (share)                    technical        1.00     1.00    0.50 (0.50 to 0.50)   1.000      0.50 (0.50 to 0.50)   1.000   0.50
+
+(binary features: missed / found columns are shares; others are medians)
+
+Per-video share of starts missed by all seeds:
+  1247199_A      0.46  (n = 85)
+  1413485_A      0.41  (n = 44)
+  1247525_A      0.38  (n = 95)
+  1249741_B      0.38  (n = 117)
+  1419265_A      0.37  (n = 76)
+  1246566_B      0.36  (n = 22)
+  1184367_A      0.34  (n = 77)
+  1247205_A      0.33  (n = 184)
+  1206010_A      0.31  (n = 142)
+  1205503_A      0.29  (n = 148)
+  1204691_A      0.29  (n = 115)
+  1211515_A      0.27  (n = 127)
+  1204877_A      0.24  (n = 72)
+  1204191_A      0.23  (n = 98)
+  1413683_A      0.23  (n = 30)
+  1209077_B      0.23  (n = 193)
+  1176566_B      0.16  (n = 122)

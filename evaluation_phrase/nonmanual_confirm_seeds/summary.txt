@@ -1,0 +1,17 @@
+Seed-level face effect at non-manually marked phrase starts (test, rank metric, percentile points)
+gap = start score at marked - unmarked starts; markers: eyes = eyes-narrowed onset w=5, brows = inner-brow step k=3.0 w=5; short pause <= 12 frames
+
+[MS B+H(+Fc) z790]  face: multistream_bilstm-373 multistream_bilstm-374 multistream_bilstm-375   no face: multistream_bilstm-428 multistream_bilstm-429 multistream_bilstm-430
+  start score, all starts    face  95.85 ± 0.05   no face  95.43 ± 0.14   diff +0.42   same-seed > 0: 3/3   all face > all no-face (perm p = 0.05)
+  eyes gap                   face   0.80 ± 0.18   no face   0.37 ± 0.09   diff +0.43   same-seed > 0: 3/3   all face > all no-face (perm p = 0.05)
+  brows gap                  face   1.04 ± 0.10   no face   0.38 ± 0.11   diff +0.66   same-seed > 0: 3/3   all face > all no-face (perm p = 0.05)
+  eyes gap, short pauses     face   1.07 ± 0.29   no face   0.70 ± 0.21   diff +0.36   same-seed > 0: 2/3   overlap
+  brows gap, short pauses    face   0.54 ± 0.24   no face  -0.11 ± 0.39   diff +0.64   same-seed > 0: 3/3   all face > all no-face (perm p = 0.05)
+
+[MS face-regions z790]  face: multistream_bilstm-411 multistream_bilstm-412 multistream_bilstm-413   no face: multistream_bilstm-428 multistream_bilstm-429 multistream_bilstm-430
+  start score, all starts    face  95.87 ± 0.03   no face  95.43 ± 0.14   diff +0.43   same-seed > 0: 3/3   all face > all no-face (perm p = 0.05)
+  eyes gap                   face   1.12 ± 0.31   no face   0.37 ± 0.09   diff +0.75   same-seed > 0: 3/3   all face > all no-face (perm p = 0.05)
+  brows gap                  face   1.27 ± 0.03   no face   0.38 ± 0.11   diff +0.89   same-seed > 0: 3/3   all face > all no-face (perm p = 0.05)
+  eyes gap, short pauses     face   1.79 ± 0.25   no face   0.70 ± 0.21   diff +1.09   same-seed > 0: 3/3   all face > all no-face (perm p = 0.05)
+  brows gap, short pauses    face   1.33 ± 0.15   no face  -0.11 ± 0.39   diff +1.44   same-seed > 0: 3/3   all face > all no-face (perm p = 0.05)
+

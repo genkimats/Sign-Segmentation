@@ -1,0 +1,639 @@
+pair,run,face,seed,measure,value
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-373,1,42,starts_per_gold,1.206067544361763
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-374,1,123,starts_per_gold,1.0824270177447053
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-375,1,2024,starts_per_gold,1.1453921007441328
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-428,0,42,starts_per_gold,0.9668002289639381
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-429,0,123,starts_per_gold,1.127647395535203
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-430,0,2024,starts_per_gold,1.2953634802518603
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-373,1,42,precision,44.70811580446132
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-374,1,123,precision,47.488101533580114
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-375,1,2024,precision,46.12693653173413
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-428,0,42,precision,48.72705743043221
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-429,0,123,precision,45.98984771573604
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-430,0,2024,precision,41.84710561201944
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-373,1,42,false_per_min,5.30223497927653
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-374,1,123,false_per_min,4.51941573770094
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-375,1,2024,false_per_min,4.906274083828412
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-428,0,42,false_per_min,3.941403855839893
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-429,0,123,false_per_min,4.842556238583887
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-430,0,2024,false_per_min,5.989477452985334
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-373,1,42,hit_all,54.16906267970098
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-374,1,123,hit_all,51.63887291546866
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-375,1,2024,hit_all,53.0764807360552
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-428,0,42,hit_all,47.326049453709025
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-429,0,123,hit_all,52.098907418056356
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-430,0,2024,hit_all,54.456584243818284
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-373,1,42,score_all,95.90762697663233
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-374,1,123,score_all,95.80966787022308
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-375,1,2024,score_all,95.83864120538794
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-428,0,42,score_all,95.28949593342192
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-429,0,123,score_all,95.42809060973
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-430,0,2024,score_all,95.57869628607509
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-373,1,42,score_neg,83.753631794145
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-374,1,123,score_neg,83.85141210461185
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-375,1,2024,score_neg,84.82628102937016
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-428,0,42,score_neg,84.31955457699004
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-429,0,123,score_neg,84.29118008961096
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-430,0,2024,score_neg,84.63937295968319
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-373,1,42,hit_eyes_cued,59.66386554621849
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-374,1,123,hit_eyes_cued,57.983193277310924
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-375,1,2024,hit_eyes_cued,60.50420168067227
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-428,0,42,hit_eyes_cued,50.42016806722689
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-429,0,123,hit_eyes_cued,59.66386554621849
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-430,0,2024,hit_eyes_cued,58.8235294117647
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-373,1,42,score_eyes_cued,96.81363853165684
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-374,1,123,score_eyes_cued,96.56150521653122
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-375,1,2024,score_eyes_cued,96.41606556795531
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-428,0,42,score_eyes_cued,95.72208038040718
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-429,0,123,score_eyes_cued,95.70124320554784
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-430,0,2024,score_eyes_cued,95.9080801861684
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-373,1,42,matched_eyes_cued,60.50420168067227
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-374,1,123,matched_eyes_cued,57.142857142857146
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-375,1,2024,matched_eyes_cued,59.66386554621849
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-428,0,42,matched_eyes_cued,51.260504201680675
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-429,0,123,matched_eyes_cued,56.30252100840336
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-430,0,2024,matched_eyes_cued,53.78151260504202
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-373,1,42,hitshort_eyes_cued,55.10204081632653
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-374,1,123,hitshort_eyes_cued,42.857142857142854
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-375,1,2024,hitshort_eyes_cued,53.06122448979592
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-428,0,42,hitshort_eyes_cued,34.69387755102041
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-429,0,123,hitshort_eyes_cued,51.02040816326531
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-430,0,2024,hitshort_eyes_cued,44.89795918367347
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-373,1,42,hit_eyes_uncued,53.76543209876543
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-374,1,123,hit_eyes_uncued,51.17283950617284
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-375,1,2024,hit_eyes_uncued,52.53086419753087
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-428,0,42,hit_eyes_uncued,47.098765432098766
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-429,0,123,hit_eyes_uncued,51.54320987654321
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-430,0,2024,hit_eyes_uncued,54.135802469135804
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-373,1,42,score_eyes_uncued,95.84107427598549
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-374,1,123,score_eyes_uncued,95.75444031206833
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-375,1,2024,score_eyes_uncued,95.79622546517467
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-428,0,42,score_eyes_uncued,95.25771966848906
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-429,0,123,score_eyes_uncued,95.40802569682734
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-430,0,2024,score_eyes_uncued,95.5545008020559
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-373,1,42,matched_eyes_uncued,50.67901234567901
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-374,1,123,matched_eyes_uncued,51.17283950617284
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-375,1,2024,matched_eyes_uncued,50.74074074074074
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-428,0,42,matched_eyes_uncued,48.888888888888886
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-429,0,123,matched_eyes_uncued,50.24691358024691
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-430,0,2024,matched_eyes_uncued,49.382716049382715
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-373,1,42,hitshort_eyes_uncued,44.33781190019194
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-374,1,123,hitshort_eyes_uncued,40.882917466410746
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-375,1,2024,hitshort_eyes_uncued,41.65067178502879
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-428,0,42,hitshort_eyes_uncued,33.78119001919386
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-429,0,123,hitshort_eyes_uncued,39.923224568138195
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-430,0,2024,hitshort_eyes_uncued,44.145873320537426
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-373,1,42,hit_brows_cued,56.57686212361331
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-374,1,123,hit_brows_cued,54.99207606973059
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-375,1,2024,hit_brows_cued,56.89381933438986
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-428,0,42,hit_brows_cued,49.44532488114105
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-429,0,123,hit_brows_cued,53.56576862123613
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-430,0,2024,hit_brows_cued,55.62599049128368
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-373,1,42,score_brows_cued,96.54252941875713
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-374,1,123,score_brows_cued,96.42780014146389
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-375,1,2024,score_brows_cued,96.57109090385585
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-428,0,42,score_brows_cued,95.59797556131912
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-429,0,123,score_brows_cued,95.6792428088471
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-430,0,2024,score_brows_cued,95.74964845950595
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-373,1,42,matched_brows_cued,55.30903328050713
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-374,1,123,matched_brows_cued,56.25990491283677
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-375,1,2024,matched_brows_cued,54.83359746434231
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-428,0,42,matched_brows_cued,51.347068145800314
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-429,0,123,matched_brows_cued,52.614896988906494
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-430,0,2024,matched_brows_cued,50.71315372424723
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-373,1,42,hitshort_brows_cued,50.24390243902439
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-374,1,123,hitshort_brows_cued,43.90243902439025
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-375,1,2024,hitshort_brows_cued,45.853658536585364
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-428,0,42,hitshort_brows_cued,38.048780487804876
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-429,0,123,hitshort_brows_cued,40.97560975609756
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-430,0,2024,hitshort_brows_cued,45.36585365853659
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-373,1,42,hit_brows_uncued,52.79783393501805
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-374,1,123,hit_brows_uncued,49.72924187725632
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-375,1,2024,hit_brows_uncued,50.90252707581227
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-428,0,42,hit_brows_uncued,46.11913357400722
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-429,0,123,hit_brows_uncued,51.26353790613718
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-430,0,2024,hit_brows_uncued,53.79061371841155
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-373,1,42,score_brows_uncued,95.54605347394214
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-374,1,123,score_brows_uncued,95.45764488903808
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-375,1,2024,score_brows_uncued,95.42151506844456
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-428,0,42,score_brows_uncued,95.1138184558018
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-429,0,123,score_brows_uncued,95.28506079236273
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-430,0,2024,score_brows_uncued,95.48133994903999
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-373,1,42,matched_brows_uncued,49.09747292418773
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-374,1,123,matched_brows_uncued,48.91696750902527
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-375,1,2024,matched_brows_uncued,49.368231046931406
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-428,0,42,matched_brows_uncued,47.74368231046932
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-429,0,123,matched_brows_uncued,49.54873646209386
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-430,0,2024,matched_brows_uncued,49.09747292418773
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-373,1,42,hitshort_brows_uncued,42.465753424657535
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-374,1,123,hitshort_brows_uncued,39.45205479452055
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-375,1,2024,hitshort_brows_uncued,40.821917808219176
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-428,0,42,hitshort_brows_uncued,31.506849315068493
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-429,0,123,hitshort_brows_uncued,40.821917808219176
+MS B+H(+Fc) z790 [confirmatory],multistream_bilstm-430,0,2024,hitshort_brows_uncued,43.56164383561644
+MS face-regions z790 [confirmatory],multistream_bilstm-411,1,42,starts_per_gold,1.1053234115626789
+MS face-regions z790 [confirmatory],multistream_bilstm-412,1,123,starts_per_gold,1.065254722381225
+MS face-regions z790 [confirmatory],multistream_bilstm-413,1,2024,starts_per_gold,1.1648540354894104
+MS face-regions z790 [confirmatory],multistream_bilstm-428,0,42,starts_per_gold,0.9668002289639381
+MS face-regions z790 [confirmatory],multistream_bilstm-429,0,123,starts_per_gold,1.127647395535203
+MS face-regions z790 [confirmatory],multistream_bilstm-430,0,2024,starts_per_gold,1.2953634802518603
+MS face-regions z790 [confirmatory],multistream_bilstm-411,1,42,precision,47.33298808907302
+MS face-regions z790 [confirmatory],multistream_bilstm-412,1,123,precision,47.608812466415905
+MS face-regions z790 [confirmatory],multistream_bilstm-413,1,2024,precision,43.78378378378378
+MS face-regions z790 [confirmatory],multistream_bilstm-428,0,42,precision,48.72705743043221
+MS face-regions z790 [confirmatory],multistream_bilstm-429,0,123,precision,45.98984771573604
+MS face-regions z790 [confirmatory],multistream_bilstm-430,0,2024,precision,41.84710561201944
+MS face-regions z790 [confirmatory],multistream_bilstm-411,1,42,false_per_min,4.628646329548697
+MS face-regions z790 [confirmatory],multistream_bilstm-412,1,123,false_per_min,4.437492793815122
+MS face-regions z790 [confirmatory],multistream_bilstm-413,1,2024,false_per_min,5.206658211409743
+MS face-regions z790 [confirmatory],multistream_bilstm-428,0,42,false_per_min,3.941403855839893
+MS face-regions z790 [confirmatory],multistream_bilstm-429,0,123,false_per_min,4.842556238583887
+MS face-regions z790 [confirmatory],multistream_bilstm-430,0,2024,false_per_min,5.989477452985334
+MS face-regions z790 [confirmatory],multistream_bilstm-411,1,42,hit_all,52.558941920644045
+MS face-regions z790 [confirmatory],multistream_bilstm-412,1,123,hit_all,50.94882116158712
+MS face-regions z790 [confirmatory],multistream_bilstm-413,1,2024,hit_all,51.236342725704425
+MS face-regions z790 [confirmatory],multistream_bilstm-428,0,42,hit_all,47.326049453709025
+MS face-regions z790 [confirmatory],multistream_bilstm-429,0,123,hit_all,52.098907418056356
+MS face-regions z790 [confirmatory],multistream_bilstm-430,0,2024,hit_all,54.456584243818284
+MS face-regions z790 [confirmatory],multistream_bilstm-411,1,42,score_all,95.84590342544297
+MS face-regions z790 [confirmatory],multistream_bilstm-412,1,123,score_all,95.90409068354779
+MS face-regions z790 [confirmatory],multistream_bilstm-413,1,2024,score_all,95.84774990683363
+MS face-regions z790 [confirmatory],multistream_bilstm-428,0,42,score_all,95.28949593342192
+MS face-regions z790 [confirmatory],multistream_bilstm-429,0,123,score_all,95.42809060973
+MS face-regions z790 [confirmatory],multistream_bilstm-430,0,2024,score_all,95.57869628607509
+MS face-regions z790 [confirmatory],multistream_bilstm-411,1,42,score_neg,84.28774887768591
+MS face-regions z790 [confirmatory],multistream_bilstm-412,1,123,score_neg,83.60972599876213
+MS face-regions z790 [confirmatory],multistream_bilstm-413,1,2024,score_neg,82.68916662593612
+MS face-regions z790 [confirmatory],multistream_bilstm-428,0,42,score_neg,84.31955457699004
+MS face-regions z790 [confirmatory],multistream_bilstm-429,0,123,score_neg,84.29118008961096
+MS face-regions z790 [confirmatory],multistream_bilstm-430,0,2024,score_neg,84.63937295968319
+MS face-regions z790 [confirmatory],multistream_bilstm-411,1,42,hit_eyes_cued,56.30252100840336
+MS face-regions z790 [confirmatory],multistream_bilstm-412,1,123,hit_eyes_cued,63.02521008403362
+MS face-regions z790 [confirmatory],multistream_bilstm-413,1,2024,hit_eyes_cued,63.865546218487395
+MS face-regions z790 [confirmatory],multistream_bilstm-428,0,42,hit_eyes_cued,50.42016806722689
+MS face-regions z790 [confirmatory],multistream_bilstm-429,0,123,hit_eyes_cued,59.66386554621849
+MS face-regions z790 [confirmatory],multistream_bilstm-430,0,2024,hit_eyes_cued,58.8235294117647
+MS face-regions z790 [confirmatory],multistream_bilstm-411,1,42,score_eyes_cued,96.64463021613976
+MS face-regions z790 [confirmatory],multistream_bilstm-412,1,123,score_eyes_cued,97.26692583211657
+MS face-regions z790 [confirmatory],multistream_bilstm-413,1,2024,score_eyes_cued,96.80617389066711
+MS face-regions z790 [confirmatory],multistream_bilstm-428,0,42,score_eyes_cued,95.72208038040718
+MS face-regions z790 [confirmatory],multistream_bilstm-429,0,123,score_eyes_cued,95.70124320554784
+MS face-regions z790 [confirmatory],multistream_bilstm-430,0,2024,score_eyes_cued,95.9080801861684
+MS face-regions z790 [confirmatory],multistream_bilstm-411,1,42,matched_eyes_cued,57.983193277310924
+MS face-regions z790 [confirmatory],multistream_bilstm-412,1,123,matched_eyes_cued,60.50420168067227
+MS face-regions z790 [confirmatory],multistream_bilstm-413,1,2024,matched_eyes_cued,61.34453781512605
+MS face-regions z790 [confirmatory],multistream_bilstm-428,0,42,matched_eyes_cued,51.260504201680675
+MS face-regions z790 [confirmatory],multistream_bilstm-429,0,123,matched_eyes_cued,56.30252100840336
+MS face-regions z790 [confirmatory],multistream_bilstm-430,0,2024,matched_eyes_cued,53.78151260504202
+MS face-regions z790 [confirmatory],multistream_bilstm-411,1,42,hitshort_eyes_cued,48.97959183673469
+MS face-regions z790 [confirmatory],multistream_bilstm-412,1,123,hitshort_eyes_cued,55.10204081632653
+MS face-regions z790 [confirmatory],multistream_bilstm-413,1,2024,hitshort_eyes_cued,55.10204081632653
+MS face-regions z790 [confirmatory],multistream_bilstm-428,0,42,hitshort_eyes_cued,34.69387755102041
+MS face-regions z790 [confirmatory],multistream_bilstm-429,0,123,hitshort_eyes_cued,51.02040816326531
+MS face-regions z790 [confirmatory],multistream_bilstm-430,0,2024,hitshort_eyes_cued,44.89795918367347
+MS face-regions z790 [confirmatory],multistream_bilstm-411,1,42,hit_eyes_uncued,52.28395061728395
+MS face-regions z790 [confirmatory],multistream_bilstm-412,1,123,hit_eyes_uncued,50.06172839506173
+MS face-regions z790 [confirmatory],multistream_bilstm-413,1,2024,hit_eyes_uncued,50.30864197530864
+MS face-regions z790 [confirmatory],multistream_bilstm-428,0,42,hit_eyes_uncued,47.098765432098766
+MS face-regions z790 [confirmatory],multistream_bilstm-429,0,123,hit_eyes_uncued,51.54320987654321
+MS face-regions z790 [confirmatory],multistream_bilstm-430,0,2024,hit_eyes_uncued,54.135802469135804
+MS face-regions z790 [confirmatory],multistream_bilstm-411,1,42,score_eyes_uncued,95.78723151921278
+MS face-regions z790 [confirmatory],multistream_bilstm-412,1,123,score_eyes_uncued,95.8039811880665
+MS face-regions z790 [confirmatory],multistream_bilstm-413,1,2024,score_eyes_uncued,95.7773471574039
+MS face-regions z790 [confirmatory],multistream_bilstm-428,0,42,score_eyes_uncued,95.25771966848906
+MS face-regions z790 [confirmatory],multistream_bilstm-429,0,123,score_eyes_uncued,95.40802569682734
+MS face-regions z790 [confirmatory],multistream_bilstm-430,0,2024,score_eyes_uncued,95.5545008020559
+MS face-regions z790 [confirmatory],multistream_bilstm-411,1,42,matched_eyes_uncued,51.111111111111114
+MS face-regions z790 [confirmatory],multistream_bilstm-412,1,123,matched_eyes_uncued,49.5679012345679
+MS face-regions z790 [confirmatory],multistream_bilstm-413,1,2024,matched_eyes_uncued,49.81481481481482
+MS face-regions z790 [confirmatory],multistream_bilstm-428,0,42,matched_eyes_uncued,48.888888888888886
+MS face-regions z790 [confirmatory],multistream_bilstm-429,0,123,matched_eyes_uncued,50.24691358024691
+MS face-regions z790 [confirmatory],multistream_bilstm-430,0,2024,matched_eyes_uncued,49.382716049382715
+MS face-regions z790 [confirmatory],multistream_bilstm-411,1,42,hitshort_eyes_uncued,40.69097888675624
+MS face-regions z790 [confirmatory],multistream_bilstm-412,1,123,hitshort_eyes_uncued,39.34740882917466
+MS face-regions z790 [confirmatory],multistream_bilstm-413,1,2024,hitshort_eyes_uncued,38.57965451055662
+MS face-regions z790 [confirmatory],multistream_bilstm-428,0,42,hitshort_eyes_uncued,33.78119001919386
+MS face-regions z790 [confirmatory],multistream_bilstm-429,0,123,hitshort_eyes_uncued,39.923224568138195
+MS face-regions z790 [confirmatory],multistream_bilstm-430,0,2024,hitshort_eyes_uncued,44.145873320537426
+MS face-regions z790 [confirmatory],multistream_bilstm-411,1,42,hit_brows_cued,57.36925515055467
+MS face-regions z790 [confirmatory],multistream_bilstm-412,1,123,hit_brows_cued,56.25990491283677
+MS face-regions z790 [confirmatory],multistream_bilstm-413,1,2024,hit_brows_cued,56.10142630744849
+MS face-regions z790 [confirmatory],multistream_bilstm-428,0,42,hit_brows_cued,49.44532488114105
+MS face-regions z790 [confirmatory],multistream_bilstm-429,0,123,hit_brows_cued,53.56576862123613
+MS face-regions z790 [confirmatory],multistream_bilstm-430,0,2024,hit_brows_cued,55.62599049128368
+MS face-regions z790 [confirmatory],multistream_bilstm-411,1,42,score_brows_cued,96.67505858572177
+MS face-regions z790 [confirmatory],multistream_bilstm-412,1,123,score_brows_cued,96.71348835544933
+MS face-regions z790 [confirmatory],multistream_bilstm-413,1,2024,score_brows_cued,96.63559570549106
+MS face-regions z790 [confirmatory],multistream_bilstm-428,0,42,score_brows_cued,95.59797556131912
+MS face-regions z790 [confirmatory],multistream_bilstm-429,0,123,score_brows_cued,95.6792428088471
+MS face-regions z790 [confirmatory],multistream_bilstm-430,0,2024,score_brows_cued,95.74964845950595
+MS face-regions z790 [confirmatory],multistream_bilstm-411,1,42,matched_brows_cued,56.41838351822504
+MS face-regions z790 [confirmatory],multistream_bilstm-412,1,123,matched_brows_cued,55.78446909667195
+MS face-regions z790 [confirmatory],multistream_bilstm-413,1,2024,matched_brows_cued,55.62599049128368
+MS face-regions z790 [confirmatory],multistream_bilstm-428,0,42,matched_brows_cued,51.347068145800314
+MS face-regions z790 [confirmatory],multistream_bilstm-429,0,123,matched_brows_cued,52.614896988906494
+MS face-regions z790 [confirmatory],multistream_bilstm-430,0,2024,matched_brows_cued,50.71315372424723
+MS face-regions z790 [confirmatory],multistream_bilstm-411,1,42,hitshort_brows_cued,48.78048780487805
+MS face-regions z790 [confirmatory],multistream_bilstm-412,1,123,hitshort_brows_cued,46.34146341463415
+MS face-regions z790 [confirmatory],multistream_bilstm-413,1,2024,hitshort_brows_cued,45.36585365853659
+MS face-regions z790 [confirmatory],multistream_bilstm-428,0,42,hitshort_brows_cued,38.048780487804876
+MS face-regions z790 [confirmatory],multistream_bilstm-429,0,123,hitshort_brows_cued,40.97560975609756
+MS face-regions z790 [confirmatory],multistream_bilstm-430,0,2024,hitshort_brows_cued,45.36585365853659
+MS face-regions z790 [confirmatory],multistream_bilstm-411,1,42,hit_brows_uncued,49.81949458483754
+MS face-regions z790 [confirmatory],multistream_bilstm-412,1,123,hit_brows_uncued,47.92418772563177
+MS face-regions z790 [confirmatory],multistream_bilstm-413,1,2024,hit_brows_uncued,48.46570397111913
+MS face-regions z790 [confirmatory],multistream_bilstm-428,0,42,hit_brows_uncued,46.11913357400722
+MS face-regions z790 [confirmatory],multistream_bilstm-429,0,123,hit_brows_uncued,51.26353790613718
+MS face-regions z790 [confirmatory],multistream_bilstm-430,0,2024,hit_brows_uncued,53.79061371841155
+MS face-regions z790 [confirmatory],multistream_bilstm-411,1,42,score_brows_uncued,95.37370405167411
+MS face-regions z790 [confirmatory],multistream_bilstm-412,1,123,score_brows_uncued,95.44314309241977
+MS face-regions z790 [confirmatory],multistream_bilstm-413,1,2024,score_brows_uncued,95.3990759908112
+MS face-regions z790 [confirmatory],multistream_bilstm-428,0,42,score_brows_uncued,95.1138184558018
+MS face-regions z790 [confirmatory],multistream_bilstm-429,0,123,score_brows_uncued,95.28506079236273
+MS face-regions z790 [confirmatory],multistream_bilstm-430,0,2024,score_brows_uncued,95.48133994903999
+MS face-regions z790 [confirmatory],multistream_bilstm-411,1,42,matched_brows_uncued,48.82671480144404
+MS face-regions z790 [confirmatory],multistream_bilstm-412,1,123,matched_brows_uncued,47.20216606498195
+MS face-regions z790 [confirmatory],multistream_bilstm-413,1,2024,matched_brows_uncued,47.74368231046932
+MS face-regions z790 [confirmatory],multistream_bilstm-428,0,42,matched_brows_uncued,47.74368231046932
+MS face-regions z790 [confirmatory],multistream_bilstm-429,0,123,matched_brows_uncued,49.54873646209386
+MS face-regions z790 [confirmatory],multistream_bilstm-430,0,2024,matched_brows_uncued,49.09747292418773
+MS face-regions z790 [confirmatory],multistream_bilstm-411,1,42,hitshort_brows_uncued,37.26027397260274
+MS face-regions z790 [confirmatory],multistream_bilstm-412,1,123,hitshort_brows_uncued,37.534246575342465
+MS face-regions z790 [confirmatory],multistream_bilstm-413,1,2024,hitshort_brows_uncued,36.986301369863014
+MS face-regions z790 [confirmatory],multistream_bilstm-428,0,42,hitshort_brows_uncued,31.506849315068493
+MS face-regions z790 [confirmatory],multistream_bilstm-429,0,123,hitshort_brows_uncued,40.821917808219176
+MS face-regions z790 [confirmatory],multistream_bilstm-430,0,2024,hitshort_brows_uncued,43.56164383561644
+Multi-stream B+H(+Fc),multistream_bilstm-115,1,42,starts_per_gold,1.222667429879794
+Multi-stream B+H(+Fc),multistream_bilstm-116,1,123,starts_per_gold,1.1219232970807098
+Multi-stream B+H(+Fc),multistream_bilstm-117,1,2024,starts_per_gold,1.2575844304522037
+Multi-stream B+H(+Fc),multistream_bilstm-112,0,42,starts_per_gold,1.2323983972524328
+Multi-stream B+H(+Fc),multistream_bilstm-113,0,123,starts_per_gold,1.160847166571265
+Multi-stream B+H(+Fc),multistream_bilstm-114,0,2024,starts_per_gold,1.1768746422438465
+Multi-stream B+H(+Fc),multistream_bilstm-115,1,42,precision,46.39513108614232
+Multi-stream B+H(+Fc),multistream_bilstm-116,1,123,precision,49.8469387755102
+Multi-stream B+H(+Fc),multistream_bilstm-117,1,2024,precision,46.97314519799727
+Multi-stream B+H(+Fc),multistream_bilstm-112,0,42,precision,46.1216906641895
+Multi-stream B+H(+Fc),multistream_bilstm-113,0,123,precision,46.400394477317555
+Multi-stream B+H(+Fc),multistream_bilstm-114,0,2024,precision,46.98443579766537
+Multi-stream B+H(+Fc),multistream_bilstm-115,1,42,false_per_min,5.211209486070066
+Multi-stream B+H(+Fc),multistream_bilstm-116,1,123,false_per_min,4.473902991097708
+Multi-stream B+H(+Fc),multistream_bilstm-117,1,2024,false_per_min,5.30223497927653
+Multi-stream B+H(+Fc),multistream_bilstm-112,0,42,false_per_min,5.279478605974915
+Multi-stream B+H(+Fc),multistream_bilstm-113,0,123,false_per_min,4.947235555771321
+Multi-stream B+H(+Fc),multistream_bilstm-114,0,2024,false_per_min,4.96088937975229
+Multi-stream B+H(+Fc),multistream_bilstm-115,1,42,hit_all,56.9867740080506
+Multi-stream B+H(+Fc),multistream_bilstm-116,1,123,hit_all,56.18171362852214
+Multi-stream B+H(+Fc),multistream_bilstm-117,1,2024,hit_all,59.34445083381254
+Multi-stream B+H(+Fc),multistream_bilstm-112,0,42,hit_all,57.101782633697525
+Multi-stream B+H(+Fc),multistream_bilstm-113,0,123,hit_all,54.11155836687752
+Multi-stream B+H(+Fc),multistream_bilstm-114,0,2024,hit_all,55.54916618746406
+Multi-stream B+H(+Fc),multistream_bilstm-115,1,42,score_all,96.41577192744374
+Multi-stream B+H(+Fc),multistream_bilstm-116,1,123,score_all,96.42307094569426
+Multi-stream B+H(+Fc),multistream_bilstm-117,1,2024,score_all,96.56401449566143
+Multi-stream B+H(+Fc),multistream_bilstm-112,0,42,score_all,96.17868463469593
+Multi-stream B+H(+Fc),multistream_bilstm-113,0,123,score_all,95.76977003503578
+Multi-stream B+H(+Fc),multistream_bilstm-114,0,2024,score_all,96.18127873538586
+Multi-stream B+H(+Fc),multistream_bilstm-115,1,42,score_neg,84.34877687102718
+Multi-stream B+H(+Fc),multistream_bilstm-116,1,123,score_neg,84.06693856973622
+Multi-stream B+H(+Fc),multistream_bilstm-117,1,2024,score_neg,84.06368009518438
+Multi-stream B+H(+Fc),multistream_bilstm-112,0,42,score_neg,83.98397666911002
+Multi-stream B+H(+Fc),multistream_bilstm-113,0,123,score_neg,84.43790618046505
+Multi-stream B+H(+Fc),multistream_bilstm-114,0,2024,score_neg,83.44191484963835
+Multi-stream B+H(+Fc),multistream_bilstm-115,1,42,hit_eyes_cued,63.02521008403362
+Multi-stream B+H(+Fc),multistream_bilstm-116,1,123,hit_eyes_cued,67.22689075630252
+Multi-stream B+H(+Fc),multistream_bilstm-117,1,2024,hit_eyes_cued,68.90756302521008
+Multi-stream B+H(+Fc),multistream_bilstm-112,0,42,hit_eyes_cued,60.50420168067227
+Multi-stream B+H(+Fc),multistream_bilstm-113,0,123,hit_eyes_cued,59.66386554621849
+Multi-stream B+H(+Fc),multistream_bilstm-114,0,2024,hit_eyes_cued,57.983193277310924
+Multi-stream B+H(+Fc),multistream_bilstm-115,1,42,score_eyes_cued,97.0644934267643
+Multi-stream B+H(+Fc),multistream_bilstm-116,1,123,score_eyes_cued,97.35051935640006
+Multi-stream B+H(+Fc),multistream_bilstm-117,1,2024,score_eyes_cued,97.26015020313721
+Multi-stream B+H(+Fc),multistream_bilstm-112,0,42,score_eyes_cued,96.45544770431061
+Multi-stream B+H(+Fc),multistream_bilstm-113,0,123,score_eyes_cued,95.77608539611391
+Multi-stream B+H(+Fc),multistream_bilstm-114,0,2024,score_eyes_cued,96.24964470140493
+Multi-stream B+H(+Fc),multistream_bilstm-115,1,42,matched_eyes_cued,56.30252100840336
+Multi-stream B+H(+Fc),multistream_bilstm-116,1,123,matched_eyes_cued,61.34453781512605
+Multi-stream B+H(+Fc),multistream_bilstm-117,1,2024,matched_eyes_cued,60.50420168067227
+Multi-stream B+H(+Fc),multistream_bilstm-112,0,42,matched_eyes_cued,56.30252100840336
+Multi-stream B+H(+Fc),multistream_bilstm-113,0,123,matched_eyes_cued,56.30252100840336
+Multi-stream B+H(+Fc),multistream_bilstm-114,0,2024,matched_eyes_cued,55.46218487394958
+Multi-stream B+H(+Fc),multistream_bilstm-115,1,42,hitshort_eyes_cued,57.142857142857146
+Multi-stream B+H(+Fc),multistream_bilstm-116,1,123,hitshort_eyes_cued,55.10204081632653
+Multi-stream B+H(+Fc),multistream_bilstm-117,1,2024,hitshort_eyes_cued,65.3061224489796
+Multi-stream B+H(+Fc),multistream_bilstm-112,0,42,hitshort_eyes_cued,48.97959183673469
+Multi-stream B+H(+Fc),multistream_bilstm-113,0,123,hitshort_eyes_cued,46.93877551020408
+Multi-stream B+H(+Fc),multistream_bilstm-114,0,2024,hitshort_eyes_cued,48.97959183673469
+Multi-stream B+H(+Fc),multistream_bilstm-115,1,42,hit_eyes_uncued,56.54320987654321
+Multi-stream B+H(+Fc),multistream_bilstm-116,1,123,hit_eyes_uncued,55.370370370370374
+Multi-stream B+H(+Fc),multistream_bilstm-117,1,2024,hit_eyes_uncued,58.641975308641975
+Multi-stream B+H(+Fc),multistream_bilstm-112,0,42,hit_eyes_uncued,56.851851851851855
+Multi-stream B+H(+Fc),multistream_bilstm-113,0,123,hit_eyes_uncued,53.7037037037037
+Multi-stream B+H(+Fc),multistream_bilstm-114,0,2024,hit_eyes_uncued,55.370370370370374
+Multi-stream B+H(+Fc),multistream_bilstm-115,1,42,score_eyes_uncued,96.36811892841959
+Multi-stream B+H(+Fc),multistream_bilstm-116,1,123,score_eyes_uncued,96.3549435624387
+Multi-stream B+H(+Fc),multistream_bilstm-117,1,2024,score_eyes_uncued,96.51287860109993
+Multi-stream B+H(+Fc),multistream_bilstm-112,0,42,score_eyes_uncued,96.15835450797734
+Multi-stream B+H(+Fc),multistream_bilstm-113,0,123,score_eyes_uncued,95.76930612888249
+Multi-stream B+H(+Fc),multistream_bilstm-114,0,2024,score_eyes_uncued,96.17625679096841
+Multi-stream B+H(+Fc),multistream_bilstm-115,1,42,matched_eyes_uncued,52.46913580246913
+Multi-stream B+H(+Fc),multistream_bilstm-116,1,123,matched_eyes_uncued,53.27160493827161
+Multi-stream B+H(+Fc),multistream_bilstm-117,1,2024,matched_eyes_uncued,54.382716049382715
+Multi-stream B+H(+Fc),multistream_bilstm-112,0,42,matched_eyes_uncued,53.45679012345679
+Multi-stream B+H(+Fc),multistream_bilstm-113,0,123,matched_eyes_uncued,50.4320987654321
+Multi-stream B+H(+Fc),multistream_bilstm-114,0,2024,matched_eyes_uncued,53.08641975308642
+Multi-stream B+H(+Fc),multistream_bilstm-115,1,42,hitshort_eyes_uncued,45.10556621880998
+Multi-stream B+H(+Fc),multistream_bilstm-116,1,123,hitshort_eyes_uncued,44.72168905950096
+Multi-stream B+H(+Fc),multistream_bilstm-117,1,2024,hitshort_eyes_uncued,48.56046065259117
+Multi-stream B+H(+Fc),multistream_bilstm-112,0,42,hitshort_eyes_uncued,45.87332053742802
+Multi-stream B+H(+Fc),multistream_bilstm-113,0,123,hitshort_eyes_uncued,41.65067178502879
+Multi-stream B+H(+Fc),multistream_bilstm-114,0,2024,hitshort_eyes_uncued,41.8426103646833
+Multi-stream B+H(+Fc),multistream_bilstm-115,1,42,hit_brows_cued,60.06339144215531
+Multi-stream B+H(+Fc),multistream_bilstm-116,1,123,hit_brows_cued,60.38034865293186
+Multi-stream B+H(+Fc),multistream_bilstm-117,1,2024,hit_brows_cued,64.02535657686212
+Multi-stream B+H(+Fc),multistream_bilstm-112,0,42,hit_brows_cued,59.11251980982567
+Multi-stream B+H(+Fc),multistream_bilstm-113,0,123,hit_brows_cued,56.735340729001585
+Multi-stream B+H(+Fc),multistream_bilstm-114,0,2024,hit_brows_cued,56.89381933438986
+Multi-stream B+H(+Fc),multistream_bilstm-115,1,42,score_brows_cued,96.95541176971577
+Multi-stream B+H(+Fc),multistream_bilstm-116,1,123,score_brows_cued,97.01595961329137
+Multi-stream B+H(+Fc),multistream_bilstm-117,1,2024,score_brows_cued,97.22259476241479
+Multi-stream B+H(+Fc),multistream_bilstm-112,0,42,score_brows_cued,96.3016749112691
+Multi-stream B+H(+Fc),multistream_bilstm-113,0,123,score_brows_cued,96.10647615810967
+Multi-stream B+H(+Fc),multistream_bilstm-114,0,2024,score_brows_cued,96.33484268321858
+Multi-stream B+H(+Fc),multistream_bilstm-115,1,42,matched_brows_cued,56.89381933438986
+Multi-stream B+H(+Fc),multistream_bilstm-116,1,123,matched_brows_cued,58.63708399366086
+Multi-stream B+H(+Fc),multistream_bilstm-117,1,2024,matched_brows_cued,59.90491283676704
+Multi-stream B+H(+Fc),multistream_bilstm-112,0,42,matched_brows_cued,54.51664025356577
+Multi-stream B+H(+Fc),multistream_bilstm-113,0,123,matched_brows_cued,53.09033280507131
+Multi-stream B+H(+Fc),multistream_bilstm-114,0,2024,matched_brows_cued,54.83359746434231
+Multi-stream B+H(+Fc),multistream_bilstm-115,1,42,hitshort_brows_cued,51.21951219512195
+Multi-stream B+H(+Fc),multistream_bilstm-116,1,123,hitshort_brows_cued,52.19512195121951
+Multi-stream B+H(+Fc),multistream_bilstm-117,1,2024,hitshort_brows_cued,55.1219512195122
+Multi-stream B+H(+Fc),multistream_bilstm-112,0,42,hitshort_brows_cued,49.26829268292683
+Multi-stream B+H(+Fc),multistream_bilstm-113,0,123,hitshort_brows_cued,46.34146341463415
+Multi-stream B+H(+Fc),multistream_bilstm-114,0,2024,hitshort_brows_cued,44.390243902439025
+Multi-stream B+H(+Fc),multistream_bilstm-115,1,42,hit_brows_uncued,55.234657039711195
+Multi-stream B+H(+Fc),multistream_bilstm-116,1,123,hit_brows_uncued,53.79061371841155
+Multi-stream B+H(+Fc),multistream_bilstm-117,1,2024,hit_brows_uncued,56.67870036101083
+Multi-stream B+H(+Fc),multistream_bilstm-112,0,42,hit_brows_uncued,55.95667870036101
+Multi-stream B+H(+Fc),multistream_bilstm-113,0,123,hit_brows_uncued,52.6173285198556
+Multi-stream B+H(+Fc),multistream_bilstm-114,0,2024,hit_brows_uncued,54.78339350180505
+Multi-stream B+H(+Fc),multistream_bilstm-115,1,42,score_brows_uncued,96.10844995950727
+Multi-stream B+H(+Fc),multistream_bilstm-116,1,123,score_brows_uncued,96.08542406008611
+Multi-stream B+H(+Fc),multistream_bilstm-117,1,2024,score_brows_uncued,96.18895660006451
+Multi-stream B+H(+Fc),multistream_bilstm-112,0,42,score_brows_uncued,96.10864233819981
+Multi-stream B+H(+Fc),multistream_bilstm-113,0,123,score_brows_uncued,95.5780177212635
+Multi-stream B+H(+Fc),multistream_bilstm-114,0,2024,score_brows_uncued,96.09382489866881
+Multi-stream B+H(+Fc),multistream_bilstm-115,1,42,matched_brows_uncued,50.36101083032491
+Multi-stream B+H(+Fc),multistream_bilstm-116,1,123,matched_brows_uncued,51.08303249097473
+Multi-stream B+H(+Fc),multistream_bilstm-117,1,2024,matched_brows_uncued,51.895306859205775
+Multi-stream B+H(+Fc),multistream_bilstm-112,0,42,matched_brows_uncued,53.15884476534296
+Multi-stream B+H(+Fc),multistream_bilstm-113,0,123,matched_brows_uncued,49.54873646209386
+Multi-stream B+H(+Fc),multistream_bilstm-114,0,2024,matched_brows_uncued,52.34657039711191
+Multi-stream B+H(+Fc),multistream_bilstm-115,1,42,hitshort_brows_uncued,43.28767123287671
+Multi-stream B+H(+Fc),multistream_bilstm-116,1,123,hitshort_brows_uncued,41.917808219178085
+Multi-stream B+H(+Fc),multistream_bilstm-117,1,2024,hitshort_brows_uncued,47.12328767123287
+Multi-stream B+H(+Fc),multistream_bilstm-112,0,42,hitshort_brows_uncued,44.38356164383562
+Multi-stream B+H(+Fc),multistream_bilstm-113,0,123,hitshort_brows_uncued,39.726027397260275
+Multi-stream B+H(+Fc),multistream_bilstm-114,0,2024,hitshort_brows_uncued,41.36986301369863
+EF-joint B+H(+F),bilstm_2023-302,1,42,starts_per_gold,1.0606754436176302
+EF-joint B+H(+F),bilstm_2023-303,1,123,starts_per_gold,1.2232398397252433
+EF-joint B+H(+F),bilstm_2023-299,0,42,starts_per_gold,0.9839725243274184
+EF-joint B+H(+F),bilstm_2023-300,0,123,starts_per_gold,1.1877504293073842
+EF-joint B+H(+F),bilstm_2023-301,0,2024,starts_per_gold,1.2306811677160847
+EF-joint B+H(+F),bilstm_2023-302,1,42,precision,46.62709120345386
+EF-joint B+H(+F),bilstm_2023-303,1,123,precision,43.47215722976135
+EF-joint B+H(+F),bilstm_2023-299,0,42,precision,47.58580570098895
+EF-joint B+H(+F),bilstm_2023-300,0,123,precision,42.40963855421687
+EF-joint B+H(+F),bilstm_2023-301,0,2024,precision,41.95348837209303
+EF-joint B+H(+F),bilstm_2023-302,1,42,false_per_min,4.5012106390596465
+EF-joint B+H(+F),bilstm_2023-303,1,123,false_per_min,5.497939789670428
+EF-joint B+H(+F),bilstm_2023-299,0,42,false_per_min,4.100698468951205
+EF-joint B+H(+F),bilstm_2023-300,0,123,false_per_min,5.438773219086227
+EF-joint B+H(+F),bilstm_2023-301,0,2024,false_per_min,5.679990776083356
+EF-joint B+H(+F),bilstm_2023-302,1,42,hit_all,49.68372627947096
+EF-joint B+H(+F),bilstm_2023-303,1,123,hit_all,53.42150661299598
+EF-joint B+H(+F),bilstm_2023-299,0,42,hit_all,47.03852788959172
+EF-joint B+H(+F),bilstm_2023-300,0,123,hit_all,50.603795284646345
+EF-joint B+H(+F),bilstm_2023-301,0,2024,hit_all,51.868890166762505
+EF-joint B+H(+F),bilstm_2023-302,1,42,score_all,95.79093379972323
+EF-joint B+H(+F),bilstm_2023-303,1,123,score_all,95.80995215491954
+EF-joint B+H(+F),bilstm_2023-299,0,42,score_all,95.49521963772469
+EF-joint B+H(+F),bilstm_2023-300,0,123,score_all,95.39522122764794
+EF-joint B+H(+F),bilstm_2023-301,0,2024,score_all,95.42917851865785
+EF-joint B+H(+F),bilstm_2023-302,1,42,score_neg,84.46894192627255
+EF-joint B+H(+F),bilstm_2023-303,1,123,score_neg,85.30540017802939
+EF-joint B+H(+F),bilstm_2023-299,0,42,score_neg,84.44101611080333
+EF-joint B+H(+F),bilstm_2023-300,0,123,score_neg,83.95050958571743
+EF-joint B+H(+F),bilstm_2023-301,0,2024,score_neg,84.51611391287925
+EF-joint B+H(+F),bilstm_2023-302,1,42,hit_eyes_cued,55.46218487394958
+EF-joint B+H(+F),bilstm_2023-303,1,123,hit_eyes_cued,60.50420168067227
+EF-joint B+H(+F),bilstm_2023-299,0,42,hit_eyes_cued,49.57983193277311
+EF-joint B+H(+F),bilstm_2023-300,0,123,hit_eyes_cued,51.260504201680675
+EF-joint B+H(+F),bilstm_2023-301,0,2024,hit_eyes_cued,54.621848739495796
+EF-joint B+H(+F),bilstm_2023-302,1,42,score_eyes_cued,96.64234434192184
+EF-joint B+H(+F),bilstm_2023-303,1,123,score_eyes_cued,95.97394228862572
+EF-joint B+H(+F),bilstm_2023-299,0,42,score_eyes_cued,96.27804026283484
+EF-joint B+H(+F),bilstm_2023-300,0,123,score_eyes_cued,96.2385944740902
+EF-joint B+H(+F),bilstm_2023-301,0,2024,score_eyes_cued,96.22787709424111
+EF-joint B+H(+F),bilstm_2023-302,1,42,matched_eyes_cued,54.621848739495796
+EF-joint B+H(+F),bilstm_2023-303,1,123,matched_eyes_cued,53.78151260504202
+EF-joint B+H(+F),bilstm_2023-299,0,42,matched_eyes_cued,48.739495798319325
+EF-joint B+H(+F),bilstm_2023-300,0,123,matched_eyes_cued,53.78151260504202
+EF-joint B+H(+F),bilstm_2023-301,0,2024,matched_eyes_cued,52.94117647058823
+EF-joint B+H(+F),bilstm_2023-302,1,42,hitshort_eyes_cued,44.89795918367347
+EF-joint B+H(+F),bilstm_2023-303,1,123,hitshort_eyes_cued,59.183673469387756
+EF-joint B+H(+F),bilstm_2023-299,0,42,hitshort_eyes_cued,32.6530612244898
+EF-joint B+H(+F),bilstm_2023-300,0,123,hitshort_eyes_cued,40.816326530612244
+EF-joint B+H(+F),bilstm_2023-301,0,2024,hitshort_eyes_cued,42.857142857142854
+EF-joint B+H(+F),bilstm_2023-302,1,42,hit_eyes_uncued,49.25925925925926
+EF-joint B+H(+F),bilstm_2023-303,1,123,hit_eyes_uncued,52.901234567901234
+EF-joint B+H(+F),bilstm_2023-299,0,42,hit_eyes_uncued,46.851851851851855
+EF-joint B+H(+F),bilstm_2023-300,0,123,hit_eyes_uncued,50.55555555555556
+EF-joint B+H(+F),bilstm_2023-301,0,2024,hit_eyes_uncued,51.666666666666664
+EF-joint B+H(+F),bilstm_2023-302,1,42,score_eyes_uncued,95.72839191421605
+EF-joint B+H(+F),bilstm_2023-303,1,123,score_eyes_uncued,95.7979059660856
+EF-joint B+H(+F),bilstm_2023-299,0,42,score_eyes_uncued,95.43771614736167
+EF-joint B+H(+F),bilstm_2023-300,0,123,score_eyes_uncued,95.33326973608831
+EF-joint B+H(+F),bilstm_2023-301,0,2024,score_eyes_uncued,95.3705086850193
+EF-joint B+H(+F),bilstm_2023-302,1,42,matched_eyes_uncued,49.69135802469136
+EF-joint B+H(+F),bilstm_2023-303,1,123,matched_eyes_uncued,49.382716049382715
+EF-joint B+H(+F),bilstm_2023-299,0,42,matched_eyes_uncued,48.45679012345679
+EF-joint B+H(+F),bilstm_2023-300,0,123,matched_eyes_uncued,48.45679012345679
+EF-joint B+H(+F),bilstm_2023-301,0,2024,matched_eyes_uncued,49.074074074074076
+EF-joint B+H(+F),bilstm_2023-302,1,42,hitshort_eyes_uncued,35.50863723608445
+EF-joint B+H(+F),bilstm_2023-303,1,123,hitshort_eyes_uncued,41.65067178502879
+EF-joint B+H(+F),bilstm_2023-299,0,42,hitshort_eyes_uncued,32.629558541266796
+EF-joint B+H(+F),bilstm_2023-300,0,123,hitshort_eyes_uncued,39.34740882917466
+EF-joint B+H(+F),bilstm_2023-301,0,2024,hitshort_eyes_uncued,40.11516314779271
+EF-joint B+H(+F),bilstm_2023-302,1,42,hit_brows_cued,52.77337559429477
+EF-joint B+H(+F),bilstm_2023-303,1,123,hit_brows_cued,56.735340729001585
+EF-joint B+H(+F),bilstm_2023-299,0,42,hit_brows_cued,48.811410459587954
+EF-joint B+H(+F),bilstm_2023-300,0,123,hit_brows_cued,52.931854199683045
+EF-joint B+H(+F),bilstm_2023-301,0,2024,hit_brows_cued,53.24881141045959
+EF-joint B+H(+F),bilstm_2023-302,1,42,score_brows_cued,96.43656149691834
+EF-joint B+H(+F),bilstm_2023-303,1,123,score_brows_cued,96.37737325495357
+EF-joint B+H(+F),bilstm_2023-299,0,42,score_brows_cued,95.74158791869012
+EF-joint B+H(+F),bilstm_2023-300,0,123,score_brows_cued,95.60443360365771
+EF-joint B+H(+F),bilstm_2023-301,0,2024,score_brows_cued,95.84737329473911
+EF-joint B+H(+F),bilstm_2023-302,1,42,matched_brows_cued,52.931854199683045
+EF-joint B+H(+F),bilstm_2023-303,1,123,matched_brows_cued,51.98098256735341
+EF-joint B+H(+F),bilstm_2023-299,0,42,matched_brows_cued,50.23771790808241
+EF-joint B+H(+F),bilstm_2023-300,0,123,matched_brows_cued,50.71315372424723
+EF-joint B+H(+F),bilstm_2023-301,0,2024,matched_brows_cued,50.871632329635496
+EF-joint B+H(+F),bilstm_2023-302,1,42,hitshort_brows_cued,42.4390243902439
+EF-joint B+H(+F),bilstm_2023-303,1,123,hitshort_brows_cued,49.75609756097561
+EF-joint B+H(+F),bilstm_2023-299,0,42,hitshort_brows_cued,32.68292682926829
+EF-joint B+H(+F),bilstm_2023-300,0,123,hitshort_brows_cued,40.48780487804878
+EF-joint B+H(+F),bilstm_2023-301,0,2024,hitshort_brows_cued,42.926829268292686
+EF-joint B+H(+F),bilstm_2023-302,1,42,hit_brows_uncued,47.92418772563177
+EF-joint B+H(+F),bilstm_2023-303,1,123,hit_brows_uncued,51.53429602888087
+EF-joint B+H(+F),bilstm_2023-299,0,42,hit_brows_uncued,46.02888086642599
+EF-joint B+H(+F),bilstm_2023-300,0,123,hit_brows_uncued,49.27797833935018
+EF-joint B+H(+F),bilstm_2023-301,0,2024,hit_brows_uncued,51.08303249097473
+EF-joint B+H(+F),bilstm_2023-302,1,42,score_brows_uncued,95.42325232234947
+EF-joint B+H(+F),bilstm_2023-303,1,123,score_brows_uncued,95.4868089111276
+EF-joint B+H(+F),bilstm_2023-299,0,42,score_brows_uncued,95.35491423583915
+EF-joint B+H(+F),bilstm_2023-300,0,123,score_brows_uncued,95.2760759124294
+EF-joint B+H(+F),bilstm_2023-301,0,2024,score_brows_uncued,95.19101885827219
+EF-joint B+H(+F),bilstm_2023-302,1,42,matched_brows_uncued,48.375451263537904
+EF-joint B+H(+F),bilstm_2023-303,1,123,matched_brows_uncued,48.375451263537904
+EF-joint B+H(+F),bilstm_2023-299,0,42,matched_brows_uncued,47.47292418772563
+EF-joint B+H(+F),bilstm_2023-300,0,123,matched_brows_uncued,47.74368231046932
+EF-joint B+H(+F),bilstm_2023-301,0,2024,matched_brows_uncued,48.46570397111913
+EF-joint B+H(+F),bilstm_2023-302,1,42,hitshort_brows_uncued,32.87671232876713
+EF-joint B+H(+F),bilstm_2023-303,1,123,hitshort_brows_uncued,39.45205479452055
+EF-joint B+H(+F),bilstm_2023-299,0,42,hitshort_brows_uncued,32.602739726027394
+EF-joint B+H(+F),bilstm_2023-300,0,123,hitshort_brows_uncued,38.9041095890411
+EF-joint B+H(+F),bilstm_2023-301,0,2024,hitshort_brows_uncued,38.9041095890411
+EF-norm B+H(+F),bilstm_2023-296,1,42,starts_per_gold,1.0240412135088723
+EF-norm B+H(+F),bilstm_2023-297,1,123,starts_per_gold,1.010303377218088
+EF-norm B+H(+F),bilstm_2023-298,1,2024,starts_per_gold,0.9187178019461935
+EF-norm B+H(+F),bilstm_2023-293,0,42,starts_per_gold,1.0074413279908414
+EF-norm B+H(+F),bilstm_2023-294,0,123,starts_per_gold,0.9496279336004579
+EF-norm B+H(+F),bilstm_2023-295,0,2024,starts_per_gold,0.9690898683457355
+EF-norm B+H(+F),bilstm_2023-296,1,42,precision,44.10285075461152
+EF-norm B+H(+F),bilstm_2023-297,1,123,precision,45.212464589235125
+EF-norm B+H(+F),bilstm_2023-298,1,2024,precision,47.414330218068535
+EF-norm B+H(+F),bilstm_2023-293,0,42,precision,44.20454545454545
+EF-norm B+H(+F),bilstm_2023-294,0,123,precision,45.93128390596745
+EF-norm B+H(+F),bilstm_2023-295,0,2024,precision,45.067926757235675
+EF-norm B+H(+F),bilstm_2023-296,1,42,false_per_min,4.551274660323202
+EF-norm B+H(+F),bilstm_2023-297,1,123,false_per_min,4.401082596532537
+EF-norm B+H(+F),bilstm_2023-298,1,2024,false_per_min,3.8412758133127825
+EF-norm B+H(+F),bilstm_2023-293,0,42,false_per_min,4.469351716437385
+EF-norm B+H(+F),bilstm_2023-294,0,123,false_per_min,4.082493370309912
+EF-norm B+H(+F),bilstm_2023-295,0,2024,false_per_min,4.232685434100578
+EF-norm B+H(+F),bilstm_2023-296,1,42,hit_all,45.370902817711325
+EF-norm B+H(+F),bilstm_2023-297,1,123,hit_all,45.88844163312248
+EF-norm B+H(+F),bilstm_2023-298,1,2024,hit_all,43.7607820586544
+EF-norm B+H(+F),bilstm_2023-293,0,42,hit_all,44.738355376653246
+EF-norm B+H(+F),bilstm_2023-294,0,123,hit_all,43.81828637147786
+EF-norm B+H(+F),bilstm_2023-295,0,2024,hit_all,43.87579068430132
+EF-norm B+H(+F),bilstm_2023-296,1,42,score_all,95.26758993152333
+EF-norm B+H(+F),bilstm_2023-297,1,123,score_all,95.11722435896395
+EF-norm B+H(+F),bilstm_2023-298,1,2024,score_all,95.05334827728024
+EF-norm B+H(+F),bilstm_2023-293,0,42,score_all,94.81007397818736
+EF-norm B+H(+F),bilstm_2023-294,0,123,score_all,94.7985588977959
+EF-norm B+H(+F),bilstm_2023-295,0,2024,score_all,94.79097213386997
+EF-norm B+H(+F),bilstm_2023-296,1,42,score_neg,84.43184017201368
+EF-norm B+H(+F),bilstm_2023-297,1,123,score_neg,84.67455458217945
+EF-norm B+H(+F),bilstm_2023-298,1,2024,score_neg,83.93486841367462
+EF-norm B+H(+F),bilstm_2023-293,0,42,score_neg,83.96311064429055
+EF-norm B+H(+F),bilstm_2023-294,0,123,score_neg,84.15739629841808
+EF-norm B+H(+F),bilstm_2023-295,0,2024,score_neg,83.48682350194457
+EF-norm B+H(+F),bilstm_2023-296,1,42,hit_eyes_cued,51.260504201680675
+EF-norm B+H(+F),bilstm_2023-297,1,123,hit_eyes_cued,52.94117647058823
+EF-norm B+H(+F),bilstm_2023-298,1,2024,hit_eyes_cued,47.89915966386555
+EF-norm B+H(+F),bilstm_2023-293,0,42,hit_eyes_cued,50.42016806722689
+EF-norm B+H(+F),bilstm_2023-294,0,123,hit_eyes_cued,49.57983193277311
+EF-norm B+H(+F),bilstm_2023-295,0,2024,hit_eyes_cued,47.89915966386555
+EF-norm B+H(+F),bilstm_2023-296,1,42,score_eyes_cued,96.22396381875507
+EF-norm B+H(+F),bilstm_2023-297,1,123,score_eyes_cued,96.05884498019651
+EF-norm B+H(+F),bilstm_2023-298,1,2024,score_eyes_cued,96.18455986104524
+EF-norm B+H(+F),bilstm_2023-293,0,42,score_eyes_cued,95.39981981862526
+EF-norm B+H(+F),bilstm_2023-294,0,123,score_eyes_cued,95.63100185921193
+EF-norm B+H(+F),bilstm_2023-295,0,2024,score_eyes_cued,95.3860403870963
+EF-norm B+H(+F),bilstm_2023-296,1,42,matched_eyes_cued,53.78151260504202
+EF-norm B+H(+F),bilstm_2023-297,1,123,matched_eyes_cued,52.10084033613445
+EF-norm B+H(+F),bilstm_2023-298,1,2024,matched_eyes_cued,52.10084033613445
+EF-norm B+H(+F),bilstm_2023-293,0,42,matched_eyes_cued,52.94117647058823
+EF-norm B+H(+F),bilstm_2023-294,0,123,matched_eyes_cued,52.10084033613445
+EF-norm B+H(+F),bilstm_2023-295,0,2024,matched_eyes_cued,54.621848739495796
+EF-norm B+H(+F),bilstm_2023-296,1,42,hitshort_eyes_cued,44.89795918367347
+EF-norm B+H(+F),bilstm_2023-297,1,123,hitshort_eyes_cued,42.857142857142854
+EF-norm B+H(+F),bilstm_2023-298,1,2024,hitshort_eyes_cued,38.775510204081634
+EF-norm B+H(+F),bilstm_2023-293,0,42,hitshort_eyes_cued,34.69387755102041
+EF-norm B+H(+F),bilstm_2023-294,0,123,hitshort_eyes_cued,40.816326530612244
+EF-norm B+H(+F),bilstm_2023-295,0,2024,hitshort_eyes_cued,32.6530612244898
+EF-norm B+H(+F),bilstm_2023-296,1,42,hit_eyes_uncued,44.93827160493827
+EF-norm B+H(+F),bilstm_2023-297,1,123,hit_eyes_uncued,45.370370370370374
+EF-norm B+H(+F),bilstm_2023-298,1,2024,hit_eyes_uncued,43.45679012345679
+EF-norm B+H(+F),bilstm_2023-293,0,42,hit_eyes_uncued,44.32098765432099
+EF-norm B+H(+F),bilstm_2023-294,0,123,hit_eyes_uncued,43.39506172839506
+EF-norm B+H(+F),bilstm_2023-295,0,2024,hit_eyes_uncued,43.58024691358025
+EF-norm B+H(+F),bilstm_2023-296,1,42,score_eyes_uncued,95.19733777560938
+EF-norm B+H(+F),bilstm_2023-297,1,123,score_eyes_uncued,95.04805593061414
+EF-norm B+H(+F),bilstm_2023-298,1,2024,score_eyes_uncued,94.97025310538643
+EF-norm B+H(+F),bilstm_2023-293,0,42,score_eyes_uncued,94.7667531417601
+EF-norm B+H(+F),bilstm_2023-294,0,123,score_eyes_uncued,94.7374103098894
+EF-norm B+H(+F),bilstm_2023-295,0,2024,score_eyes_uncued,94.74726033008359
+EF-norm B+H(+F),bilstm_2023-296,1,42,matched_eyes_uncued,46.851851851851855
+EF-norm B+H(+F),bilstm_2023-297,1,123,matched_eyes_uncued,47.28395061728395
+EF-norm B+H(+F),bilstm_2023-298,1,2024,matched_eyes_uncued,47.71604938271605
+EF-norm B+H(+F),bilstm_2023-293,0,42,matched_eyes_uncued,46.17283950617284
+EF-norm B+H(+F),bilstm_2023-294,0,123,matched_eyes_uncued,45.30864197530864
+EF-norm B+H(+F),bilstm_2023-295,0,2024,matched_eyes_uncued,46.41975308641975
+EF-norm B+H(+F),bilstm_2023-296,1,42,hitshort_eyes_uncued,34.74088291746641
+EF-norm B+H(+F),bilstm_2023-297,1,123,hitshort_eyes_uncued,34.16506717850288
+EF-norm B+H(+F),bilstm_2023-298,1,2024,hitshort_eyes_uncued,33.20537428023032
+EF-norm B+H(+F),bilstm_2023-293,0,42,hitshort_eyes_uncued,33.97312859884837
+EF-norm B+H(+F),bilstm_2023-294,0,123,hitshort_eyes_uncued,31.28598848368522
+EF-norm B+H(+F),bilstm_2023-295,0,2024,hitshort_eyes_uncued,30.9021113243762
+EF-norm B+H(+F),bilstm_2023-296,1,42,hit_brows_cued,47.70206022187005
+EF-norm B+H(+F),bilstm_2023-297,1,123,hit_brows_cued,48.811410459587954
+EF-norm B+H(+F),bilstm_2023-298,1,2024,hit_brows_cued,48.652931854199686
+EF-norm B+H(+F),bilstm_2023-293,0,42,hit_brows_cued,45.64183835182251
+EF-norm B+H(+F),bilstm_2023-294,0,123,hit_brows_cued,45.64183835182251
+EF-norm B+H(+F),bilstm_2023-295,0,2024,hit_brows_cued,46.275752773375594
+EF-norm B+H(+F),bilstm_2023-296,1,42,score_brows_cued,95.6161789436534
+EF-norm B+H(+F),bilstm_2023-297,1,123,score_brows_cued,95.41431027310578
+EF-norm B+H(+F),bilstm_2023-298,1,2024,score_brows_cued,95.61166146635873
+EF-norm B+H(+F),bilstm_2023-293,0,42,score_brows_cued,95.07338273294525
+EF-norm B+H(+F),bilstm_2023-294,0,123,score_brows_cued,95.08172990981242
+EF-norm B+H(+F),bilstm_2023-295,0,2024,score_brows_cued,94.97251770420942
+EF-norm B+H(+F),bilstm_2023-296,1,42,matched_brows_cued,50.396196513470684
+EF-norm B+H(+F),bilstm_2023-297,1,123,matched_brows_cued,50.396196513470684
+EF-norm B+H(+F),bilstm_2023-298,1,2024,matched_brows_cued,52.13946117274168
+EF-norm B+H(+F),bilstm_2023-293,0,42,matched_brows_cued,48.17749603803487
+EF-norm B+H(+F),bilstm_2023-294,0,123,matched_brows_cued,47.543581616481774
+EF-norm B+H(+F),bilstm_2023-295,0,2024,matched_brows_cued,48.49445324881141
+EF-norm B+H(+F),bilstm_2023-296,1,42,hitshort_brows_cued,37.5609756097561
+EF-norm B+H(+F),bilstm_2023-297,1,123,hitshort_brows_cued,38.048780487804876
+EF-norm B+H(+F),bilstm_2023-298,1,2024,hitshort_brows_cued,39.51219512195122
+EF-norm B+H(+F),bilstm_2023-293,0,42,hitshort_brows_cued,35.1219512195122
+EF-norm B+H(+F),bilstm_2023-294,0,123,hitshort_brows_cued,35.1219512195122
+EF-norm B+H(+F),bilstm_2023-295,0,2024,hitshort_brows_cued,32.68292682926829
+EF-norm B+H(+F),bilstm_2023-296,1,42,hit_brows_uncued,44.04332129963899
+EF-norm B+H(+F),bilstm_2023-297,1,123,hit_brows_uncued,44.22382671480145
+EF-norm B+H(+F),bilstm_2023-298,1,2024,hit_brows_uncued,40.974729241877256
+EF-norm B+H(+F),bilstm_2023-293,0,42,hit_brows_uncued,44.22382671480145
+EF-norm B+H(+F),bilstm_2023-294,0,123,hit_brows_uncued,42.7797833935018
+EF-norm B+H(+F),bilstm_2023-295,0,2024,hit_brows_uncued,42.50902527075812
+EF-norm B+H(+F),bilstm_2023-296,1,42,score_brows_uncued,95.06907037678138
+EF-norm B+H(+F),bilstm_2023-297,1,123,score_brows_uncued,94.94803553962863
+EF-norm B+H(+F),bilstm_2023-298,1,2024,score_brows_uncued,94.7353919394567
+EF-norm B+H(+F),bilstm_2023-293,0,42,score_brows_uncued,94.66012106821242
+EF-norm B+H(+F),bilstm_2023-294,0,123,score_brows_uncued,94.6372945398695
+EF-norm B+H(+F),bilstm_2023-295,0,2024,score_brows_uncued,94.68758291466041
+EF-norm B+H(+F),bilstm_2023-296,1,42,matched_brows_uncued,45.57761732851986
+EF-norm B+H(+F),bilstm_2023-297,1,123,matched_brows_uncued,46.02888086642599
+EF-norm B+H(+F),bilstm_2023-298,1,2024,matched_brows_uncued,45.667870036101085
+EF-norm B+H(+F),bilstm_2023-293,0,42,matched_brows_uncued,45.75812274368231
+EF-norm B+H(+F),bilstm_2023-294,0,123,matched_brows_uncued,44.765342960288805
+EF-norm B+H(+F),bilstm_2023-295,0,2024,matched_brows_uncued,46.11913357400722
+EF-norm B+H(+F),bilstm_2023-296,1,42,hitshort_brows_uncued,34.52054794520548
+EF-norm B+H(+F),bilstm_2023-297,1,123,hitshort_brows_uncued,33.15068493150685
+EF-norm B+H(+F),bilstm_2023-298,1,2024,hitshort_brows_uncued,30.410958904109588
+EF-norm B+H(+F),bilstm_2023-293,0,42,hitshort_brows_uncued,33.42465753424658
+EF-norm B+H(+F),bilstm_2023-294,0,123,hitshort_brows_uncued,30.410958904109588
+EF-norm B+H(+F),bilstm_2023-295,0,2024,hitshort_brows_uncued,30.136986301369863
