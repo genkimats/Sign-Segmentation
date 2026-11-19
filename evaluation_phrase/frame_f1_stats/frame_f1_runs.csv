@@ -1,0 +1,91 @@
+model,run,metric,split,value,peak_settings_tuned_on_val
+Modality-specific: body + hand keypoints,multistream_bilstm-130,frame,val,0.6666,d=10 sigma=5 t=0.1
+Modality-specific: body + hand keypoints,multistream_bilstm-131,frame,val,0.6678,d=10 sigma=5 t=0.1
+Modality-specific: body + hand keypoints,multistream_bilstm-132,frame,val,0.6693,d=10 sigma=5 t=0.1
+Modality-specific: body + hand keypoints,multistream_bilstm-130,frame,test,0.6743,d=10 sigma=5 t=0.1
+Modality-specific: body + hand keypoints,multistream_bilstm-131,frame,test,0.676,d=10 sigma=5 t=0.1
+Modality-specific: body + hand keypoints,multistream_bilstm-132,frame,test,0.6783,d=10 sigma=5 t=0.1
+Modality-specific: body + hand keypoints,multistream_bilstm-130,bnd_thr,val,0.3003,d=10 sigma=5 t=0.1
+Modality-specific: body + hand keypoints,multistream_bilstm-131,bnd_thr,val,0.3119,d=10 sigma=5 t=0.1
+Modality-specific: body + hand keypoints,multistream_bilstm-132,bnd_thr,val,0.3162,d=10 sigma=5 t=0.1
+Modality-specific: body + hand keypoints,multistream_bilstm-130,bnd_thr,test,0.37,d=10 sigma=5 t=0.1
+Modality-specific: body + hand keypoints,multistream_bilstm-131,bnd_thr,test,0.3741,d=10 sigma=5 t=0.1
+Modality-specific: body + hand keypoints,multistream_bilstm-132,bnd_thr,test,0.3873,d=10 sigma=5 t=0.1
+Modality-specific: body + hand keypoints,multistream_bilstm-130,bnd_peak,val,0.466,d=10 sigma=5 t=0.1
+Modality-specific: body + hand keypoints,multistream_bilstm-131,bnd_peak,val,0.4573,d=10 sigma=5 t=0.1
+Modality-specific: body + hand keypoints,multistream_bilstm-132,bnd_peak,val,0.4545,d=10 sigma=5 t=0.1
+Modality-specific: body + hand keypoints,multistream_bilstm-130,bnd_peak,test,0.4649,d=10 sigma=5 t=0.1
+Modality-specific: body + hand keypoints,multistream_bilstm-131,bnd_peak,test,0.473,d=10 sigma=5 t=0.1
+Modality-specific: body + hand keypoints,multistream_bilstm-132,bnd_peak,test,0.4699,d=10 sigma=5 t=0.1
+Modality-specific: + hand shape (HaMeR),multistream_bilstm-112,frame,val,0.6735,d=10 sigma=5 t=0.1
+Modality-specific: + hand shape (HaMeR),multistream_bilstm-113,frame,val,0.6733,d=10 sigma=5 t=0.1
+Modality-specific: + hand shape (HaMeR),multistream_bilstm-114,frame,val,0.6746,d=10 sigma=5 t=0.1
+Modality-specific: + hand shape (HaMeR),multistream_bilstm-112,frame,test,0.6884,d=10 sigma=5 t=0.1
+Modality-specific: + hand shape (HaMeR),multistream_bilstm-113,frame,test,0.682,d=10 sigma=5 t=0.1
+Modality-specific: + hand shape (HaMeR),multistream_bilstm-114,frame,test,0.6875,d=10 sigma=5 t=0.1
+Modality-specific: + hand shape (HaMeR),multistream_bilstm-112,bnd_thr,val,0.3808,d=10 sigma=5 t=0.1
+Modality-specific: + hand shape (HaMeR),multistream_bilstm-113,bnd_thr,val,0.3447,d=10 sigma=5 t=0.1
+Modality-specific: + hand shape (HaMeR),multistream_bilstm-114,bnd_thr,val,0.3417,d=10 sigma=5 t=0.1
+Modality-specific: + hand shape (HaMeR),multistream_bilstm-112,bnd_thr,test,0.4572,d=10 sigma=5 t=0.1
+Modality-specific: + hand shape (HaMeR),multistream_bilstm-113,bnd_thr,test,0.4199,d=10 sigma=5 t=0.1
+Modality-specific: + hand shape (HaMeR),multistream_bilstm-114,bnd_thr,test,0.4271,d=10 sigma=5 t=0.1
+Modality-specific: + hand shape (HaMeR),multistream_bilstm-112,bnd_peak,val,0.4842,d=10 sigma=5 t=0.1
+Modality-specific: + hand shape (HaMeR),multistream_bilstm-113,bnd_peak,val,0.4781,d=10 sigma=5 t=0.1
+Modality-specific: + hand shape (HaMeR),multistream_bilstm-114,bnd_peak,val,0.4854,d=10 sigma=5 t=0.1
+Modality-specific: + hand shape (HaMeR),multistream_bilstm-112,bnd_peak,test,0.5149,d=10 sigma=5 t=0.1
+Modality-specific: + hand shape (HaMeR),multistream_bilstm-113,bnd_peak,test,0.5043,d=10 sigma=5 t=0.1
+Modality-specific: + hand shape (HaMeR),multistream_bilstm-114,bnd_peak,test,0.5165,d=10 sigma=5 t=0.1
+Modality-specific: + face (proposed),multistream_bilstm-115,frame,val,0.6723,d=10 sigma=2 t=0.2
+Modality-specific: + face (proposed),multistream_bilstm-116,frame,val,0.6744,d=25 sigma=5 t=0.1
+Modality-specific: + face (proposed),multistream_bilstm-117,frame,val,0.672,d=10 sigma=5 t=0.15
+Modality-specific: + face (proposed),multistream_bilstm-115,frame,test,0.6875,d=10 sigma=2 t=0.2
+Modality-specific: + face (proposed),multistream_bilstm-116,frame,test,0.6913,d=25 sigma=5 t=0.1
+Modality-specific: + face (proposed),multistream_bilstm-117,frame,test,0.6895,d=10 sigma=5 t=0.15
+Modality-specific: + face (proposed),multistream_bilstm-115,bnd_thr,val,0.372,d=10 sigma=2 t=0.2
+Modality-specific: + face (proposed),multistream_bilstm-116,bnd_thr,val,0.3575,d=25 sigma=5 t=0.1
+Modality-specific: + face (proposed),multistream_bilstm-117,bnd_thr,val,0.3734,d=10 sigma=5 t=0.15
+Modality-specific: + face (proposed),multistream_bilstm-115,bnd_thr,test,0.4252,d=10 sigma=2 t=0.2
+Modality-specific: + face (proposed),multistream_bilstm-116,bnd_thr,test,0.4187,d=25 sigma=5 t=0.1
+Modality-specific: + face (proposed),multistream_bilstm-117,bnd_thr,test,0.4614,d=10 sigma=5 t=0.15
+Modality-specific: + face (proposed),multistream_bilstm-115,bnd_peak,val,0.4947,d=10 sigma=2 t=0.2
+Modality-specific: + face (proposed),multistream_bilstm-116,bnd_peak,val,0.4911,d=25 sigma=5 t=0.1
+Modality-specific: + face (proposed),multistream_bilstm-117,bnd_peak,val,0.4848,d=10 sigma=5 t=0.15
+Modality-specific: + face (proposed),multistream_bilstm-115,bnd_peak,test,0.5173,d=10 sigma=2 t=0.2
+Modality-specific: + face (proposed),multistream_bilstm-116,bnd_peak,test,0.5213,d=25 sigma=5 t=0.1
+Modality-specific: + face (proposed),multistream_bilstm-117,bnd_peak,test,0.5493,d=10 sigma=5 t=0.15
+Early fusion (same inputs),bilstm_2023-302,frame,val,0.6688,d=25 sigma=5 t=0.1
+Early fusion (same inputs),bilstm_2023-303,frame,val,0.6708,d=10 sigma=2 t=0.2
+Early fusion (same inputs),bilstm_2023-304,frame,val,0.6692,d=50 sigma=2 t=0.2
+Early fusion (same inputs),bilstm_2023-302,frame,test,0.6758,d=25 sigma=5 t=0.1
+Early fusion (same inputs),bilstm_2023-303,frame,test,0.6757,d=10 sigma=2 t=0.2
+Early fusion (same inputs),bilstm_2023-304,frame,test,0.6766,d=50 sigma=2 t=0.2
+Early fusion (same inputs),bilstm_2023-302,bnd_thr,val,0.3339,d=25 sigma=5 t=0.1
+Early fusion (same inputs),bilstm_2023-303,bnd_thr,val,0.3203,d=10 sigma=2 t=0.2
+Early fusion (same inputs),bilstm_2023-304,bnd_thr,val,0.3283,d=50 sigma=2 t=0.2
+Early fusion (same inputs),bilstm_2023-302,bnd_thr,test,0.3877,d=25 sigma=5 t=0.1
+Early fusion (same inputs),bilstm_2023-303,bnd_thr,test,0.3808,d=10 sigma=2 t=0.2
+Early fusion (same inputs),bilstm_2023-304,bnd_thr,test,0.3864,d=50 sigma=2 t=0.2
+Early fusion (same inputs),bilstm_2023-302,bnd_peak,val,0.4655,d=25 sigma=5 t=0.1
+Early fusion (same inputs),bilstm_2023-303,bnd_peak,val,0.466,d=10 sigma=2 t=0.2
+Early fusion (same inputs),bilstm_2023-304,bnd_peak,val,0.4698,d=50 sigma=2 t=0.2
+Early fusion (same inputs),bilstm_2023-302,bnd_peak,test,0.4803,d=25 sigma=5 t=0.1
+Early fusion (same inputs),bilstm_2023-303,bnd_peak,test,0.4891,d=10 sigma=2 t=0.2
+Early fusion (same inputs),bilstm_2023-304,bnd_peak,test,0.4983,d=50 sigma=2 t=0.2
+"Moryossef et al. (2023), re-implemented",bilstm_2023-244,frame,val,0.6598,d=10 sigma=2 t=0.15
+"Moryossef et al. (2023), re-implemented",bilstm_2023-245,frame,val,0.6599,d=25 sigma=5 t=0.1
+"Moryossef et al. (2023), re-implemented",bilstm_2023-246,frame,val,0.6586,d=25 sigma=5 t=0.1
+"Moryossef et al. (2023), re-implemented",bilstm_2023-244,frame,test,0.6658,d=10 sigma=2 t=0.15
+"Moryossef et al. (2023), re-implemented",bilstm_2023-245,frame,test,0.6681,d=25 sigma=5 t=0.1
+"Moryossef et al. (2023), re-implemented",bilstm_2023-246,frame,test,0.6673,d=25 sigma=5 t=0.1
+"Moryossef et al. (2023), re-implemented",bilstm_2023-244,bnd_thr,val,0.2245,d=10 sigma=2 t=0.15
+"Moryossef et al. (2023), re-implemented",bilstm_2023-245,bnd_thr,val,0.2242,d=25 sigma=5 t=0.1
+"Moryossef et al. (2023), re-implemented",bilstm_2023-246,bnd_thr,val,0.2857,d=25 sigma=5 t=0.1
+"Moryossef et al. (2023), re-implemented",bilstm_2023-244,bnd_thr,test,0.2986,d=10 sigma=2 t=0.15
+"Moryossef et al. (2023), re-implemented",bilstm_2023-245,bnd_thr,test,0.307,d=25 sigma=5 t=0.1
+"Moryossef et al. (2023), re-implemented",bilstm_2023-246,bnd_thr,test,0.3459,d=25 sigma=5 t=0.1
+"Moryossef et al. (2023), re-implemented",bilstm_2023-244,bnd_peak,val,0.4302,d=10 sigma=2 t=0.15
+"Moryossef et al. (2023), re-implemented",bilstm_2023-245,bnd_peak,val,0.4271,d=25 sigma=5 t=0.1
+"Moryossef et al. (2023), re-implemented",bilstm_2023-246,bnd_peak,val,0.4268,d=25 sigma=5 t=0.1
+"Moryossef et al. (2023), re-implemented",bilstm_2023-244,bnd_peak,test,0.4501,d=10 sigma=2 t=0.15
+"Moryossef et al. (2023), re-implemented",bilstm_2023-245,bnd_peak,test,0.4524,d=25 sigma=5 t=0.1
+"Moryossef et al. (2023), re-implemented",bilstm_2023-246,bnd_peak,test,0.4507,d=25 sigma=5 t=0.1
