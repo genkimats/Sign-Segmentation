@@ -100,16 +100,16 @@ def draw_skeleton(ax, body, face, lw=2.0, ms=10, dx=0.0):
         if valid(h):
             for i, j in HAND_EDGES:
                 seg(h[i], h[j], c, lw * 0.8)
-    if face is not None and valid(face):
-        if len(face) == len(_FACE83):
-            pos = {raw: k for k, raw in enumerate(_FACE83)}
-            for chain, closed in ((_LIPS, True), (_LEYE, True), (_REYE, True), (_LBROW, False), (_RBROW, False)):
-                idx = [pos[r] for r in chain] + ([pos[chain[0]]] if closed else [])
-                ax.plot(face[idx, 0] + dx, face[idx, 1], color=FACE_C, lw=lw * 0.6)
-        else:
-            ax.scatter(face[:, 0] + dx, face[:, 1], s=ms, color=FACE_C, zorder=3, linewidths=0)
-    elif valid(pose[:11]):                    # no face file: the pose's own face points as a stand-in
-        ax.scatter(pose[:11, 0] + dx, pose[:11, 1], s=ms, color=MUTED, zorder=3, linewidths=0)
+    # if face is not None and valid(face):
+    #     if len(face) == len(_FACE83):
+    #         pos = {raw: k for k, raw in enumerate(_FACE83)}
+    #         for chain, closed in ((_LIPS, True), (_LEYE, True), (_REYE, True), (_LBROW, False), (_RBROW, False)):
+    #             idx = [pos[r] for r in chain] + ([pos[chain[0]]] if closed else [])
+    #             ax.plot(face[idx, 0] + dx, face[idx, 1], color=FACE_C, lw=lw * 0.6)
+    #     else:
+    #         ax.scatter(face[:, 0] + dx, face[:, 1], s=ms, color=FACE_C, zorder=3, linewidths=0)
+    # elif valid(pose[:11]):                    # no face file: the pose's own face points as a stand-in
+    #     ax.scatter(pose[:11, 0] + dx, pose[:11, 1], s=ms, color=MUTED, zorder=3, linewidths=0)
 
 
 def finish(ax):
