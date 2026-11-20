@@ -3,10 +3,10 @@ plot_decoding_example.py -- slide 10 figure from REAL predictions: P(B) of one t
 the annotated phrase starts, and the starts of three decoders (argmax, threshold, peak picking + threshold).
 
 Decoders are tuned on validation exactly as in decoder_ablation.py (threshold: IoU + %-score; peaks: boundary F1).
-By default the script picks the 10-s stretch of the test set with the most annotated phrase starts where argmax
-also over-segments; pass --video / --start to choose one yourself.
+By default the script picks a random test video and, in it, a random 10-s stretch with at least 3 annotated phrase
+starts where argmax over-segments (new each run; the seed is printed). Pass --video / --start, or --seed, to fix it.
 
-  python plot_decoding_example.py                       # run multistream_bilstm-115, automatic stretch
+  python plot_decoding_example.py                       # run multistream_bilstm-115, random video and stretch
   python plot_decoding_example.py --video 1209077_B --start 12000 --seconds 10
 Output: evaluation_phrase/figures/decoding_example.png
 """
@@ -58,7 +58,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--run", default="multistream_bilstm-115")
     ap.add_argument("--pred-root", default=PRED_ROOT)
-    ap.add_argument("--video", default=None)
+    ap.add_argument("--video", default=None, help="default: a random test video")
+    ap.add_argument("--seed", type=int, default=None, help="random seed (default: new each run, printed)")
     ap.add_argument("--start", type=int, default=None, help="first frame of the stretch")
     ap.add_argument("--seconds", type=float, default=10.0)
     ap.add_argument("--out", default=os.path.join("evaluation_phrase", "figures", "decoding_example.png"))
@@ -76,17 +77,27 @@ def main():
                   "thr": np.array([s for s, _ in decode_threshold_2023(p, th["b"], th["o"])]),
                   "peak": np.asarray(thr_peaks(p[B_TAG], pk))}
 
-    if a.video is None or a.start is None:          # best stretch: many gold starts, argmax over-segments
-        best = None
+    seed = a.seed if a.seed is not None else int(np.random.SeedSequence().entropy % 100000)
+    rng = np.random.default_rng(seed)
+    if a.start is None:                              # random stretch with >= 3 annotated starts where argmax over-segments
+        good = []
         for v, d in dec.items():
+            if a.video is not None and v != a.video:
+                continue
             T = probs[v].shape[1]
             for s0 in range(0, max(1, T - L), FPS):
                 inwin = lambda x: int(((x >= s0) & (x < s0 + L)).sum())
                 g, am = inwin(d["gold"]), inwin(d["argmax"])
-                score = g + 0.2 * min(am - g, 10)
-                if g >= 3 and (best is None or score > best[0]):
-                    best = (score, v, s0)
-        _, a.video, a.start = best
+                if g >= 3 and am > g:
+                    good.append((v, s0))
+        if not good:
+            raise SystemExit("no 10-s stretch with >= 3 annotated starts found -- pass --video / --start")
+        vids = sorted({v for v, _ in good})
+        pick_v = a.video or str(rng.choice(vids))     # first a random video, then a random stretch in it
+        cands = [s0 for v, s0 in good if v == pick_v]
+        a.video, a.start = pick_v, int(rng.choice(cands))
+    elif a.video is None:
+        raise SystemExit("--start needs --video")
     v, s0 = a.video, a.start
     p, d = probs[v], dec[v]
     t = np.arange(s0, min(s0 + L, p.shape[1]))
@@ -117,6 +128,7 @@ def main():
     os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
     fig.savefig(a.out, dpi=200, bbox_inches="tight", facecolor="white")
     print(f"wrote {a.out}  (video {v}, frames {t[0]}-{t[-1]})")
+    print(f"  to redraw exactly this: --video {v} --start {s0}   (or --seed {seed})")
 
 
 if __name__ == "__main__":

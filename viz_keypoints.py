@@ -14,7 +14,8 @@ Data (defaults follow the repo layout; override with the flags):
                 lip / eye / brow contours are drawn as lines, with any other count (e.g. the compact 31) as dots.
   labels        processed_data/BIO_tags_phrase_v2/<video>.npy  (0 = O, 1 = I, 2 = B)
 
-  python viz_keypoints.py --video 1209077_B                    # picks a stretch with 3 phrase starts
+  python viz_keypoints.py                                      # random test video, random stretch with 3 phrase starts
+  python viz_keypoints.py --video 1209077_B                    # that video, random stretch
   python viz_keypoints.py --video 1209077_B --start 12000 --seconds 8 --frames 7
   python viz_keypoints.py --selftest
 Output: evaluation_phrase/figures/
@@ -135,16 +136,41 @@ def phrases_from_labels(lab):
     return out
 
 
-def pick_stretch(lab, L):
-    """First stretch of L frames with 3 phrase starts, at least one O frame, and starts away from the edges."""
+def pick_stretch(lab, L, rng):
+    """A random stretch of L frames with >= 3 phrase starts away from the edges and at least one O frame."""
     starts = np.where(lab == 2)[0]
-    for s in starts:
-        a = max(0, s - L // 8)
+    good = []
+    for st in starts:
+        a = max(0, st - L // 8)
         b = a + L
         inside = starts[(starts >= a + L // 10) & (starts < b - L // 10)]
         if b <= len(lab) and len(inside) >= 3 and np.any(lab[a:b] == 0):
-            return a
+            good.append(a)
+    if good:
+        return int(rng.choice(good))
     return max(0, (starts[0] if len(starts) else 0) - L // 8)
+
+
+def split_videos(split_file, split):
+    """Video ids of one split from dataset_splits.json, or None if the file is missing."""
+    import json
+    if not split_file or not os.path.exists(split_file):
+        return None
+    with open(split_file) as f:
+        d = json.load(f)
+    return {v.replace(".npy", "").replace(".pt", "") for v in d.get(split, [])} or None
+
+
+def random_video(rng, labels_dir, kin_dir, split_file, split):
+    vids = sorted(f[:-4] for f in os.listdir(labels_dir) if f.endswith(".npy"))
+    vids = [v for v in vids if os.path.exists(os.path.join(kin_dir, f"{v}.pt"))
+            or os.path.exists(os.path.join(kin_dir, f"{v}.npy"))]
+    keep = split_videos(split_file, split)
+    if keep:
+        vids = [v for v in vids if v in keep] or vids
+    if not vids:
+        raise SystemExit(f"no video has both a label file in {labels_dir} and keypoints in {kin_dir}")
+    return str(rng.choice(vids))
 
 
 # ----------------------------------------------------------------------------- figures
@@ -219,8 +245,14 @@ def fig_bio(lab, a, L, out):
     plt.close(fig)
 
 
-def run(video, kin_dir, face_dir, labels_dir, out_dir, start=None, seconds=8.0, frames=7, frame=None):
+def run(video, kin_dir, face_dir, labels_dir, out_dir, start=None, seconds=8.0, frames=7, frame=None, seed=None,
+        split_file="dataset_splits.json", split="test"):
     os.makedirs(out_dir, exist_ok=True)
+    if seed is None:
+        seed = int(np.random.SeedSequence().entropy % 100000)
+    rng = np.random.default_rng(seed)
+    if video is None:
+        video = random_video(rng, labels_dir, kin_dir, split_file, split)
     body = load_body(kin_dir, video)
     face = find_face(face_dir, video)
     lab = np.load(os.path.join(labels_dir, f"{video}.npy")).astype(int)
@@ -228,7 +260,7 @@ def run(video, kin_dir, face_dir, labels_dir, out_dir, start=None, seconds=8.0, 
     body, lab = body[:T], lab[:T]
     face = face[:T] if face is not None else None
     L = int(seconds * FPS)
-    a = pick_stretch(lab, L) if start is None else start
+    a = pick_stretch(lab, L, rng) if start is None else start
     a = min(a, max(0, T - L))
     if frame is None:                           # a frame inside a phrase with both hands and the face visible
         cand = [t for t in range(a, a + L) if lab[t] == 1 and valid(body[t, 23:44]) and valid(body[t, 44:65])
@@ -238,6 +270,7 @@ def run(video, kin_dir, face_dir, labels_dir, out_dir, start=None, seconds=8.0, 
     fig_strip(body, face, lab, a, L, frames, os.path.join(out_dir, "keypoints_strip.png"))
     fig_bio(lab, a, min(L, int(4 * FPS)), os.path.join(out_dir, "bio_strip.png"))
     print(f"  {video}: stretch frames {a}-{a + L} ({a / FPS:.1f}-{(a + L) / FPS:.1f} s), single frame {frame}")
+    print(f"  to redraw exactly this: --video {video} --start {a} --frame {frame}   (or --seed {seed})")
     print(f"wrote {out_dir}/keypoints_frame.png, keypoints_strip.png, bio_strip.png")
 
 
@@ -276,7 +309,7 @@ def selftest():
         os.makedirs(f"{d}/lab")
         np.save(f"{d}/lab/v_A.npy", lab)
         out = os.environ.get("VIZ_SELFTEST_OUT", f"{d}/out")
-        run("v_A", f"{d}/kin", f"{d}/face_norm", f"{d}/lab", out)
+        run(None, f"{d}/kin", f"{d}/face_norm", f"{d}/lab", out, seed=1)
         ok = all(os.path.exists(os.path.join(out, f)) for f in ("keypoints_frame.png", "keypoints_strip.png",
                                                                 "bio_strip.png"))
         print(f"  [{'ok' if ok else 'FAIL'}] three figures written")
@@ -285,7 +318,10 @@ def selftest():
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--video")
+    ap.add_argument("--video", default=None, help="default: a random video of --split")
+    ap.add_argument("--seed", type=int, default=None, help="random seed (default: new each run, printed)")
+    ap.add_argument("--split-file", default="dataset_splits.json")
+    ap.add_argument("--split", default="test")
     ap.add_argument("--kin-dir", default=os.path.join("processed_data", "kinematic_features"))
     ap.add_argument("--face-dir", default=None)
     ap.add_argument("--labels-dir", default=os.path.join("processed_data", "BIO_tags_phrase_v2"))
@@ -298,9 +334,8 @@ def main():
     a = ap.parse_args()
     if a.selftest:
         sys.exit(0 if selftest() else 1)
-    if not a.video:
-        ap.error("--video is required (e.g. a test video such as 1209077_B)")
-    run(a.video, a.kin_dir, a.face_dir, a.labels_dir, a.out_dir, a.start, a.seconds, a.frames, a.frame)
+    run(a.video, a.kin_dir, a.face_dir, a.labels_dir, a.out_dir, a.start, a.seconds, a.frames, a.frame, a.seed,
+        a.split_file, a.split)
 
 
 if __name__ == "__main__":

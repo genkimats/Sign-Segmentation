@@ -20,6 +20,7 @@ Data (defaults follow the repo layout; override with the flags):
   sign labels   processed_data/BIO_tags/<video>.npy           (sign level; 0 = O, 1 = I, 2 = B)
   phrase labels processed_data/BIO_tags_phrase_v2/<video>.npy
 
+  python viz_hamer.py                                   # random test video, random stretch with >= 3 signs
   python viz_hamer.py --video 1209077_B
   python viz_hamer.py --video 1209077_B --start 12000 --seconds 6 --hand right
   python viz_hamer.py --selftest
@@ -132,21 +133,43 @@ def draw_hand(ax, joint_deg, x0, sx=1.0, sy=1.0):
 
 
 # ----------------------------------------------------------------------------- figure
-def run(video, hamer_dir, sign_dir, phrase_dir, out, start=None, seconds=6.0, hand=None, max_hands=6):
+def random_video(rng, hamer_dir, sign_dir, split_file, split):
+    import json
+    dirs = [hamer_dir] if hamer_dir else sorted(c for c in glob.glob(os.path.join("processed_data", "*hamer*"))
+                                                if os.path.isdir(c))
+    have = set()
+    for c in dirs:
+        have |= {f.rsplit("_hamer", 1)[0] for f in os.listdir(c) if "_hamer." in f}
+    vids = sorted(v for v in have if os.path.exists(os.path.join(sign_dir, f"{v}.npy")))
+    if split_file and os.path.exists(split_file):
+        keep = {v.replace(".npy", "").replace(".pt", "") for v in json.load(open(split_file)).get(split, [])}
+        vids = [v for v in vids if v in keep] or vids
+    if not vids:
+        raise SystemExit("no video has both HaMeR features and sign labels -- check --hamer-dir / --sign-labels-dir")
+    return str(rng.choice(vids))
+
+
+def run(video, hamer_dir, sign_dir, phrase_dir, out, start=None, seconds=6.0, hand=None, max_hands=6, seed=None,
+        split_file="dataset_splits.json", split="test"):
+    if seed is None:
+        seed = int(np.random.SeedSequence().entropy % 100000)
+    rng = np.random.default_rng(seed)
+    if video is None:
+        video = random_video(rng, hamer_dir, sign_dir, split_file, split)
     sign = np.load(os.path.join(sign_dir, f"{video}.npy")).astype(int)
     phrase = np.load(os.path.join(phrase_dir, f"{video}.npy")).astype(int) if phrase_dir else None
     T = len(sign)
     hp, go = per_frame(find_hamer(hamer_dir, video), T)
     ang = joint_angles(hp)
     L = int(seconds * FPS)
-    if start is None:                          # a stretch with several signs and the most detected hand frames
-        best, start = -1, 0
-        for a in range(0, max(1, T - L), L // 2):
-            n_sign = int(np.sum(sign[a:a + L] == 2))
-            det = np.mean(np.isfinite(ang[a:a + L, :, 0]))
-            score = det * min(n_sign, max_hands)
-            if score > best:
-                best, start = score, a
+    if start is None:                          # a random stretch with several signs and the hands mostly detected
+        scored = []
+        for a0 in range(0, max(1, T - L), L // 4):
+            n_sign = int(np.sum(sign[a0:a0 + L] == 2))
+            det = float(np.mean(np.isfinite(ang[a0:a0 + L, :, 0])))
+            scored.append((det * min(n_sign, max_hands), a0, n_sign, det))
+        good = [a0 for sc, a0, n, det in scored if n >= 3 and det >= 0.5]
+        start = int(rng.choice(good)) if good else max(scored)[1]
     a, b = start, min(T, start + L)
     if hand is None:                           # the hand that moves its fingers more in this stretch
         var = [np.nanstd(finger_bends(ang[a:b], h)) if np.isfinite(ang[a:b, h, 0]).any() else -1 for h in (0, 1)]
@@ -212,6 +235,8 @@ def run(video, hamer_dir, sign_dir, phrase_dir, out, start=None, seconds=6.0, ha
     plt.close(fig)
     print(f"  {video}: frames {a}-{b} ({a / FPS:.1f}-{b / FPS:.1f} s), {len(signs)} signs, "
           f"{['left', 'right'][hand]} hand")
+    print(f"  to redraw exactly this: --video {video} --start {a} --hand {['left', 'right'][hand]}   "
+          f"(or --seed {seed})")
     print(f"wrote {out}")
 
 
@@ -252,7 +277,7 @@ def selftest():
         ang = joint_angles(hp)
         ok1 = np.isnan(ang[210, 1]).all() and abs(np.nanmax(ang[:, 0]) - np.degrees(0.3)) < 1e-6
         out = os.environ.get("VIZ_SELFTEST_OUT", d)
-        run("v_A", f"{d}/ham", f"{d}/sign", f"{d}/phrase", os.path.join(out, "hamer_features.png"))
+        run(None, f"{d}/ham", f"{d}/sign", f"{d}/phrase", os.path.join(out, "hamer_features.png"), seed=1)
         ok2 = os.path.exists(os.path.join(out, "hamer_features.png"))
     print(f"  [{'ok' if ok1 else 'FAIL'}] joint angles and missing hands")
     print(f"  [{'ok' if ok2 else 'FAIL'}] figure written")
@@ -261,7 +286,10 @@ def selftest():
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--video")
+    ap.add_argument("--video", default=None, help="default: a random video of --split")
+    ap.add_argument("--seed", type=int, default=None, help="random seed (default: new each run, printed)")
+    ap.add_argument("--split-file", default="dataset_splits.json")
+    ap.add_argument("--split", default="test")
     ap.add_argument("--hamer-dir", default=None)
     ap.add_argument("--sign-labels-dir", default=os.path.join("processed_data", "BIO_tags"))
     ap.add_argument("--phrase-labels-dir", default=os.path.join("processed_data", "BIO_tags_phrase_v2"))
@@ -273,9 +301,8 @@ def main():
     a = ap.parse_args()
     if a.selftest:
         sys.exit(0 if selftest() else 1)
-    if not a.video:
-        ap.error("--video is required")
-    run(a.video, a.hamer_dir, a.sign_labels_dir, a.phrase_labels_dir, a.out, a.start, a.seconds, a.hand)
+    run(a.video, a.hamer_dir, a.sign_labels_dir, a.phrase_labels_dir, a.out, a.start, a.seconds, a.hand,
+        seed=a.seed, split_file=a.split_file, split=a.split)
 
 
 if __name__ == "__main__":
