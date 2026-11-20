@@ -55,17 +55,25 @@ def load_body(kin_dir, video):
     return np.asarray(d, dtype=np.float64)[:, :, :3]
 
 
-def find_face(face_dir, video):
+def find_face(face_dir, video, prefer_points=31):
+    """Shoulder-normalized face points. Without --face-dir, every processed_data/*face*normalized* folder is
+    checked and the one with the model's compact 31-point face is preferred."""
     cands = [face_dir] if face_dir else [c for c in sorted(glob.glob(os.path.join("processed_data",
                                                                                   "*face*normalized*")))
                                          if os.path.isdir(c)]
+    found = []
     for c in cands:
         p = os.path.join(c, f"{video}.npy")
         if os.path.exists(p):
-            print(f"  face points from {p}")
-            return np.asarray(np.load(p), dtype=np.float64)[:, :, :3]
-    print("  no shoulder-normalized face file found -- drawing body and hands only")
-    return None
+            found.append((p, np.load(p, mmap_mode="r").shape))
+    if not found:
+        print("  no shoulder-normalized face file found -- drawing body and hands only")
+        return None
+    best = next((f for f in found if f[1][1] == prefer_points), found[0])
+    p, shape = best
+    print(f"  face points from {p}  ({shape[1]} points, {shape[2]} coordinates)"
+          + ("" if len(found) == 1 else f"; other face folders: {', '.join(os.path.dirname(q) for q, _ in found if q != p)}"))
+    return np.asarray(np.load(p), dtype=np.float64)
 
 
 def valid(p):
@@ -93,9 +101,12 @@ def frame_points(body, face):
         if valid(h) and valid(b[wrist]):
             h[:, 2] += b[wrist, 2] - h[0, 2]          # hand wrist at the body's wrist depth
     f = None
-    if face is not None and valid(face):
+    if face is not None and valid(face[:, :2]):
         f = face.copy()
-        f[:, 2] += b[0, 2] - f[:, 2].mean()           # face centred on the nose depth
+        if f.shape[1] < 3:                            # x, y only: place the face flat at the nose's depth
+            f = np.concatenate([f, np.full((len(f), 1), b[0, 2])], 1)
+        else:
+            f[:, 2] += b[0, 2] - f[:, 2].mean()       # face centred on the nose depth
     return b, f
 
 
@@ -160,7 +171,7 @@ def run(video, kin_dir, face_dir, labels_dir, out_dir, frame=None, gif=False, se
     T = min(len(body), len(lab), len(face) if face is not None else 10 ** 9)
     if frame is None:                                   # a frame inside a phrase with both hands (and face) seen
         cand = [t for t in range(T) if lab[t] == 1 and valid(body[t, 23:44]) and valid(body[t, 44:65])
-                and (face is None or valid(face[t]))]
+                and (face is None or valid(face[t, :, :2]))]
         if not cand:
             raise SystemExit(f"{video}: no frame with both hands visible inside a phrase; pass --frame")
         frame = int(rng.choice(cand))
@@ -178,8 +189,10 @@ def run(video, kin_dir, face_dir, labels_dir, out_dir, frame=None, gif=False, se
         handles.append(plt.Line2D([], [], color=FACE_C, marker="o", lw=0, label=f"Face ({len(f)} points)"))
     fig.legend(handles=handles, loc="lower center", ncol=len(handles), frameon=False, fontsize=10,
                bbox_to_anchor=(0.5, -0.02))
-    fig.text(0.5, -0.07, "Depth is MediaPipe's own estimate (coarser than x and y); hands and face aligned to the "
-             "body's wrists and nose", ha="center", fontsize=9, color=MUTED)
+    flat = face is not None and face.shape[-1] < 3
+    fig.text(0.5, -0.07, "Depth is MediaPipe's own estimate (coarser than x and y); hands aligned to the body's "
+             "wrists, face to the nose" + (" (face file has no depth: drawn flat)" if flat else ""),
+             ha="center", fontsize=9, color=MUTED)
     p = os.path.join(out_dir, "keypoints3d.png")
     fig.savefig(p, dpi=220, bbox_inches="tight", facecolor="white")
     plt.close(fig)
