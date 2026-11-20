@@ -1,8 +1,13 @@
 """
 viz_keypoints3d.py -- the body, hand and face keypoints in 3D, seen from an angle so the depth is visible.
 
-  keypoints3d.png   the same frame from three viewpoints: from the camera, from an angle, and from the side
-  keypoints3d.gif   (with --gif) the skeleton turning around, for a slide that plays animations
+  keypoints3d_body.png   body and hands, the same frame from three viewpoints: camera, angle, side
+  keypoints3d_face.png   the model's 31 compact face points on their own (3 views if the file has depth, else 2D)
+  keypoints3d_body.gif   (with --gif) the body and hands turning around
+
+The face is limited to the 31 compact points the model uses: a 31-point face file is used as it is; a larger file
+(e.g. the full 478-point face) is cut down with the 31 indices from --face-indices, or with a 31-integer list
+named ...FACE... / ...COMPACT... found in the repo's Python files (the script prints which one it used).
 
 Depth comes from MediaPipe's own z estimate, which is coarser than x / y. MediaPipe gives each hand's z relative to
 its own wrist and the face's z relative to the face, so the script moves each hand to the depth of the body's
@@ -80,6 +85,70 @@ def valid(p):
     return p is not None and np.all(np.isfinite(p)) and not np.allclose(p, 0)
 
 
+def parse_indices(spec):
+    """--face-indices: a comma list ("70,105,...") or a .npy / .json / .txt file with the indices."""
+    if os.path.exists(spec):
+        if spec.endswith(".npy"):
+            return [int(i) for i in np.load(spec).ravel()]
+        txt = open(spec).read()
+        try:
+            return [int(i) for i in json.loads(txt)]
+        except Exception:
+            return [int(i) for i in txt.replace(",", " ").split()]
+    return [int(i) for i in spec.split(",") if i.strip()]
+
+
+def discover_compact_indices(n=31, roots=(".", "src", "data_processing")):
+    """Look through the repo's Python files for a list of n integer face indices (a name containing FACE or COMPACT,
+    e.g. COMPACT_FACE_INDICES = [...]). Returns (indices, where) or (None, None)."""
+    import ast
+    hits = []
+    for r in roots:
+        for path in sorted(glob.glob(os.path.join(r, "*.py"))):
+            try:
+                tree = ast.parse(open(path, encoding="utf-8", errors="ignore").read())
+            except Exception:
+                continue
+            for node in ast.walk(tree):
+                if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+                    continue
+                targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                names = [t.id for t in targets if isinstance(t, ast.Name)]
+                if not names or not any(k in nm.upper() for nm in names for k in ("FACE", "COMPACT")):
+                    continue
+                try:
+                    val = ast.literal_eval(node.value)
+                except Exception:
+                    continue
+                if isinstance(val, (list, tuple)) and len(val) == n and all(isinstance(v, int) for v in val):
+                    hits.append((list(val), f"{path}: {names[0]}"))
+    if not hits:
+        return None, None
+    if len({tuple(h[0]) for h in hits}) > 1:
+        print("  several candidate 31-index lists found -- using the first; pass --face-indices to choose:")
+        for _, where in hits:
+            print(f"    {where}")
+    return hits[0]
+
+
+def compact_face(face, spec, n=31):
+    """Limit the face to the model's compact n points. A file that already has n points is used as it is."""
+    if face is None or face.shape[1] == n:
+        return face
+    if spec:
+        idx, where = parse_indices(spec), "--face-indices"
+    else:
+        idx, where = discover_compact_indices(n)
+    if idx is None:
+        raise SystemExit(f"the face file has {face.shape[1]} points, and the {n} compact-face indices were not "
+                         f"found in the repo. Pass them: --face-indices i1,i2,...  (or a .json / .npy file), or "
+                         f"--face-dir <folder with the {n}-point files>")
+    if len(idx) != n or max(idx) >= face.shape[1]:
+        raise SystemExit(f"--face-indices must hold {n} indices below {face.shape[1]} (got {len(idx)})")
+    print(f"  face limited to {n} compact points (indices from {where})")
+    return face[:, idx]
+
+
 def random_video(rng, labels_dir, kin_dir, split_file, split):
     vids = sorted(f[:-4] for f in os.listdir(labels_dir) if f.endswith(".npy"))
     vids = [v for v in vids if os.path.exists(os.path.join(kin_dir, f"{v}.pt"))
@@ -115,20 +184,7 @@ def to_plot(p):
     return np.stack([p[..., 0], p[..., 2], -p[..., 1]], -1)
 
 
-def draw(ax, b, f, elev, azim, lim):
-    B = to_plot(b)
-    for i, j in ARM_EDGES:
-        ax.plot(*zip(B[i], B[j]), color=BODY_C, lw=3.2, solid_capstyle="round")
-    for off, c, wrist in ((23, LEFT_C, 15), (44, RIGHT_C, 16)):
-        if valid(b[off:off + 21]):
-            ax.plot(*zip(B[wrist], B[off]), color=BODY_C, lw=2)          # arm to hand
-            for i, j in HAND_EDGES:
-                ax.plot(*zip(B[off + i], B[off + j]), color=c, lw=1.8)
-    if f is not None:
-        F = to_plot(f)
-        ax.scatter(F[:, 0], F[:, 1], F[:, 2], color=FACE_C, s=6, depthshade=False)
-    else:
-        ax.scatter(B[:11, 0], B[:11, 1], B[:11, 2], color=MUTED, s=6, depthshade=False)
+def style_3d(ax, lim, elev, azim):
     c, r = lim
     ax.set_xlim(c[0] - r, c[0] + r)
     ax.set_ylim(c[1] - r, c[1] + r)
@@ -147,8 +203,27 @@ def draw(ax, b, f, elev, azim, lim):
         axis.pane.set_edgecolor((0.85, 0.87, 0.9, 1.0))
 
 
+def draw(ax, b, f, elev, azim, lim, pose_face=True):
+    B = to_plot(b)
+    for i, j in ARM_EDGES:
+        ax.plot(*zip(B[i], B[j]), color=BODY_C, lw=3.2, solid_capstyle="round")
+    for off, c, wrist in ((23, LEFT_C, 15), (44, RIGHT_C, 16)):
+        if valid(b[off:off + 21]):
+            ax.plot(*zip(B[wrist], B[off]), color=BODY_C, lw=2)          # arm to hand
+            for i, j in HAND_EDGES:
+                ax.plot(*zip(B[off + i], B[off + j]), color=c, lw=1.8)
+    if f is not None:
+        F = to_plot(f)
+        ax.scatter(F[:, 0], F[:, 1], F[:, 2], color=FACE_C, s=6, depthshade=False)
+    elif pose_face:
+        ax.scatter(B[:11, 0], B[:11, 1], B[:11, 2], color=MUTED, s=6, depthshade=False)
+    else:                                             # head position only (pose nose), so the body reads as a body
+        ax.scatter(*B[0], color=BODY_C, s=60, depthshade=False)
+    style_3d(ax, lim, elev, azim)
+
+
 def limits(b, f):
-    pts = [to_plot(b[11:17])] + [to_plot(b[o:o + 21]) for o in (23, 44) if valid(b[o:o + 21])]
+    pts = [to_plot(b[[0] + list(range(11, 17))])] + [to_plot(b[o:o + 21]) for o in (23, 44) if valid(b[o:o + 21])]
     if f is not None:
         pts.append(to_plot(f))
     P = np.concatenate(pts)
@@ -158,7 +233,7 @@ def limits(b, f):
 
 # ----------------------------------------------------------------------------- figures
 def run(video, kin_dir, face_dir, labels_dir, out_dir, frame=None, gif=False, seed=None,
-        split_file="dataset_splits.json", split="test"):
+        split_file="dataset_splits.json", split="test", face_indices=None):
     os.makedirs(out_dir, exist_ok=True)
     if seed is None:
         seed = int(np.random.SeedSequence().entropy % 100000)
@@ -166,7 +241,7 @@ def run(video, kin_dir, face_dir, labels_dir, out_dir, frame=None, gif=False, se
     if video is None:
         video = random_video(rng, labels_dir, kin_dir, split_file, split)
     body = load_body(kin_dir, video)
-    face = find_face(face_dir, video)
+    face = compact_face(find_face(face_dir, video), face_indices)
     lab = np.load(os.path.join(labels_dir, f"{video}.npy")).astype(int)
     T = min(len(body), len(lab), len(face) if face is not None else 10 ** 9)
     if frame is None:                                   # a frame inside a phrase with both hands (and face) seen
@@ -175,30 +250,55 @@ def run(video, kin_dir, face_dir, labels_dir, out_dir, frame=None, gif=False, se
         if not cand:
             raise SystemExit(f"{video}: no frame with both hands visible inside a phrase; pass --frame")
         frame = int(rng.choice(cand))
-    b, f = frame_points(body[frame], face[frame] if face is not None else None)
-    lim = limits(b, f)
+    b, _ = frame_points(body[frame], None)
+    lim = limits(b, None)
 
+    # 1) body and hands
     fig = plt.figure(figsize=(12, 4.4))
     for k, (title, elev, azim) in enumerate(VIEWS):
         ax = fig.add_subplot(1, 3, k + 1, projection="3d")
-        draw(ax, b, f, elev, azim, lim)
+        draw(ax, b, None, elev, azim, lim, pose_face=False)
         ax.set_title(title, fontsize=12, color=MUTED, y=0.98)
-    handles = [plt.Line2D([], [], color=BODY_C, lw=3, label="Body"), plt.Line2D([], [], color=LEFT_C, lw=3,
-               label="Left hand"), plt.Line2D([], [], color=RIGHT_C, lw=3, label="Right hand")]
-    if f is not None:
-        handles.append(plt.Line2D([], [], color=FACE_C, marker="o", lw=0, label=f"Face ({len(f)} points)"))
-    fig.legend(handles=handles, loc="lower center", ncol=len(handles), frameon=False, fontsize=10,
-               bbox_to_anchor=(0.5, -0.02))
-    flat = face is not None and face.shape[-1] < 3
-    fig.text(0.5, -0.07, "Depth is MediaPipe's own estimate (coarser than x and y); hands aligned to the body's "
-             "wrists, face to the nose" + (" (face file has no depth: drawn flat)" if flat else ""),
-             ha="center", fontsize=9, color=MUTED)
-    p = os.path.join(out_dir, "keypoints3d.png")
+    handles = [plt.Line2D([], [], color=BODY_C, lw=3, label="Body"),
+               plt.Line2D([], [], color=LEFT_C, lw=3, label="Left hand"),
+               plt.Line2D([], [], color=RIGHT_C, lw=3, label="Right hand")]
+    fig.legend(handles=handles, loc="lower center", ncol=3, frameon=False, fontsize=10, bbox_to_anchor=(0.5, 0.1))
+    fig.text(0.5, 0.06, "Depth is MediaPipe's own estimate (coarser than x and y); each hand aligned to the body's "
+             "wrist", ha="center", fontsize=9, color=MUTED)
+    p = os.path.join(out_dir, "keypoints3d_body.png")
     fig.savefig(p, dpi=220, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     print(f"  {video}: frame {frame} ({frame / 50:.1f} s)")
     print(f"  to redraw exactly this: --video {video} --frame {frame}   (or --seed {seed})")
     print(f"wrote {p}")
+
+    # 2) face (compact points), on its own
+    if face is not None:
+        f = face[frame].copy()
+        has_z = f.shape[1] >= 3
+        if has_z:
+            fig = plt.figure(figsize=(12, 4.4))
+            F = to_plot(f[:, :3])
+            c = (F.max(0) + F.min(0)) / 2
+            r = np.abs(F - c).max() * 1.1
+            for k, (title, elev, azim) in enumerate(VIEWS):
+                ax = fig.add_subplot(1, 3, k + 1, projection="3d")
+                ax.scatter(F[:, 0], F[:, 1], F[:, 2], color=FACE_C, s=28, depthshade=False)
+                style_3d(ax, (c, r), elev, azim)
+                ax.set_title(title, fontsize=12, color=MUTED, y=0.98)
+            note = f"Face: the model's {len(f)} compact points; depth is MediaPipe's own estimate"
+        else:
+            fig, ax = plt.subplots(figsize=(4.6, 4.6))
+            ax.scatter(f[:, 0], f[:, 1], color=FACE_C, s=40)
+            ax.set_aspect("equal")
+            ax.invert_yaxis()
+            ax.axis("off")
+            note = f"Face: the model's {len(f)} compact points (x, y; the face file has no depth)"
+        fig.text(0.5, -0.02, note, ha="center", fontsize=9, color=MUTED)
+        p = os.path.join(out_dir, "keypoints3d_face.png")
+        fig.savefig(p, dpi=220, bbox_inches="tight", facecolor="white")
+        plt.close(fig)
+        print(f"wrote {p}")
 
     if gif:
         from matplotlib.animation import FuncAnimation, PillowWriter
@@ -207,10 +307,10 @@ def run(video, kin_dir, face_dir, labels_dir, out_dir, frame=None, gif=False, se
 
         def update(i):
             ax.cla()
-            draw(ax, b, f, 12, -90 + i * 4, lim)
+            draw(ax, b, None, 12, -90 + i * 4, lim, pose_face=False)
             return []
         anim = FuncAnimation(fig, update, frames=90, blit=False)
-        p = os.path.join(out_dir, "keypoints3d.gif")
+        p = os.path.join(out_dir, "keypoints3d_body.gif")
         anim.save(p, writer=PillowWriter(fps=20), dpi=110, savefig_kwargs={"facecolor": "white"})
         plt.close(fig)
         print(f"wrote {p}")
@@ -251,10 +351,39 @@ def selftest():
             abs(f[:, 2].mean() - pose[0, 2]) < 1e-9
         out = os.environ.get("VIZ_SELFTEST_OUT", f"{d}/out")
         run(None, f"{d}/kin", f"{d}/face", f"{d}/lab", out, gif=True, seed=1)
-        ok2 = os.path.exists(os.path.join(out, "keypoints3d.png")) and os.path.exists(os.path.join(out, "keypoints3d.gif"))
+        ok2 = all(os.path.exists(os.path.join(out, n)) for n in
+                  ("keypoints3d_body.png", "keypoints3d_face.png", "keypoints3d_body.gif"))
+
+        # a full 478-point face with x, y only: cut down to 31 with given indices, or with indices found in the repo
+        idx = sorted(rng.choice(478, 31, replace=False).tolist())
+        full = rng.normal(size=(T, 478, 2))
+        full[:, idx] = face[:, :, :2]
+        os.makedirs(f"{d}/face_full")
+        np.save(f"{d}/face_full/v_A.npy", full)
+        ok3 = np.allclose(compact_face(full, ",".join(map(str, idx))), face[:, :, :2])
+        try:
+            here = os.getcwd()
+            os.chdir(d)
+            try:
+                compact_face(full, None)
+                ok4 = False                                  # no indices anywhere -> must stop, not guess
+            except SystemExit:
+                ok4 = True
+            os.makedirs("src")
+            open("src/graph.py", "w").write(f"OTHER = [1, 2, 3]\nCOMPACT_FACE_INDICES = {idx}\n")
+            ok5 = np.allclose(compact_face(full, None), face[:, :, :2])
+        finally:
+            os.chdir(here)
+        out2 = out + "_2d"
+        run("v_A", f"{d}/kin", f"{d}/face_full", f"{d}/lab", out2, seed=2, face_indices=",".join(map(str, idx)))
+        ok6 = os.path.exists(os.path.join(out2, "keypoints3d_face.png"))
     print(f"  [{'ok' if ok1 else 'FAIL'}] hand and face depth aligned to the body")
-    print(f"  [{'ok' if ok2 else 'FAIL'}] figure and GIF written")
-    return ok1 and ok2
+    print(f"  [{'ok' if ok2 else 'FAIL'}] body figure, face figure and GIF written")
+    print(f"  [{'ok' if ok3 else 'FAIL'}] 478-point face cut to the 31 given indices")
+    print(f"  [{'ok' if ok4 else 'FAIL'}] no indices given or found -> stops with a message")
+    print(f"  [{'ok' if ok5 else 'FAIL'}] indices found in the repo's code")
+    print(f"  [{'ok' if ok6 else 'FAIL'}] 2-coordinate face drawn as a flat 2D figure")
+    return ok1 and ok2 and ok3 and ok4 and ok5 and ok6
 
 
 def main():
@@ -267,13 +396,17 @@ def main():
     ap.add_argument("--split", default="test")
     ap.add_argument("--kin-dir", default=os.path.join("processed_data", "kinematic_features"))
     ap.add_argument("--face-dir", default=None)
+    ap.add_argument("--face-indices", default=None,
+                    help="the 31 compact-face indices into the face file (comma list or .json/.npy file); default: "
+                         "found in the repo's code, or not needed if the face file already has 31 points")
     ap.add_argument("--labels-dir", default=os.path.join("processed_data", "BIO_tags_phrase_v2"))
     ap.add_argument("--out-dir", default=os.path.join("evaluation_phrase", "figures"))
     ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args()
     if a.selftest:
         sys.exit(0 if selftest() else 1)
-    run(a.video, a.kin_dir, a.face_dir, a.labels_dir, a.out_dir, a.frame, a.gif, a.seed, a.split_file, a.split)
+    run(a.video, a.kin_dir, a.face_dir, a.labels_dir, a.out_dir, a.frame, a.gif, a.seed, a.split_file, a.split,
+        a.face_indices)
 
 
 if __name__ == "__main__":
