@@ -1298,10 +1298,40 @@ FUSION_OPTIONAL = [{**a, "force_selection_metric": None} for a in fusion_optiona
 # EXPERIMENTS_TO_RUN = BLENDSHAPE_STUDY
 # Twentieth batch (2026-11-18): modality-imbalance methods, 12 arms + 3 single-stream reruns at 1 seed (press Enter
 # at the seed prompt), SAME machine as 373-375. First, once: python balance_study/smoke_test.py
+# ------------------------------------------------------------------------------
+# UZH SPLIT RE-RUN (2026-11-25). dataset_splits.json was rebuilt on the 3.0.0-uzh-document split
+# (Zhang et al., 2023) with the filtering of Moryossef et al. (2023), keeping our hand/face filter
+# (make_uzh_split.py): train 288 docs / 505 videos, val 6 / 9, test 9 / 14. Every run compared in the
+# thesis is retrained on it (old-split runs are not comparable). Descriptions start with "UZH:".
+#   CORE      selection table + main comparison + face analysis reference
+#   CONTROLS  midterm questions: size-matched BiLSTM, no branch MLPs
+#   OPTIONAL  published-number check (their recipe, E1s / E2s) and the cue comparison
+# ------------------------------------------------------------------------------
+def _uzh(arms):
+    return [{**a, "description": "UZH: " + a["description"]} for a in arms]
+
+
+UZH_CORE = _uzh([
+    {**_MS_BODY_ONLY, "description": "MS Body"},
+    {**_MS_CUE_STUDY, "description": "MS Body + HaMeR"},
+    {**_MS_BEST, "description": "MS Body + HaMeR + Face(compact) (proposed)"},
+    {**EARLY_FUSION_MECHANISM_STUDY[1], "description": EARLY_FUSION_MECHANISM_STUDY[1]["description"]},
+    {**BASELINE_2023_STUDY[2], "description": BASELINE_2023_STUDY[2]["description"]},
+])
+UZH_CONTROLS = _uzh(SIZE_BRANCH_STUDY)
+UZH_OPTIONAL = _uzh([
+    {**BASELINE_2023_STUDY[0], "description": BASELINE_2023_STUDY[0]["description"]},   # vs published numbers
+    {**BASELINE_2023_STUDY[1], "description": BASELINE_2023_STUDY[1]["description"]},   # face-hurts check
+    CUE_STUDY[0], CUE_STUDY[3], CUE_STUDY[6],                                          # cues only / face cues / + cues
+])
+
 # EXPERIMENTS_TO_RUN = IMBALANCE_STUDY
 # Twenty-first batch (2026-11-24): size-matched BiLSTM + no-branch ablation, 3 arms x 3 seeds = 9 runs (enter "all"),
 # SAME machine as 373-375.
-EXPERIMENTS_TO_RUN = SIZE_BRANCH_STUDY
+# EXPERIMENTS_TO_RUN = SIZE_BRANCH_STUDY   # old split -- superseded by UZH_CONTROLS
+# Twenty-second batch (2026-11-25): everything on the UZH split. 8 arms x 3 seeds = 24 runs (enter "all").
+# Add UZH_OPTIONAL (5 arms, 15 runs) when these are done; the 2023-recipe runs need full-video batches.
+EXPERIMENTS_TO_RUN = UZH_CORE + UZH_CONTROLS
 # EXPERIMENTS_TO_RUN = [{**_MS_BEST, "force_selection_metric": None,
 #                        "description": "MS best: Body + HaMeR + Face(compact), no count loss"}]   # metric asked at training
 # then, after extracting the clean features: EXPERIMENTS_TO_RUN = TEMPO_STUDY_A2_CLEAN  (3 seeds: "all")
