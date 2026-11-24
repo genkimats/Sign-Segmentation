@@ -2283,7 +2283,8 @@ class Moryossef2023_BiLSTM(nn.Module):
                  hamer_dim=None, use_pose_input=True, temporal_kernel=1, temporal_layers=2,
                  temporal_dropout=0.0, modality_norm=False, joint_temporal_layers=0,
                  joint_temporal_channels=64, body_vertices=65, joint_temporal_per_modality=False,
-                 hamer_branch=False, hamer_branch_dim=256, hamer_branch_dropout=0.2, **unused):
+                 hamer_branch=False, hamer_branch_dim=256, hamer_branch_dropout=0.2,
+                 lstm_hidden=None, **unused):
         super().__init__()
         if d_model % 2:
             raise ValueError("d_model (their hidden_dim) must be even.")
@@ -2349,9 +2350,13 @@ class Moryossef2023_BiLSTM(nn.Module):
         if int(temporal_kernel) > 1 and int(temporal_layers) > 0:
             self.temporal = nn.Sequential(*[TemporalResidual(d_model, int(temporal_kernel), float(temporal_dropout))
                                             for _ in range(int(temporal_layers))])
-        self.encoder = nn.LSTM(d_model, d_model // 2, num_layers=n_layers, batch_first=True,
+        # lstm_hidden (SIZE_MATCH_STUDY, 2026-11-24): units PER DIRECTION. None = d_model // 2, the faithful
+        # model (their hidden_dim = total BiLSTM output). lstm_hidden = d_model matches the multistream model:
+        # BiLSTM input d_model (256), output 2 * d_model (512).
+        self.lstm_hidden = int(lstm_hidden) if lstm_hidden else d_model // 2
+        self.encoder = nn.LSTM(d_model, self.lstm_hidden, num_layers=n_layers, batch_first=True,
                                bidirectional=True)
-        self.phrase_bio_head = nn.Linear(d_model, num_classes)
+        self.phrase_bio_head = nn.Linear(2 * self.lstm_hidden, num_classes)
 
     def forward(self, x, hamer=None, **unused):
         B, C, T, V = x.shape
@@ -2471,7 +2476,11 @@ class MultiStreamSegmenter(nn.Module):
                           encoder + branch for both hands (left hand mirrored on hand_mirror_channels, the
                           x coordinate, so both look like a right hand). stgcn / tcn, flatten, concat only.
       branch_layers       layers of every stream branch: 1 = Linear-LN-GELU-Dropout (original); 3 = that
-                          followed by two more Linear(out, out)-LN-GELU-Dropout layers (a 3-layer MLP)
+                          followed by two more Linear(out, out)-LN-GELU-Dropout layers (a 3-layer MLP);
+                          0 = NO branch (BRANCH_ABLATION, 2026-11-24): each stream's raw output (flattened
+                          ST-GCN output, the HaMeR vector) goes straight into the concat, and the fusion
+                          projection takes the full width (body+hands 65*C + face 31*C + HaMeR 288).
+                          concat fusion only; not with body_split or hamer_temporal_kernel > 1
       fusion_layers       layers of the concat fusion projection: 1 (original) or more, the same way
     """
     STREAM_ORDER = ("body_hands", "face", "hamer", "cues")
@@ -2540,10 +2549,17 @@ class MultiStreamSegmenter(nn.Module):
             raise ValueError(f"vertex_pooling must be 'flatten', 'part_mean' or 'part_attn', got '{vertex_pooling}'.")
         self.stream_dropout = float(stream_dropout)
 
-        if int(branch_layers) < 1 or int(fusion_layers) < 1:
-            raise ValueError("branch_layers and fusion_layers must be >= 1.")
+        if int(branch_layers) < 0 or int(fusion_layers) < 1:
+            raise ValueError("branch_layers must be >= 0 and fusion_layers >= 1.")
+        self.no_branch = int(branch_layers) == 0
+        if self.no_branch and (fusion != "concat" or body_split or int(hamer_temporal_kernel) > 1):
+            raise ValueError("branch_layers=0 needs fusion='concat', no body_split and hamer_temporal_kernel <= 1.")
+        self._branch_in = []
 
         def branch(in_dim, out_dim):
+            if self.no_branch:                    # identity: the stream keeps its own width
+                self._branch_in.append(int(in_dim))
+                return nn.Identity()
             # branch_layers = 1: the original single layer (same module layout, old checkpoints load)
             layers = [nn.Linear(in_dim, out_dim), nn.LayerNorm(out_dim), nn.GELU(), nn.Dropout(dropout)]
             for _ in range(int(branch_layers) - 1):
@@ -2687,6 +2703,11 @@ class MultiStreamSegmenter(nn.Module):
                 nn.init.zeros_(self.cue_temporal.bias)
             self.branches["cues"] = branch(cue_dim, out_dims["cues"])
 
+        if self.no_branch:                        # stream widths = their raw output sizes, in build order
+            if len(self._branch_in) != len(self.branches):
+                raise RuntimeError("branch_layers=0: could not match stream widths to streams.")
+            for name, d in zip(self.branches.keys(), self._branch_in):
+                out_dims[name] = d
         if fusion == "concat":
             self.stream_dims = {name: out_dims[name] for name in self.streams}
             self.concat_dim = sum(self.stream_dims.values())

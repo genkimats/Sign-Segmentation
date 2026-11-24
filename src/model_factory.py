@@ -167,6 +167,9 @@ def build_model_kwargs(config, detected_hamer_dim=None, detected_dinov2_dim=None
         model_kwargs["temporal_kernel"] = int(config.get("temporal_kernel", 1))
         model_kwargs["temporal_layers"] = int(config.get("temporal_layers", 2))
         model_kwargs["temporal_dropout"] = float(config.get("temporal_dropout", 0.0))
+        # SIZE_BRANCH_STUDY: BiLSTM units per direction (default d_model // 2); only passed when set
+        if config.get("lstm_hidden"):
+            model_kwargs["lstm_hidden"] = int(config["lstm_hidden"])
         # fusion-mechanism controls: only passed when on, so older configs rebuild unchanged
         if config.get("modality_norm"):
             model_kwargs["modality_norm"] = True
@@ -280,9 +283,11 @@ def build_model_kwargs(config, detected_hamer_dim=None, detected_dinov2_dim=None
                     raise ValueError("body_split 'hands_shared' mirrors the x coordinate; it needs base_features "
                                      "with 'x-cord' and no kinematic_features.")
                 model_kwargs["hand_mirror_channels"] = [coords.index("x-cord")]
-        for key in ("branch_layers", "fusion_layers"):
-            if int(config.get(key, 1) or 1) > 1:
-                model_kwargs[key] = int(config[key])
+        # branch_layers = 0 (no branch MLPs) must be passed too; 1 is the default and stays out
+        if config.get("branch_layers") is not None and int(config["branch_layers"]) != 1:
+            model_kwargs["branch_layers"] = int(config["branch_layers"])
+        if int(config.get("fusion_layers", 1) or 1) > 1:
+            model_kwargs["fusion_layers"] = int(config["fusion_layers"])
         if config.get("face_encoder"):
             model_kwargs["face_encoder"] = config["face_encoder"]
             if config.get("face_region_dilations"):

@@ -886,6 +886,27 @@ BLENDSHAPE_STUDY = [
 from balance_study.experiments import imbalance_arms, missing_teachers, single_stream_arms  # noqa: E402
 IMBALANCE_STUDY = imbalance_arms(_MS_BEST) + single_stream_arms(_MS_CUE_STUDY)
 
+# ------------------------------------------------------------------------------
+# SIZE / BRANCH STUDY (2026-11-24, after the midterm): two questions from the midterm feedback.
+#   SZ-MS   Moryossef et al. (2023) E1s, my recipe (= 244-246) with the BiLSTM widened to 256 units per
+#           direction (input 256, output 512, the same as the proposed model; theirs is 128 per direction)
+#   SZ-EF   early fusion, same inputs, per-joint temporal conv (= 302-304) with the same wider BiLSTM
+#   NB      proposed model (= 115-117, B+H+Fc) without the branch MLPs: each stream's output goes straight
+#           into the concat, so fusion_proj is one Linear(6432 -> 256) + LN + ReLU + Dropout
+# Expected sizes (count_params.py): SZ-MS ~5.8M, SZ-EF ~7.5M, NB ~7.6M; proposed 7.79M.
+# References: proposed 115-117 (other machine) / 373-375 (this machine), early fusion 244-246 / 302-304.
+# Needs src/models.py with lstm_hidden and branch_layers=0 (models_size_branch.patch) and the
+# model_factory.py fix that passes both.
+# ------------------------------------------------------------------------------
+SIZE_BRANCH_STUDY = [
+    {**BASELINE_2023_STUDY[2], "lstm_hidden": 256,
+     "description": "SZ-MS: BL2023 E1s (body+hands), my recipe, BiLSTM 256 per direction (in 256, out 512)"},
+    {**EARLY_FUSION_MECHANISM_STUDY[1], "lstm_hidden": 256,
+     "description": f"SZ-EF: EF-joint B+F+H ({_FS}), BiLSTM 256 per direction (in 256, out 512)"},
+    {**_MS_BEST, "branch_layers": 0,
+     "description": "NB: MS Body + HaMeR + Face(compact), no branch MLPs (streams concatenated directly)"},
+]
+
 # After choosing on validation: the winning change of each modality together (3 seeds), e.g.
 # TAILORED_COMBINED = [{**_MS_BEST, "body_stream_hands": False, "hamer_encoder": "proto", "hamer_proto_k": 32,
 #                       "hamer_proto_init": _HAMER_PROTOTYPES, "face_encoder": "regions",
@@ -1277,7 +1298,10 @@ FUSION_OPTIONAL = [{**a, "force_selection_metric": None} for a in fusion_optiona
 # EXPERIMENTS_TO_RUN = BLENDSHAPE_STUDY
 # Twentieth batch (2026-11-18): modality-imbalance methods, 12 arms + 3 single-stream reruns at 1 seed (press Enter
 # at the seed prompt), SAME machine as 373-375. First, once: python balance_study/smoke_test.py
-EXPERIMENTS_TO_RUN = IMBALANCE_STUDY
+# EXPERIMENTS_TO_RUN = IMBALANCE_STUDY
+# Twenty-first batch (2026-11-24): size-matched BiLSTM + no-branch ablation, 3 arms x 3 seeds = 9 runs (enter "all"),
+# SAME machine as 373-375.
+EXPERIMENTS_TO_RUN = SIZE_BRANCH_STUDY
 # EXPERIMENTS_TO_RUN = [{**_MS_BEST, "force_selection_metric": None,
 #                        "description": "MS best: Body + HaMeR + Face(compact), no count loss"}]   # metric asked at training
 # then, after extracting the clean features: EXPERIMENTS_TO_RUN = TEMPO_STUDY_A2_CLEAN  (3 seeds: "all")
