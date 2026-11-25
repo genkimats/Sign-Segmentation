@@ -1307,8 +1307,19 @@ FUSION_OPTIONAL = [{**a, "force_selection_metric": None} for a in fusion_optiona
 #   CONTROLS  midterm questions: size-matched BiLSTM, no branch MLPs
 #   OPTIONAL  published-number check (their recipe, E1s / E2s) and the cue comparison
 # ------------------------------------------------------------------------------
+# 25 fps (2026-11-25), as Moryossef et al. (2023): every input stream is subsampled [::2] per window
+# (src/dataset.py); training labels use downsample_labels (a B anywhere in a 2-frame group is kept, so no
+# phrase start is lost); evaluation repeats each output twice and scores against the RAW 50 fps labels,
+# so metrics, saved predictions and the decoders are unchanged. window_size stays in raw frames:
+# 512 raw = 256 model steps = 10.24 s, the same seconds as before. Arms that already set a factor (the
+# 2023 recipe) already use 2.
+UZH_DOWNSAMPLE = 2
+
+
 def _uzh(arms):
-    return [{**a, "description": "UZH: " + a["description"]} for a in arms]
+    # set AFTER the arm: _RECIPE_MINE sets temporal_downsample_factor = 1 explicitly
+    return [{**a, "temporal_downsample_factor": UZH_DOWNSAMPLE,
+             "description": "UZH 25fps: " + a["description"]} for a in arms]
 
 
 UZH_CORE = _uzh([
@@ -1329,9 +1340,9 @@ UZH_OPTIONAL = _uzh([
 # Twenty-first batch (2026-11-24): size-matched BiLSTM + no-branch ablation, 3 arms x 3 seeds = 9 runs (enter "all"),
 # SAME machine as 373-375.
 # EXPERIMENTS_TO_RUN = SIZE_BRANCH_STUDY   # old split -- superseded by UZH_CONTROLS
-# Twenty-second batch (2026-11-25): everything on the UZH split. 8 arms x 3 seeds = 24 runs (enter "all").
+# Twenty-second batch (2026-11-25): everything on the UZH split, at 25 fps. 8 arms x 3 seeds = 24 runs (enter "all").
 # Add UZH_OPTIONAL (5 arms, 15 runs) when these are done; the 2023-recipe runs need full-video batches.
-EXPERIMENTS_TO_RUN = UZH_CORE + UZH_CONTROLS
+EXPERIMENTS_TO_RUN = UZH_CORE
 # EXPERIMENTS_TO_RUN = [{**_MS_BEST, "force_selection_metric": None,
 #                        "description": "MS best: Body + HaMeR + Face(compact), no count loss"}]   # metric asked at training
 # then, after extracting the clean features: EXPERIMENTS_TO_RUN = TEMPO_STUDY_A2_CLEAN  (3 seeds: "all")
