@@ -1342,7 +1342,7 @@ UZH_OPTIONAL = _uzh([
 # EXPERIMENTS_TO_RUN = SIZE_BRANCH_STUDY   # old split -- superseded by UZH_CONTROLS
 # Twenty-second batch (2026-11-25): everything on the UZH split, at 25 fps. 8 arms x 3 seeds = 24 runs (enter "all").
 # Add UZH_OPTIONAL (5 arms, 15 runs) when these are done; the 2023-recipe runs need full-video batches.
-EXPERIMENTS_TO_RUN = UZH_CORE
+EXPERIMENTS_TO_RUN = UZH_CONTROLS
 # EXPERIMENTS_TO_RUN = [{**_MS_BEST, "force_selection_metric": None,
 #                        "description": "MS best: Body + HaMeR + Face(compact), no count loss"}]   # metric asked at training
 # then, after extracting the clean features: EXPERIMENTS_TO_RUN = TEMPO_STUDY_A2_CLEAN  (3 seeds: "all")
