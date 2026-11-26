@@ -1,0 +1,19 @@
+run,decoder,settings_tuned_on_val,bnd_f1_2,bnd_f1_5,bnd_f1_10,bnd_p_5,bnd_r_5,iou,pct,seg_f1_05,n_pred,n_gold,iou_pct_score
+multistream_bilstm-373,argmax,-,0.2411,0.278,0.3104,0.198,0.4665,0.8405,2.3788,0.3018,4117.0,1747.0,0.8405
+multistream_bilstm-373,threshold (2023),b=0.3 o=0.7,0.3197,0.4888,0.5381,0.4471,0.5392,0.8244,1.2361,0.5125,2107.0,1747.0,1.5883
+multistream_bilstm-373,peak picking,d=100 sigma=10 o_min=5,0.2101,0.2968,0.3445,0.2126,0.4917,0.7998,2.7914,0.3403,4041.0,1747.0,0.7998
+multistream_bilstm-373,peak picking + threshold,d=10 sigma=5 t=0.1 o_min=5,0.3694,0.4927,0.5478,0.4183,0.5993,0.8381,1.4563,0.5157,2503.0,1747.0,1.3818
+multistream_bilstm-373,"peak picking + threshold, threshold end",d=10 sigma=5 t=0.1 o=0.6,0.3694,0.4927,0.5478,0.4183,0.5993,0.8406,1.4563,0.5253,2503.0,1747.0,1.3843
+multistream_bilstm-373,"peak picking, threshold end (extra)",d=100 sigma=10 o=0.7,0.2101,0.2968,0.3445,0.2126,0.4917,0.8191,2.7914,0.3479,4041.0,1747.0,0.8191
+multistream_bilstm-374,argmax,-,0.2448,0.2784,0.3074,0.2013,0.4511,0.8415,2.2575,0.2828,3914.0,1747.0,0.8415
+multistream_bilstm-374,threshold (2023),b=0.3 o=0.6,0.326,0.4937,0.5487,0.4749,0.514,0.8262,1.1027,0.5326,1891.0,1747.0,1.7235
+multistream_bilstm-374,peak picking,d=100 sigma=10 o_min=5,0.2004,0.2971,0.3448,0.2141,0.4854,0.8144,2.735,0.3446,3961.0,1747.0,0.8144
+multistream_bilstm-374,peak picking + threshold,d=10 sigma=2 t=0.25 o_min=5,0.4035,0.5106,0.5615,0.5351,0.4883,0.8208,0.925,0.5337,1594.0,1747.0,1.7458
+multistream_bilstm-374,"peak picking + threshold, threshold end",d=10 sigma=2 t=0.25 o=0.7,0.4035,0.5106,0.5615,0.5351,0.4883,0.8221,0.925,0.5324,1594.0,1747.0,1.7471
+multistream_bilstm-374,"peak picking, threshold end (extra)",d=100 sigma=10 o=0.6,0.2004,0.2971,0.3448,0.2141,0.4854,0.8176,2.735,0.3493,3961.0,1747.0,0.8176
+multistream_bilstm-375,argmax,-,0.239,0.2755,0.307,0.1985,0.4499,0.8455,2.2999,0.2811,3959.0,1747.0,0.8455
+multistream_bilstm-375,threshold (2023),b=0.3 o=0.7,0.3378,0.4925,0.54,0.4613,0.5283,0.8287,1.1674,0.5246,2001.0,1747.0,1.6613
+multistream_bilstm-375,peak picking,d=100 sigma=10 o_min=5,0.1958,0.2898,0.333,0.2083,0.4762,0.8091,2.7772,0.3411,3995.0,1747.0,0.8091
+multistream_bilstm-375,peak picking + threshold,d=10 sigma=5 t=0.15 o_min=5,0.3841,0.5166,0.5625,0.5392,0.4957,0.8285,0.9175,0.5463,1606.0,1747.0,1.746
+multistream_bilstm-375,"peak picking + threshold, threshold end",d=10 sigma=5 t=0.15 o=0.7,0.3841,0.5166,0.5625,0.5392,0.4957,0.8363,0.9175,0.5529,1606.0,1747.0,1.7538
+multistream_bilstm-375,"peak picking, threshold end (extra)",d=100 sigma=10 o=0.8,0.1958,0.2898,0.333,0.2083,0.4762,0.8171,2.7772,0.345,3995.0,1747.0,0.8171

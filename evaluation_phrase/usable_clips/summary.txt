@@ -1,0 +1,52 @@
+Usable-clip analysis (test; peak picking + threshold tuned on val, o_min=5)
+usable = IoU >= thr with exactly one annotated phrase and no other phrase > 20% inside; merged = covers >= 50% of 2+ phrases; one-to-one matching.
+clip precision = usable / predicted clips; phrase recovery = usable / annotated phrases. Mean +- SD over runs; differences: paired bootstrap over videos, runs averaged.
+
+=== IoU >= 0.5  (1747 annotated phrases) ===
+model                                       clips    usable-clip F1    clip precision   phrase recovery    merged  fragment  spurious     other
+Proposed (feature-specific encoders)         2168     0.494 +- 0.005     0.450 +- 0.040     0.553 +- 0.054      9.7%     34.6%      7.2%      3.5%
+Moryossef et al. (2023), re-implemented      2396     0.432 +- 0.007     0.373 +- 0.006     0.512 +- 0.020      7.2%     41.9%      9.0%      4.5%
+Early fusion, same inputs                    2258     0.450 +- 0.009     0.403 +- 0.037     0.516 +- 0.032      8.1%     39.2%      8.0%      4.4%
+  merged / fragment / spurious / other = share of predicted clips
+  difference, Proposed (feature-specific encoders) - Moryossef et al. (2023), re-implemented:
+    usable-clip F1     +0.062 (95% CI: +0.046 to +0.080)
+    clip precision     +0.077 (95% CI: +0.061 to +0.096)
+    phrase recovery    +0.042 (95% CI: +0.023 to +0.061)
+    merged share       +0.025 (95% CI: +0.016 to +0.036)
+    fragment share     -0.074 (95% CI: -0.095 to -0.056)
+  difference, Proposed (feature-specific encoders) - Early fusion, same inputs:
+    usable-clip F1     +0.043 (95% CI: +0.025 to +0.061)
+    clip precision     +0.048 (95% CI: +0.031 to +0.064)
+    phrase recovery    +0.038 (95% CI: +0.016 to +0.059)
+    merged share       +0.016 (95% CI: +0.006 to +0.025)
+    fragment share     -0.047 (95% CI: -0.062 to -0.033)
+
+=== IoU >= 0.7  (1747 annotated phrases) ===
+model                                       clips    usable-clip F1    clip precision   phrase recovery    merged  fragment  spurious     other
+Proposed (feature-specific encoders)         2168     0.331 +- 0.021     0.303 +- 0.046     0.369 +- 0.017      9.7%     50.6%      7.2%      2.3%
+Moryossef et al. (2023), re-implemented      2396     0.263 +- 0.004     0.228 +- 0.008     0.312 +- 0.005      7.2%     57.9%      9.0%      3.1%
+Early fusion, same inputs                    2258     0.283 +- 0.017     0.253 +- 0.033     0.323 +- 0.012      8.1%     55.8%      8.0%      2.8%
+  merged / fragment / spurious / other = share of predicted clips
+  difference, Proposed (feature-specific encoders) - Moryossef et al. (2023), re-implemented:
+    usable-clip F1     +0.067 (95% CI: +0.049 to +0.088)
+    clip precision     +0.075 (95% CI: +0.057 to +0.097)
+    phrase recovery    +0.057 (95% CI: +0.038 to +0.078)
+    merged share       +0.025 (95% CI: +0.016 to +0.036)
+    fragment share     -0.074 (95% CI: -0.099 to -0.052)
+  difference, Proposed (feature-specific encoders) - Early fusion, same inputs:
+    usable-clip F1     +0.048 (95% CI: +0.030 to +0.064)
+    clip precision     +0.049 (95% CI: +0.033 to +0.065)
+    phrase recovery    +0.046 (95% CI: +0.026 to +0.064)
+    merged share       +0.016 (95% CI: +0.006 to +0.025)
+    fragment share     -0.052 (95% CI: -0.066 to -0.040)
+
+Decoder settings tuned on val (per run): d = min peak distance, sigma = smoothing, t = peak threshold
+  multistream_bilstm-115: d=10 sigma=2 t=0.2
+  multistream_bilstm-116: d=25 sigma=5 t=0.1
+  multistream_bilstm-117: d=10 sigma=5 t=0.15
+  bilstm_2023-244: d=10 sigma=2 t=0.15
+  bilstm_2023-245: d=25 sigma=5 t=0.1
+  bilstm_2023-246: d=25 sigma=5 t=0.1
+  bilstm_2023-302: d=25 sigma=5 t=0.1
+  bilstm_2023-303: d=10 sigma=2 t=0.2
+  bilstm_2023-304: d=50 sigma=2 t=0.2

@@ -1,0 +1,19 @@
+{
+  "run": "multistream_bilstm-435",
+  "model": "multistream_bilstm",
+  "prefix": "435",
+  "split": "val",
+  "labels_dir": "processed_data/BIO_tags_phrase_v2",
+  "description": "BS: B+H + blendshape stream (52, temporal conv 9) instead of face keypoints [seed=123]",
+  "seed": 123,
+  "inference": "training windows",
+  "fixed_thresholds": [
+    0.5,
+    0.5
+  ],
+  "swept_thresholds": null,
+  "tuned_thresholds": null,
+  "tuned_on": null,
+  "sweep_metric": "iou_pct",
+  "merge_starts": {}
+}

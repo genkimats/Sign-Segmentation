@@ -1,0 +1,47 @@
+Engineered cues vs learned features (val; peak picking + threshold tuned on val per run;
+boundary F1 +-5 frames; frame-level F1 = macro over O/I/B, argmax; mean of seeds; paired bootstrap
+over videos, 2000 draws)
+
+arm                   n  bnd F1  bnd P  bnd R frame F1  description
+learned               3   0.490  0.456  0.538    0.673  Learned: B+H+Fc (proposed)
+learned_bh            3   0.483  0.412  0.582    0.674  Learned: B+H (no face)
+cues36                3   0.395  0.380  0.411    0.647  Engineered only: 36 selected cues
+cues36_tc             3   0.387  0.366  0.411    0.648  Engineered only: 36 cues + temporal conv
+cues48                3   0.388  0.389  0.389    0.645  Engineered only: all 48 cues
+bh_facecues           3   0.492  0.459  0.532    0.670  B+H + 12 face cues (instead of learned face)
+bh_nonmanualcues      3   0.488  0.456  0.525    0.671  B+H + 19 non-manual cues (face + head)
+bh_cues36             3   0.487  0.453  0.528    0.669  B+H + 36 selected cues
+learned_plus_cues     3   0.492  0.471  0.517    0.671  B+H+Fc + 36 selected cues
+
+Paired differences (A - B):
+  Q1 engineered only (36) vs learned  [cues36 - learned]
+      boundary F1    -0.096 (95% CI: -0.112 to -0.081)
+      frame-level F1 -0.025 (95% CI: -0.031 to -0.019)
+  Q1 engineered only (36 + temporal conv) vs learned  [cues36_tc - learned]
+      boundary F1    -0.103 (95% CI: -0.120 to -0.088)
+      frame-level F1 -0.025 (95% CI: -0.031 to -0.020)
+  Q1 engineered only (48) vs learned  [cues48 - learned]
+      boundary F1    -0.102 (95% CI: -0.118 to -0.085)
+      frame-level F1 -0.028 (95% CI: -0.034 to -0.021)
+  Q2 face: 12 engineered cues vs learned face encoder  [bh_facecues - learned]
+      boundary F1    +0.002 (95% CI: -0.005 to +0.009)
+      frame-level F1 -0.003 (95% CI: -0.005 to +0.000)
+  Q2 face+head: 19 engineered cues vs learned face encoder  [bh_nonmanualcues - learned]
+      boundary F1    -0.002 (95% CI: -0.009 to +0.008)
+      frame-level F1 -0.002 (95% CI: -0.005 to +0.001)
+  Q2 do engineered face cues add to B+H?  [bh_facecues - learned_bh]
+      boundary F1    +0.009 (95% CI: -0.009 to +0.023)
+      frame-level F1 -0.003 (95% CI: -0.008 to +0.001)
+  Q2 reference: does the learned face add to B+H?  [learned - learned_bh]
+      boundary F1    +0.008 (95% CI: -0.011 to +0.022)
+      frame-level F1 -0.001 (95% CI: -0.005 to +0.003)
+  Q3 do 36 cues add to B+H?  [bh_cues36 - learned_bh]
+      boundary F1    +0.004 (95% CI: -0.010 to +0.016)
+      frame-level F1 -0.004 (95% CI: -0.008 to -0.000)
+  Q3 do 36 cues add to B+H+Fc?  [learned_plus_cues - learned]
+      boundary F1    +0.002 (95% CI: -0.010 to +0.013)
+      frame-level F1 -0.002 (95% CI: -0.005 to +0.001)
+
+Training configs (first run of each arm), keys that differ:
+  (configs not found -- compare saved_models_phrase/<run> configs by hand: class_weights,
+   force_selection_metric / selection metric, epochs, learning_rate, window_size)

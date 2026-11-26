@@ -1,0 +1,33 @@
+Split overlap check (dataset_splits.json)
+
+1. Exact duplicates
+   train: 500 entries, duplicated: ['1244581_A.npy']
+   val: 14 entries, duplicated: none
+   test: 17 entries, duplicated: none
+   in both train and val: ['1244581_B.npy']
+   in both test and train: none
+   in both test and val: none
+
+VAL (14 videos, 10 documents, 10 sessions)
+2. conversation: partner video in train        5 / 14
+               same video in train            1 / 14
+3. session: session has train videos          10 / 14 videos; 8 / 10 sessions
+   signer (same session + side) in train       8 / 14
+
+TEST (17 videos, 17 documents, 16 sessions)
+2. conversation: partner video in train       17 / 17
+               same video in train            0 / 17
+3. session: session has train videos          17 / 17 videos; 16 / 16 sessions
+   signer (same session + side) in train       9 / 17
+
+val and test share sessions: none
+
+4. Does the overlap explain the comparison? (boundary F1 +-5 frames, peak picking + threshold tuned
+   on val, mean of seeds; A = multistream_bilstm-115 multistream_bilstm-116 multistream_bilstm-117; B = bilstm_2023-244 bilstm_2023-245 bilstm_2023-246)
+   TEST
+   all test videos (17 videos): A 0.529  B 0.451  A - B +0.078 (95% CI: +0.068 to +0.088)
+   signer seen in train (9 videos): A 0.541  B 0.461  A - B +0.079 (95% CI: +0.066 to +0.095)
+   signer not seen in train (8 videos): A 0.519  B 0.442  A - B +0.077 (95% CI: +0.062 to +0.090)
+   VALIDATION (decoder tuned on all val videos, as in the main pipeline)
+   all val videos (14 videos): A 0.490  B 0.428  A - B +0.062 (95% CI: +0.043 to +0.077)
+   without val videos that are also in train (13 videos): A 0.489  B 0.428  A - B +0.062 (95% CI: +0.042 to +0.076)

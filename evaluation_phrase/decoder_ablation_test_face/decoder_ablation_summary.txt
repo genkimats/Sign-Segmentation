@@ -1,0 +1,56 @@
+Decoder ablation (test; every decoder tuned on val); runs: multistream_bilstm-373, multistream_bilstm-374, multistream_bilstm-375
+Boundary F1 / P / R: phrase starts within +-5 frames (+-0.1 s) or +-2 frames (+-0.04 s), counts pooled over videos. IoU, Percentage of Segments (%) and Segment F1 (IoU >= 0.5): per-video means. Mean +- SD over runs.
+
+decoder                                        bF1 +-0.1 s    bF1 +-0.04 s      P      R             IoU      %      Segment F1
+argmax                                      0.277 +- 0.002  0.242 +- 0.003  0.199  0.456  0.843 +- 0.003   2.31  0.289 +- 0.011
+threshold (2023)                            0.492 +- 0.003  0.328 +- 0.009  0.461  0.527  0.826 +- 0.002   1.17  0.523 +- 0.010
+peak picking                                0.295 +- 0.004  0.202 +- 0.007  0.212  0.484  0.808 +- 0.007   2.77  0.342 +- 0.002
+peak picking + threshold                    0.507 +- 0.012  0.386 +- 0.017  0.498  0.528  0.829 +- 0.009   1.10  0.532 +- 0.015
+peak picking + threshold, threshold end     0.507 +- 0.012  0.386 +- 0.017  0.498  0.528  0.833 +- 0.010   1.10  0.537 +- 0.014
+peak picking, threshold end (extra)         0.295 +- 0.004  0.202 +- 0.007  0.212  0.484  0.818 +- 0.001   2.77  0.347 +- 0.002
+
+Difference to 'peak picking + threshold' (95% CI: paired bootstrap over test videos, runs averaged):
+decoder                                                  bF1 +-0.1 s                       IoU                Segment F1                         %
+argmax                                     -0.229 (-0.248 to -0.211) +0.013 (+0.008 to +0.019) -0.243 (-0.263 to -0.222)    +1.21 (+1.05 to +1.38)
+threshold (2023)                           -0.015 (-0.023 to -0.006) -0.003 (-0.013 to +0.005) -0.009 (-0.026 to +0.006)    +0.07 (+0.03 to +0.11)
+peak picking                               -0.212 (-0.240 to -0.187) -0.021 (-0.028 to -0.014) -0.190 (-0.239 to -0.148)    +1.67 (+1.07 to +2.39)
+peak picking + threshold, threshold end    +0.000 (+0.000 to +0.000) +0.004 (-0.003 to +0.010) +0.005 (-0.003 to +0.013)    +0.00 (+0.00 to +0.00)
+peak picking, threshold end (extra)        -0.212 (-0.240 to -0.187) -0.011 (-0.020 to -0.004) -0.185 (-0.234 to -0.144)    +1.67 (+1.07 to +2.39)
+
+Contrasts:
+  start threshold (pause end)                        bF1 +0.212 (+0.187 to +0.240) | IoU +0.021 (+0.014 to +0.028) | Segment F1 +0.190 (+0.148 to +0.239)
+  start threshold (threshold end)                    bF1 +0.212 (+0.187 to +0.240) | IoU +0.015 (+0.010 to +0.020) | Segment F1 +0.189 (+0.142 to +0.243)
+  threshold end vs pause end (thresholded starts)    bF1 +0.000 (+0.000 to +0.000) | IoU +0.004 (-0.003 to +0.010) | Segment F1 +0.005 (-0.003 to +0.013)
+  threshold end vs pause end (pure starts)           bF1 +0.000 (+0.000 to +0.000) | IoU +0.010 (+0.002 to +0.018) | Segment F1 +0.005 (+0.000 to +0.011)
+
+Check: with the same starts, the end rule leaves boundary F1 and % unchanged: yes
+
+Pause-end length o_min ('peak picking + threshold' starts; the decoder uses 5); mean over runs:
+  o_min (frames)                 1               3               5              10              25
+  val IoU                    0.809           0.816           0.820           0.824           0.828
+  val Segment F1             0.490           0.502           0.504           0.506           0.505
+  test IoU                   0.820           0.827           0.829           0.832           0.834
+  test Segment F1            0.521           0.528           0.532           0.533           0.534
+
+Settings tuned on val (per run): d = minimum peak distance (frames), sigma = Gaussian smoothing (frames), t = peak threshold, b / o = P(B) / P(O) thresholds
+  multistream_bilstm-373:
+    argmax                                     -
+    threshold (2023)                           b=0.3 o=0.7
+    peak picking                               d=100 sigma=10 o_min=5
+    peak picking + threshold                   d=10 sigma=5 t=0.1 o_min=5
+    peak picking + threshold, threshold end    d=10 sigma=5 t=0.1 o=0.6
+    peak picking, threshold end (extra)        d=100 sigma=10 o=0.7
+  multistream_bilstm-374:
+    argmax                                     -
+    threshold (2023)                           b=0.3 o=0.6
+    peak picking                               d=100 sigma=10 o_min=5
+    peak picking + threshold                   d=10 sigma=2 t=0.25 o_min=5
+    peak picking + threshold, threshold end    d=10 sigma=2 t=0.25 o=0.7
+    peak picking, threshold end (extra)        d=100 sigma=10 o=0.6
+  multistream_bilstm-375:
+    argmax                                     -
+    threshold (2023)                           b=0.3 o=0.7
+    peak picking                               d=100 sigma=10 o_min=5
+    peak picking + threshold                   d=10 sigma=5 t=0.15 o_min=5
+    peak picking + threshold, threshold end    d=10 sigma=5 t=0.15 o=0.7
+    peak picking, threshold end (extra)        d=100 sigma=10 o=0.8
